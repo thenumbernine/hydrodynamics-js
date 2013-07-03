@@ -1,0 +1,8 @@
+learning hydrodynamics 
+
+learning about donor cell advection, slope and flux limiters, Burger's eqns vs Riemann eqns.
+Almost got a Roe solver, or I do but I know I still have to iron some kinks out (like how/if a flux limiter applies to a Roe solver, or if only slope limiters do?)
+
+sources: 
+the "Hydrodynamics II" book found online here: http://www.mpia-hd.mpg.de/homes/dullemon/lectures/hydrodynamicsII/ 
+cfd codes: (haven't used these yet, but I want to) http://www.cfdbooks.com/cfdcodes.html 
