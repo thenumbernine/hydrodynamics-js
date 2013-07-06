@@ -248,13 +248,13 @@ var advectMethods = {
 			//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 			//(i.e. qi[ix] is between q[ix-1] and q[ix])
 			for (var ix = 1; ix < this.nx; ++ix) {
-/* supposed to be Roe's method - is diverging * /
+				//compute Roe averaged interface values
 				var densityL = this.q[ix-1][0];
 				var densityR = this.q[ix][0];
-				var velocityL = this.q[ix-1][1] / this.q[ix-1][0];
-				var velocityR = this.q[ix][0] / this.q[ix][0];
-				var energyTotalL = this.q[ix-1][2] / this.q[ix-1][0];
-				var energyTotalR = this.q[ix-1][2] / this.q[ix-1][0];
+				var velocityL = this.q[ix-1][1] / densityL;
+				var velocityR = this.q[ix][1] / densityR;
+				var energyTotalL = this.q[ix-1][2] / densityL;
+				var energyTotalR = this.q[ix][2] / densityR;
 				
 				var energyKinematicL = .5 * velocityL * velocityL;
 				var energyThermalL = energyTotalL - energyKinematicL;
@@ -270,22 +270,17 @@ var advectMethods = {
 			
 				var weightL = Math.sqrt(densityL);
 				var weightR = Math.sqrt(densityR);
-				var denom = 1 / (weightL + weightR);
+				var denom = weightL + weightR;
 
 				var velocity = (weightL * velocityL + weightR * velocityR) / denom;
 				var hTotal = (weightL * hTotalL + weightR * hTotalR) / denom;
-/**/
-/* old fashioned averaging - works */
-				var density = .5 * (this.q[ix-1][0] + this.q[ix][0]);
-				var velocity = .5 * (this.q[ix-1][1] / this.q[ix-1][0] + this.q[ix][1] / this.q[ix][0]);
-				var energyTotal = .5 * (this.q[ix-1][2] / this.q[ix-1][0] + this.q[ix][2] / this.q[ix][0]);
-				
-				var energyKinematic = .5 * velocity * velocity;
-				var energyThermal = energyTotal - energyKinematic;
-				var pressure = (this.gamma - 1) * density * energyThermal;
-				var hTotal = energyTotal + pressure / density;
-/**/
-				buildEigenstate(this.interfaceMatrix[ix], this.interfaceEigenvalues[ix], this.interfaceEigenvectors[ix], this.interfaceEigenvectorsInverse[ix], velocity, hTotal, this.gamma);
+
+				buildEigenstate(
+					this.interfaceMatrix[ix],
+					this.interfaceEigenvalues[ix], 
+					this.interfaceEigenvectors[ix], 
+					this.interfaceEigenvectorsInverse[ix], 
+					velocity, hTotal, this.gamma);
 			}
 		
 			var mindum = undefined;
