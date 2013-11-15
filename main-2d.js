@@ -118,54 +118,82 @@ var fluxMethods = {
 
 var boundaryMethods = {
 	periodic : function(nx,q) {
-		q[0][0] = q[nx-4][0];
-		q[1][0] = q[nx-3][0];
-		q[nx-2][0] = q[2][0];
-		q[nx-1][0] = q[3][0];
-		q[0][1] = q[nx-4][1];
-		q[1][1] = q[nx-3][1];
-		q[nx-2][1] = q[2][1];
-		q[nx-1][1] = q[3][1];
-		q[0][2] = q[nx-4][2];
-		q[1][2] = q[nx-3][2];
-		q[nx-2][2] = q[2][2];
-		q[nx-1][2] = q[3][2];
+		for (var i = 0; i < nx; ++i) {
+			for (var qi = 0; qi < 4; ++qi) {
+				//top
+				q[i][0][qi] = q[i][nx-4][qi];
+				q[i][1][qi] = q[i][nx-3][qi];
+				q[i][nx-2][qi] = q[i][2][qi];
+				q[i][nx-1][qi] = q[i][3][qi];
+				//left	
+				q[0][i][qi] = q[nx-4][i][qi];
+				q[1][i][qi] = q[nx-3][i][qi];
+				q[nx-2][i][qi] = q[2][i][qi];
+				q[nx-1][i][qi] = q[3][i][qi];
+			}
+		}
 	},
 	mirror : function(nx,q) {
-		q[0][0] = q[3][0];
-		q[1][0] = q[2][0];
-		q[nx-2][0] = q[nx-3][0];
-		q[nx-1][0] = q[nx-4][0];
-		q[0][1] = -q[3][1];
-		q[1][1] = -q[2][1];
-		q[nx-2][1] = -q[nx-3][1];
-		q[nx-1][1] = -q[nx-4][1];
-		q[0][2] = q[3][2];
-		q[1][2] = q[2][2];
-		q[nx-2][2] = q[nx-3][2];
-		q[nx-1][2] = q[nx-4][2];
+		for (var i = 0; i < nx; ++i) {
+			//top
+			q[i][0][0] = q[i][3][0];
+			q[i][1][0] = q[i][2][0];
+			q[i][nx-2][0] = q[i][nx-3][0];
+			q[i][nx-1][0] = q[i][nx-4][0];
+			q[i][0][1] = -q[i][3][1];
+			q[i][1][1] = -q[i][2][1];
+			q[i][nx-2][1] = -q[i][nx-3][1];
+			q[i][nx-1][1] = -q[i][nx-4][1];
+			q[i][0][2] = -q[i][3][2];
+			q[i][1][2] = -q[i][2][2];
+			q[i][nx-2][2] = -q[i][nx-3][2];
+			q[i][nx-1][2] = -q[i][nx-4][2];
+			q[i][0][3] = q[i][3][3];
+			q[i][1][3] = q[i][2][3];
+			q[i][nx-2][3] = q[i][nx-3][3];
+			q[i][nx-1][3] = q[i][nx-4][3];
+			//left
+			q[0][i][0] = q[3][i][0];
+			q[1][i][0] = q[2][i][0];
+			q[nx-2][i][0] = q[nx-3][i][0];
+			q[nx-1][i][0] = q[nx-4][i][0];
+			q[0][i][1] = -q[3][i][1];
+			q[1][i][1] = -q[2][i][1];
+			q[nx-2][i][1] = -q[nx-3][i][1];
+			q[nx-1][i][1] = -q[nx-4][i][1];
+			q[0][i][2] = -q[3][i][2];
+			q[1][i][2] = -q[2][i][2];
+			q[nx-2][i][2] = -q[nx-3][i][2];
+			q[nx-1][i][2] = -q[nx-4][i][2];
+			q[0][i][3] = q[3][i][3];
+			q[1][i][3] = q[2][i][3];
+			q[nx-2][i][3] = q[nx-3][i][3];
+			q[nx-1][i][3] = q[nx-4][i][3];
+		}
 	},
 	dirichlet : function(nx,q) {
-		q[0][0] = 0;
-		q[1][0] = 0;
-		q[nx-2][0] = 0;
-		q[nx-1][0] = 0;
-		q[0][1] = 0;
-		q[1][1] = 0;
-		q[nx-2][1] = 0;
-		q[nx-1][1] = 0;
-		q[0][2] = 0;
-		q[1][2] = 0;
-		q[nx-2][2] = 0;
-		q[nx-1][2] = 0;
+		for (var i = 0; i < nx; ++i) {
+			for (var qi = 0; qi < 4; ++qi) {
+				q[i][0][qi] = 0;
+				q[1][1][qi] = 0;
+				q[i][nx-2][qi] = 0;
+				q[i][nx-1][qi] = 0;
+				q[0][i][qi] = 0;
+				q[1][1][qi] = 0;
+				q[nx-2][i][qi] = 0;
+				q[nx-1][i][qi] = 0;
+			}
+		}
 	},
 	constant : function(nx,q) {
-		q[0][0] = q[1][0] = q[2][0];
-		q[nx-1][0] = q[nx-2][0] = q[nx-3][0];
-		q[0][1] = q[1][1] = q[2][1];
-		q[nx-1][1] = q[nx-2][1] = q[nx-3][1];
-		q[0][2] = q[1][2] = q[2][2];
-		q[nx-1][2] = q[nx-2][2] = q[nx-3][2];
+		for (var i = 0; i < nx; ++i) {
+			for (var qi = 0; qi < 4; ++qi) {
+				q[i][0][qi] = q[i][1][qi] = q[i][2][qi];
+				q[i][nx-1][qi] = q[i][nx-2][qi] = q[i][nx-3][qi];
+				q[0][i][qi] = q[1][i][qi] = q[2][i][qi];
+				q[nx-1][i][qi] = q[nx-2][i][qi] = q[nx-3][i][qi];
+			}
+		}
 	}
 };
 
@@ -199,13 +227,6 @@ var advectMethods = {
 			//assert(this.xi.length == this.nx + 1);
 			//assert(this.q.length == this.nx);
 			//assert(this.ui.length == this.nx + 1);
-			for (var i = 0; i < this.nx; ++i) {
-				for (var j = 0; j < this.nx; ++j) {
-					for (var qi = 0; qi < 4; ++qi) {
-						if (this.q[i][j][qi] != this.q[i][j][qi]) throw 'nan';
-					}
-				}
-			}
 	
 			//get velocity at interfaces from state
 			for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
@@ -252,6 +273,7 @@ var advectMethods = {
 						
 						//left boundary
 						var dq = this.q[i][j][qi] - this.q[i-1][j][qi];
+						if (dq != dq) throw 'nan';
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
 							if (this.ui[i][j][0][0] >= 0) {
@@ -266,6 +288,7 @@ var advectMethods = {
 						
 						//top boundary
 						var dq = this.q[i][j][qi] - this.q[i][j-1][qi];
+						if (dq != dq) throw 'nan';
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
 							if (this.ui[i][j][1][1] >= 0) {
@@ -287,7 +310,7 @@ var advectMethods = {
 							this.r[i][j][side][qi] = 0;
 							this.r[i][this.nx-j][side][qi] = 0;
 							this.r[j][i][side][qi] = 0;
-							this.r[i][this.nx-j][0][qi] = 0;
+							this.r[this.nx-j][i][side][qi] = 0;
 						}
 					}
 				}
@@ -295,10 +318,10 @@ var advectMethods = {
 				//construct flux:
 				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
 					for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-						//flux limiter
-						var phi = this.fluxMethod(this.r[i][j][qi]);
 						
 						//left
+						//flux limiter
+						var phi = this.fluxMethod(this.r[i][j][0][qi]);
 						if (this.ui[i][j][0][0] >= 0) {
 							this.flux[i][j][0][qi] = this.ui[i][j][0][0] * this.q[i-1][j][qi];
 						} else {
@@ -309,8 +332,10 @@ var advectMethods = {
 						this.flux[i][j][0][qi] += delta * .5 * Math.abs(this.ui[i][j][0][0]) * (1 - Math.abs(this.ui[i][j][0][0] * dt / dx));
 					
 						//top
+						//flux limiter
+						var phi = this.fluxMethod(this.r[i][j][1][qi]);
 						if (this.ui[i][j][1][1] >= 0) {
-							this.flux[i][j][1][qi] = this.ui[i][j][1][1] * this.q[i-1][j][qi];
+							this.flux[i][j][1][qi] = this.ui[i][j][1][1] * this.q[i][j-1][qi];
 						} else {
 							this.flux[i][j][1][qi] = this.ui[i][j][1][1] * this.q[i][j][qi];
 						}
@@ -327,7 +352,7 @@ var advectMethods = {
 							this.flux[i][j][side][qi] = 0;
 							this.flux[i][this.nx-j][side][qi] = 0;
 							this.flux[j][i][side][qi] = 0;
-							this.flux[i][this.nx-j][side][qi] = 0;
+							this.flux[this.nx-j][i][side][qi] = 0;
 						}
 					}
 				}
@@ -429,7 +454,7 @@ var HydroState = makeClass({
 			}
 		}
 		
-		//f_{i-1/2}: cell flux
+		//f_{i-1/2},{j-1/2}: cell flux
 		this.flux = [];
 		for (var i = 0; i < this.nx+1; ++i) {
 			this.flux[i] = [];
@@ -479,15 +504,15 @@ var HydroState = makeClass({
 		var dg = .1 * (x1 - x0);
 		for (var i = 0; i < this.nx; ++i) {
 			for (var j = 0; j < this.nx; ++j) {
-				this.q[i][0] = 1 + .3 * Math.exp(-(Math.pow(this.x[i][j][0]-xmid,2)+Math.pow(this.x[i][j][1]-xmid,2))/(dg*dg));
-				this.q[i][1] = 0 * this.q[i][0];
-				this.q[i][2] = 0 * this.q[i][0];
-				this.q[i][3] = 1 * this.q[i][0];
+				this.q[i][j][0] = .3 + .3 * Math.exp(-(Math.pow(this.x[i][j][0]-xmid,2)+Math.pow(this.x[i][j][1]-xmid,2))/(dg*dg));
+				this.q[i][j][1] = 0 * this.q[i][j][0];
+				this.q[i][j][2] = 0 * this.q[i][j][0];
+				this.q[i][j][3] = 1 * this.q[i][j][0];
 			}
 		}
 	},
 	boundary : function() {
-		//this.boundaryMethod(this.nx, this.q);
+		this.boundaryMethod(this.nx, this.q);
 	},
 	step : function(dt) {
 		
@@ -553,7 +578,7 @@ var Hydro = makeClass({
 		this.state = new HydroState();
 	
 		//geometry
-		this.vertexPositions = new Float32Array(2*this.state.nx*this.state.nx);
+		this.vertexPositions = new Float32Array(3*this.state.nx*this.state.nx);
 		this.vertexStates = new Float32Array(3*this.state.nx*this.state.nx);
 	},
 	update : function() {
@@ -573,6 +598,7 @@ var Hydro = makeClass({
 			for (var j = 0; j < nx; ++j) {
 				this.vertexPositions[e++] = x[i][j][0];
 				this.vertexPositions[e++] = x[i][j][1];
+				this.vertexPositions[e++] = q[i][j][0] * 20.;
 				this.vertexStates[f++] = q[i][j][0];
 				this.vertexStates[f++] = Math.sqrt((q[i][j][1] * q[i][j][1] + q[i][j][2] * q[i][j][2]) / (q[i][j][0] * q[i][j][0]));
 				this.vertexStates[f++] = q[i][j][3] / q[i][j][0];
@@ -597,9 +623,9 @@ function onresize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
 	//factor out aspectratio from fovY (thus making it fovX)
-	var aspectRatio = canvas.width / canvas.height;
-	GL.view.fovY = .5 * (xmax - xmin) / aspectRatio;
-	GL.view.pos[1] = (ymax + ymin) / 2 / aspectRatio;
+	//var aspectRatio = canvas.width / canvas.height;
+	//GL.view.fovY = .5 * (xmax - xmin) / aspectRatio;
+	//GL.view.pos[1] = (ymax + ymin) / 2 / aspectRatio;
 	GL.resize();
 }
 
@@ -645,11 +671,20 @@ $(document).ready(function(){
 		throw e;
 	}
 
-	GL.view.ortho = true;
-	GL.view.zNear = -1;
-	GL.view.zFar = 1;
-	GL.view.pos[0] = (xmax + xmin) / 2;
-	GL.view.pos[1] = (ymax + ymin) / 2;
+	//GL.view.ortho = true;
+	//GL.view.zNear = -1;
+	//GL.view.zFar = 1;
+
+	quat.multiply(GL.view.angle,
+		[Math.sin(Math.PI/8), 0, 0, Math.cos(Math.PI/8)],
+		[0,0,0,1]);
+	GL.view.pos[0] = 0;
+	GL.view.pos[1] = 0;
+	GL.view.pos[2] = 2 * (xmin + xmax + ymin + ymax) / 4; 
+	vec3.transformQuat(GL.view.pos, GL.view.pos, GL.view.angle);
+	//offset to center on grid
+	GL.view.pos[0] += (xmin + xmax) / 2;
+	GL.view.pos[1] += (ymin + ymax) / 2; 
 
 	var shader = new GL.ShaderProgram({
 		vertexCodeID : 'water-vsh',
@@ -661,12 +696,10 @@ $(document).ready(function(){
 	//make grid
 	hydro.update();
 	waveVtxBuf = new GL.ArrayBuffer({
-		dim : 2,
 		data : hydro.vertexPositions,
 		usage : gl.DYNAMIC_DRAW
 	});
 	waveStateBuf = new GL.ArrayBuffer({
-		dim : 3,
 		data : hydro.vertexStates,
 		usage : gl.DYNAMIC_DRAW
 	});

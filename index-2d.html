@@ -20,14 +20,14 @@ _gaq.push(['_trackPageview']);
 })();
 </script>
 		<script id='water-vsh' type='x-shader/x-vertex'>
-attribute vec2 vertex;
+attribute vec3 vertex;
 attribute vec3 state;
 varying vec3 statev;
 uniform mat4 mvMat;
 uniform mat4 projMat;
 void main() {
 	statev = state;
-	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+	gl_Position = projMat * mvMat * vec4(vertex.xyz, 1.);
 }
 		</script>
 		<script id='water-fsh' type='x-shader/x-fragment'>
