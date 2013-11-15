@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Learning Hydrodynamics - WebGL</title>
+		
+		<script language='javascript' type='text/javascript' src='../js/jquery-1.10.0.min.js'></script>
+		<script language='javascript' type='text/javascript' src='../js/util.js'></script>
+		<script language='javascript' type='text/javascript' src='../js/gl-matrix.2.2.0.min.js'></script>
+		<script language='javascript' type='text/javascript' src='../js/gl-util.js'></script>
+		<script language='javascript' type='text/javascript' src='main-2d.js'></script>
+		
+<script type='text/javascript'>
+var _gaq = _gaq || [];
+_gaq.push(['_setAccount', 'UA-17312646-1']);
+_gaq.push(['_trackPageview']);
+(function() {
+	var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+	ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+	var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
+</script>
+		<script id='water-vsh' type='x-shader/x-vertex'>
+attribute vec2 vertex;
+attribute vec3 state;
+varying vec3 statev;
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	statev = state;
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+}
+		</script>
+		<script id='water-fsh' type='x-shader/x-fragment'>
+varying vec3 statev;
+void main() {
+	gl_FragColor = vec4(statev, 1.);;
+}
+		</script>
+
+		<style type='text/css'>
+
+body {
+	background-color:black;
+	color:white;
+}
+
+a:link {
+	cursor:pointer;
+	color:#00FFFF;
+}
+
+a:visited {
+	cursor:pointer;
+	color:#00FFFF;
+}
+
+a:hover {
+	cursor:pointer;
+	color:#00FFFF;
+}
+
+a:active {
+	cursor:pointer;
+	color:#00FFFF;
+}
+	
+		</style>
+	</head>
+	<body style='margin:0px; overflow:hidden'>
+		<div id='panel' style='overflow-x:hidden; width:400px; z-index:1, width:300px; position:absolute; background-color:rgba(0,0,0,.75)'>
+			<button id='reset-sod'>Reset Sod</button>
+			<button id='reset-wave'>Reset Wave</button>
+			<br>
+			Boundary:
+			<select id='boundary'></select><br>
+			Flux Limiter:
+			<select id='flux-limiter'></select><br>
+			Advect:
+			<select id='advect-method'></select><br>
+		</div>
+		<div id='webglfail' style='display:none'>
+			Sorry, your browser does not support WebGL<br>
+			Try one of these other, better browsers:<br>
+			<a href='http://www.google.com/chrome'>Chrome</a><br>
+			<a href='http://www.mozilla.org/firefox'>Firefox</a><br>
+			<a href='http://www.apple.com/safari'>Safari</a><br>
+			<b>Opera Users:</b><br>
+			Enter "opera:config" in the address bar.<br>
+			In the "User Prefs" section set both "Enable Hardware Acceleration" and "Enable WebGL" to "1" and then click "Save".<br>
+			It is still buggy.<br>
+			<b>IE Users:</b><br>
+			Sorry guys, IE doesn't plan to support WebGL.<br>
+			Consider using a more <a href='http://www.w3schools.com/browsers/browsers_stats.asp'>standard compliant</a> browser.<br>
+		</div>
+	</body>
+</html>
