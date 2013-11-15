@@ -10,13 +10,10 @@ var canvas;
 var waveVtxBuf, waveStateBuf;
 var xmin = 0;
 var xmax = 100; 
-var ymin = -10;
-var ymax = 50;
+var ymin = 0;
+var ymax = 100;
 var gridstep = 10;
-
-function isnan(x) {
-	return x != x;
-}
+var mouse;
 
 function mat33invert(out, a) {
 	var det = a[0][0] * a[1][1] * a[2][2]
@@ -594,10 +591,12 @@ var Hydro = makeClass({
 		var nx = this.state.nx;
 		var e = 0;
 		var f = 0;
+		var centerX = (xmax + xmin) / 2;
+		var centerY = (ymax + ymin) / 2;
 		for (var i = 0; i < nx; ++i) {
 			for (var j = 0; j < nx; ++j) {
-				this.vertexPositions[e++] = x[i][j][0];
-				this.vertexPositions[e++] = x[i][j][1];
+				this.vertexPositions[e++] = x[i][j][0] - centerX;
+				this.vertexPositions[e++] = x[i][j][1] - centerY;
 				this.vertexPositions[e++] = q[i][j][0] * 20.;
 				this.vertexStates[f++] = q[i][j][0];
 				this.vertexStates[f++] = Math.sqrt((q[i][j][1] * q[i][j][1] + q[i][j][2] * q[i][j][2]) / (q[i][j][0] * q[i][j][0]));
@@ -622,10 +621,6 @@ function update() {
 function onresize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
-	//factor out aspectratio from fovY (thus making it fovX)
-	//var aspectRatio = canvas.width / canvas.height;
-	//GL.view.fovY = .5 * (xmax - xmin) / aspectRatio;
-	//GL.view.pos[1] = (ymax + ymin) / 2 / aspectRatio;
 	GL.resize();
 }
 
@@ -678,13 +673,6 @@ $(document).ready(function(){
 	quat.multiply(GL.view.angle,
 		[Math.sin(Math.PI/8), 0, 0, Math.cos(Math.PI/8)],
 		[0,0,0,1]);
-	GL.view.pos[0] = 0;
-	GL.view.pos[1] = 0;
-	GL.view.pos[2] = 2 * (xmin + xmax + ymin + ymax) / 4; 
-	vec3.transformQuat(GL.view.pos, GL.view.pos, GL.view.angle);
-	//offset to center on grid
-	GL.view.pos[0] += (xmin + xmax) / 2;
-	GL.view.pos[1] += (ymin + ymax) / 2; 
 
 	var shader = new GL.ShaderProgram({
 		vertexCodeID : 'water-vsh',
@@ -706,8 +694,8 @@ $(document).ready(function(){
 	for (var j = 0; j < hydro.state.nx-1; ++j) {
 		var indexes = [];
 		for (var i = 0; i < hydro.state.nx; ++i) {
-			indexes.push(i+(j+1)*hydro.state.nx);
 			indexes.push(i+j*hydro.state.nx);
+			indexes.push(i+(j+1)*hydro.state.nx);
 		}
 		new GL.SceneObject({
 			mode : gl.TRIANGLE_STRIP,
@@ -716,10 +704,42 @@ $(document).ready(function(){
 				vertex : waveVtxBuf,
 				state : waveStateBuf
 			},
-			shader : shader 
+			shader : shader
 		});
 	}
-
+	
+	function refreshView() {
+		GL.view.pos[0] = 0;
+		GL.view.pos[1] = 0;
+		GL.view.pos[2] = targetDistance;
+		vec3.transformQuat(GL.view.pos, GL.view.pos, GL.view.angle);
+	};
+	var targetDistance = 2 * (xmin + xmax + ymin + ymax) / 4;
+	var zoomFactor = .0003;	// upon mousewheel
+	var dragging = false;
+	var tmpQ = quat.create();	
+	mouse = new Mouse3D({
+		pressObj : canvas,
+		mousedown : function() {
+			dragging = false;
+		},
+		move : function(dx,dy) {
+			dragging = true;
+			var rotAngle = Math.PI / 180 * .01 * Math.sqrt(dx*dx + dy*dy);
+			quat.setAxisAngle(tmpQ, [-dy, -dx, 0], rotAngle);
+			quat.multiply(GL.view.angle, GL.view.angle, tmpQ);
+			quat.normalize(GL.view.angle, GL.view.angle);
+			refreshView();
+		},
+		zoom : function(zoomChange) {
+			dragging = true;
+			var scale = Math.exp(-zoomFactor * zoomChange);
+			targetDistance *= scale;
+			refreshView();			
+		}
+	});
+	refreshView();
+	
 	//start it off
 	onresize();
 	update();

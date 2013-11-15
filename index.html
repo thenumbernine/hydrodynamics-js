@@ -3,11 +3,11 @@
 	<head>
 		<title>Learning Hydrodynamics - WebGL</title>
 		
-		<script language='javascript' type='text/javascript' src='../js/jquery-1.10.0.min.js'></script>
-		<script language='javascript' type='text/javascript' src='../js/util.js'></script>
-		<script language='javascript' type='text/javascript' src='../js/gl-matrix.2.2.0.min.js'></script>
-		<script language='javascript' type='text/javascript' src='../js/gl-util.js'></script>
-		<script language='javascript' type='text/javascript' src='main.js'></script>
+		<script type='text/javascript' src='../js/jquery-1.10.0.min.js'></script>
+		<script type='text/javascript' src='../js/util.js'></script>
+		<script type='text/javascript' src='../js/gl-matrix.2.2.0.min.js'></script>
+		<script type='text/javascript' src='../js/gl-util.js'></script>
+		<script type='text/javascript' src='main.js'></script>
 		
 <script type='text/javascript'>
 var _gaq = _gaq || [];
@@ -96,6 +96,9 @@ a:active {
 			<select id='flux-limiter'></select><br>
 			Advect:
 			<select id='advect-method'></select><br>
+		
+			<input type='radio' group='1' checked>1D</input><br>
+			<input type='radio' group='1' onclick='location.href="index-2d.html"'>2D</input><br>
 		</div>
 		<div id='webglfail' style='display:none'>
 			Sorry, your browser does not support WebGL<br>
