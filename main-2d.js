@@ -116,79 +116,79 @@ var fluxMethods = {
 var boundaryMethods = {
 	periodic : function(nx,q) {
 		for (var i = 0; i < nx; ++i) {
-			for (var qi = 0; qi < 4; ++qi) {
+			for (var iq = 0; iq < 4; ++iq) {
 				//top
-				q[i][0][qi] = q[i][nx-4][qi];
-				q[i][1][qi] = q[i][nx-3][qi];
-				q[i][nx-2][qi] = q[i][2][qi];
-				q[i][nx-1][qi] = q[i][3][qi];
+				q[iq + 4 * (i + nx * 0)] = q[iq + 4 * (i + nx * (nx-4))];
+				q[iq + 4 * (i + nx * 1)] = q[iq + 4 * (i + nx * (nx-3))];
+				q[iq + 4 * (i + nx * (nx-2))] = q[iq + 4 * (i + nx * 2)];
+				q[iq + 4 * (i + nx * (nx-1))] = q[iq + 4 * (i + nx * 3)];
 				//left	
-				q[0][i][qi] = q[nx-4][i][qi];
-				q[1][i][qi] = q[nx-3][i][qi];
-				q[nx-2][i][qi] = q[2][i][qi];
-				q[nx-1][i][qi] = q[3][i][qi];
+				q[iq + 4 * (0 + nx * i)] = q[iq + 4 * (nx-4 + nx * i)];
+				q[iq + 4 * (1 + nx * i)] = q[iq + 4 * (nx-3 + nx * i)];
+				q[iq + 4 * (nx-2 + nx * i)] = q[iq + 4 * (2 + nx * i)];
+				q[iq + 4 * (nx-1 + nx * i)] = q[iq + 4 * (3 + nx * i)];
 			}
 		}
 	},
 	mirror : function(nx,q) {
 		for (var i = 0; i < nx; ++i) {
 			//top
-			q[i][0][0] = q[i][3][0];
-			q[i][1][0] = q[i][2][0];
-			q[i][nx-2][0] = q[i][nx-3][0];
-			q[i][nx-1][0] = q[i][nx-4][0];
-			q[i][0][1] = -q[i][3][1];
-			q[i][1][1] = -q[i][2][1];
-			q[i][nx-2][1] = -q[i][nx-3][1];
-			q[i][nx-1][1] = -q[i][nx-4][1];
-			q[i][0][2] = -q[i][3][2];
-			q[i][1][2] = -q[i][2][2];
-			q[i][nx-2][2] = -q[i][nx-3][2];
-			q[i][nx-1][2] = -q[i][nx-4][2];
-			q[i][0][3] = q[i][3][3];
-			q[i][1][3] = q[i][2][3];
-			q[i][nx-2][3] = q[i][nx-3][3];
-			q[i][nx-1][3] = q[i][nx-4][3];
+			q[0 + 4 * (i + nx * (0))] = q[0 + 4 * (i + nx * (3))];
+			q[0 + 4 * (i + nx * (1))] = q[0 + 4 * (i + nx * (2))];
+			q[0 + 4 * (i + nx * (nx-2))] = q[0 + 4 * (i + nx * (nx-3))];
+			q[0 + 4 * (i + nx * (nx-1))] = q[0 + 4 * (i + nx * (nx-4))];
+			q[1 + 4 * (i + nx * (0))] = -q[1 + 4 * (i + nx * (3))];
+			q[1 + 4 * (i + nx * (1))] = -q[1 + 4 * (i + nx * (2))];
+			q[1 + 4 * (i + nx * (nx-2))] = -q[1 + 4 * (i + nx * (nx-3))];
+			q[1 + 4 * (i + nx * (nx-1))] = -q[1 + 4 * (i + nx * (nx-4))];
+			q[2 + 4 * (i + nx * (0))] = -q[2 + 4 * (i + nx * (3))];
+			q[2 + 4 * (i + nx * (1))] = -q[2 + 4 * (i + nx * (2))];
+			q[2 + 4 * (i + nx * (nx-2))] = -q[2 + 4 * (i + nx * (nx-3))];
+			q[2 + 4 * (i + nx * (nx-1))] = -q[2 + 4 * (i + nx * (nx-4))];
+			q[3 + 4 * (i + nx * (0))] = q[3 + 4 * (i + nx * (3))];
+			q[3 + 4 * (i + nx * (1))] = q[3 + 4 * (i + nx * (2))];
+			q[3 + 4 * (i + nx * (nx-2))] = q[3 + 4 * (i + nx * (nx-3))];
+			q[3 + 4 * (i + nx * (nx-1))] = q[3 + 4 * (i + nx * (nx-4))];
 			//left
-			q[0][i][0] = q[3][i][0];
-			q[1][i][0] = q[2][i][0];
-			q[nx-2][i][0] = q[nx-3][i][0];
-			q[nx-1][i][0] = q[nx-4][i][0];
-			q[0][i][1] = -q[3][i][1];
-			q[1][i][1] = -q[2][i][1];
-			q[nx-2][i][1] = -q[nx-3][i][1];
-			q[nx-1][i][1] = -q[nx-4][i][1];
-			q[0][i][2] = -q[3][i][2];
-			q[1][i][2] = -q[2][i][2];
-			q[nx-2][i][2] = -q[nx-3][i][2];
-			q[nx-1][i][2] = -q[nx-4][i][2];
-			q[0][i][3] = q[3][i][3];
-			q[1][i][3] = q[2][i][3];
-			q[nx-2][i][3] = q[nx-3][i][3];
-			q[nx-1][i][3] = q[nx-4][i][3];
+			q[0 + 4 * (0 + nx * (i))] = q[0 + 4 * (3 + nx * (i))];
+			q[0 + 4 * (1 + nx * (i))] = q[0 + 4 * (2 + nx * (i))];
+			q[0 + 4 * (nx-2 + nx * (i))] = q[0 + 4 * (nx-3 + nx * (i))];
+			q[0 + 4 * (nx-1 + nx * (i))] = q[0 + 4 * (nx-4 + nx * (i))];
+			q[1 + 4 * (0 + nx * (i))] = -q[1 + 4 * (3 + nx * (i))];
+			q[1 + 4 * (1 + nx * (i))] = -q[1 + 4 * (2 + nx * (i))];
+			q[1 + 4 * (nx-2 + nx * (i))] = -q[1 + 4 * (nx-3 + nx * (i))];
+			q[1 + 4 * (nx-1 + nx * (i))] = -q[1 + 4 * (nx-4 + nx * (i))];
+			q[2 + 4 * (0 + nx * (i))] = -q[2 + 4 * (3 + nx * (i))];
+			q[2 + 4 * (1 + nx * (i))] = -q[2 + 4 * (2 + nx * (i))];
+			q[2 + 4 * (nx-2 + nx * (i))] = -q[2 + 4 * (nx-3 + nx * (i))];
+			q[2 + 4 * (nx-1 + nx * (i))] = -q[2 + 4 * (nx-4 + nx * (i))];
+			q[3 + 4 * (0 + nx * (i))] = q[3 + 4 * (3 + nx * (i))];
+			q[3 + 4 * (1 + nx * (i))] = q[3 + 4 * (2 + nx * (i))];
+			q[3 + 4 * (nx-2 + nx * (i))] = q[3 + 4 * (nx-3 + nx * (i))];
+			q[3 + 4 * (nx-1 + nx * (i))] = q[3 + 4 * (nx-4 + nx * (i))];
 		}
 	},
 	dirichlet : function(nx,q) {
 		for (var i = 0; i < nx; ++i) {
-			for (var qi = 0; qi < 4; ++qi) {
-				q[i][0][qi] = 0;
-				q[1][1][qi] = 0;
-				q[i][nx-2][qi] = 0;
-				q[i][nx-1][qi] = 0;
-				q[0][i][qi] = 0;
-				q[1][1][qi] = 0;
-				q[nx-2][i][qi] = 0;
-				q[nx-1][i][qi] = 0;
+			for (var iq = 0; iq < 4; ++iq) {
+				q[iq + 4 * (i + nx * (0))] = 0;
+				q[iq + 4 * (1 + nx * (1))] = 0;
+				q[iq + 4 * (i + nx * (nx-2))] = 0;
+				q[iq + 4 * (i + nx * (nx-1))] = 0;
+				q[iq + 4 * (0 + nx * (i))] = 0;
+				q[iq + 4 * (1 + nx * (1))] = 0;
+				q[iq + 4 * (nx-2 + nx * (i))] = 0;
+				q[iq + 4 * (nx-1 + nx * (i))] = 0;
 			}
 		}
 	},
 	constant : function(nx,q) {
 		for (var i = 0; i < nx; ++i) {
-			for (var qi = 0; qi < 4; ++qi) {
-				q[i][0][qi] = q[i][1][qi] = q[i][2][qi];
-				q[i][nx-1][qi] = q[i][nx-2][qi] = q[i][nx-3][qi];
-				q[0][i][qi] = q[1][i][qi] = q[2][i][qi];
-				q[nx-1][i][qi] = q[nx-2][i][qi] = q[nx-3][i][qi];
+			for (var iq = 0; iq < 4; ++iq) {
+				q[iq + 4 * (i + nx * (0))] = q[iq + 4 * (i + nx * (1))] = q[iq + 4 * (i + nx * (2))];
+				q[iq + 4 * (i + nx * (nx-1))] = q[iq + 4 * (i + nx * (nx-2))] = q[iq + 4 * (i + nx * (nx-3))];
+				q[iq + 4 * (0 + nx * (i))] = q[iq + 4 * (1 + nx * (i))] = q[iq + 4 * (2 + nx * (i))];
+				q[iq + 4 * (nx-1 + nx * (i))] = q[iq + 4 * (nx-2 + nx * (i))] = q[iq + 4 * (nx-3 + nx * (i))];
 			}
 		}
 	}
@@ -201,10 +201,10 @@ var advectMethods = {
 			var mindum = undefined;
 			for (var j = 0; j < this.nx; ++j) {
 				for (var i = 0; i < this.nx; ++i) {
-					var rho = this.q[i][j][0];
-					var u = this.q[i][j][1] / rho;
-					var v = this.q[i][j][2] / rho; 
-					var energyTotal = this.q[i][j][3] / rho; 
+					var rho = this.q[0 + 4 * (i + this.nx * (j))];
+					var u = this.q[1 + 4 * (i + this.nx * (j))] / rho;
+					var v = this.q[2 + 4 * (i + this.nx * (j))] / rho; 
+					var energyTotal = this.q[3 + 4 * (i + this.nx * (j))] / rho; 
 					var energyKinematic = .5 * (u * u + v * v);
 					var energyThermal = energyTotal - energyKinematic;
 					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
@@ -225,9 +225,9 @@ var advectMethods = {
 			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
 				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
 					//left boundary's du/dx (velocity gradient tangent to edge)
-					this.ui[i][j][0] = .5 * (this.q[i][j][1] / this.q[i][j][0] + this.q[i-1][j][1] / this.q[i-1][j][0]);
+					this.ui[i][j][0] = .5 * (this.q[1 + 4 * (i + this.nx * (j))] / this.q[0 + 4 * (i + this.nx * (j))] + this.q[1 + 4 * (i-1 + this.nx * (j))] / this.q[0 + 4 * (i-1 + this.nx * (j))]);
 					//top boundary's dv/dy
-					this.ui[i][j][1] = .5 * (this.q[i][j][2] / this.q[i][j][0] + this.q[i][j-1][2] / this.q[i][j-1][0]);
+					this.ui[i][j][1] = .5 * (this.q[2 + 4 * (i + this.nx * (j))] / this.q[0 + 4 * (i + this.nx * (j))] + this.q[2 + 4 * (i + this.nx * (j-1))] / this.q[0 + 4 * (i + this.nx * (j-1))]);
 				}
 			}
 			//boundary zero
@@ -249,40 +249,36 @@ var advectMethods = {
 			}
 
 			//compute flux and advect for each state vector
-			for (var qi = 0; qi < 4; ++qi) {	//state
+			for (var iq = 0; iq < 4; ++iq) {	//state
 				//r_{i-1/2},{j-1/2} flux limiter
 				for (var j = this.nghost; j < this.nx+this.nghost-3; ++j) {
 					for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
 						
 						//left boundary
-						var dq = this.q[i][j][qi] - this.q[i-1][j][qi];
-						if (dq != dq) throw 'nan';
+						var dq = this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i-1 + this.nx * (j))];
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
 							if (this.ui[i][j][0] >= 0) {
-								this.r[i][j][0][qi] = (this.q[i-1][j][qi] - this.q[i-2][j][qi]) / dq;
+								this.r[i][j][0][iq] = (this.q[iq + 4 * (i-1 + this.nx * (j))] - this.q[iq + 4 * (i-2 + this.nx * (j))]) / dq;
 							} else {
-								this.r[i][j][0][qi] = (this.q[i+1][j][qi] - this.q[i][j][qi]) / dq;
+								this.r[i][j][0][iq] = (this.q[iq + 4 * (i+1 + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j))]) / dq;
 							}
 						} else {
-							this.r[i][j][0][qi] = 0;
+							this.r[i][j][0][iq] = 0;
 						}
-						if (this.r[i][j][0][qi] != this.r[i][j][0][qi]) throw 'nan';
 						
 						//top boundary
-						var dq = this.q[i][j][qi] - this.q[i][j-1][qi];
-						if (dq != dq) throw 'nan';
+						var dq = this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j-1))];
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
 							if (this.ui[i][j][1] >= 0) {
-								this.r[i][j][1][qi] = (this.q[i][j-1][qi] - this.q[i][j-2][qi]) / dq;
+								this.r[i][j][1][iq] = (this.q[iq + 4 * (i + this.nx * (j-1))] - this.q[iq + 4 * (i + this.nx * (j-2))]) / dq;
 							} else {
-								this.r[i][j][1][qi] = (this.q[i][j+1][qi] - this.q[i][j][qi]) / dq;
+								this.r[i][j][1][iq] = (this.q[iq + 4 * (i + this.nx * (j+1))] - this.q[iq + 4 * (i + this.nx * (j))]) / dq;
 							}
 						} else {
-							this.r[i][j][1][qi] = 0;
+							this.r[i][j][1][iq] = 0;
 						}
-						if (this.r[i][j][1][qi] != this.r[i][j][1][qi]) throw 'nan';
 					}
 				}
 			
@@ -290,10 +286,10 @@ var advectMethods = {
 				for (var j = 0; j < this.nghost; ++j) {
 					for (var i = 0; i <= this.nx; ++i) {
 						for (var side = 0; side < 2; ++side) {
-							this.r[i][j][side][qi] = 0;
-							this.r[i][this.nx-j][side][qi] = 0;
-							this.r[j][i][side][qi] = 0;
-							this.r[this.nx-j][i][side][qi] = 0;
+							this.r[i][j][side][iq] = 0;
+							this.r[i][this.nx-j][side][iq] = 0;
+							this.r[j][i][side][iq] = 0;
+							this.r[this.nx-j][i][side][iq] = 0;
 						}
 					}
 				}
@@ -304,37 +300,37 @@ var advectMethods = {
 						
 						//left
 						//flux limiter
-						var phi = this.fluxMethod(this.r[i][j][0][qi]);
+						var phi = this.fluxMethod(this.r[i][j][0][iq]);
 						if (this.ui[i][j][0] >= 0) {
-							this.flux[i][j][0][qi] = this.ui[i][j][0] * this.q[i-1][j][qi];
+							this.flux[i][j][0][iq] = this.ui[i][j][0] * this.q[iq + 4 * (i-1 + this.nx * (j))];
 						} else {
-							this.flux[i][j][0][qi] = this.ui[i][j][0] * this.q[i][j][qi];
+							this.flux[i][j][0][iq] = this.ui[i][j][0] * this.q[iq + 4 * (i + this.nx * (j))];
 						}
-						var delta = phi * (this.q[i][j][qi] - this.q[i-1][j][qi]);
+						var delta = phi * (this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i-1 + this.nx * (j))]);
 						var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
-						this.flux[i][j][0][qi] += delta * .5 * Math.abs(this.ui[i][j][0]) * (1 - Math.abs(this.ui[i][j][0] * dt / dx));
+						this.flux[i][j][0][iq] += delta * .5 * Math.abs(this.ui[i][j][0]) * (1 - Math.abs(this.ui[i][j][0] * dt / dx));
 					
 						//top
 						//flux limiter
-						var phi = this.fluxMethod(this.r[i][j][1][qi]);
+						var phi = this.fluxMethod(this.r[i][j][1][iq]);
 						if (this.ui[i][j][1] >= 0) {
-							this.flux[i][j][1][qi] = this.ui[i][j][1] * this.q[i][j-1][qi];
+							this.flux[i][j][1][iq] = this.ui[i][j][1] * this.q[iq + 4 * (i + this.nx * (j-1))];
 						} else {
-							this.flux[i][j][1][qi] = this.ui[i][j][1] * this.q[i][j][qi];
+							this.flux[i][j][1][iq] = this.ui[i][j][1] * this.q[iq + 4 * (i + this.nx * (j))];
 						}
-						var delta = phi * (this.q[i][j][qi] - this.q[i][j-1][qi]);
+						var delta = phi * (this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j-1))]);
 						var dx = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
-						this.flux[i][j][1][qi] += delta * .5 * Math.abs(this.ui[i][j][1]) * (1 - Math.abs(this.ui[i][j][1] * dt / dx));
+						this.flux[i][j][1][iq] += delta * .5 * Math.abs(this.ui[i][j][1]) * (1 - Math.abs(this.ui[i][j][1] * dt / dx));
 					}
 				}
 				//now for ghost boundaries
 				for (var j = 0; j < this.nghost-1; ++j) {
 					for (var i = 0; i <= this.nx; ++i) {
 						for (var side = 0; side < 2; ++side) {
-							this.flux[i][j][side][qi] = 0;
-							this.flux[i][this.nx-j][side][qi] = 0;
-							this.flux[j][i][side][qi] = 0;
-							this.flux[this.nx-j][i][side][qi] = 0;
+							this.flux[i][j][side][iq] = 0;
+							this.flux[i][this.nx-j][side][iq] = 0;
+							this.flux[j][i][side][iq] = 0;
+							this.flux[this.nx-j][i][side][iq] = 0;
 						}
 					}
 				}
@@ -342,8 +338,8 @@ var advectMethods = {
 				//update cells
 				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-						this.q[i][j][qi] -= dt * (this.flux[i+1][j][0][qi] - this.flux[i][j][0][qi]) / (this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)]);
-						this.q[i][j][qi] -= dt * (this.flux[i][j+1][1][qi] - this.flux[i][j][1][qi]) / (this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)]);
+						this.q[iq + 4 * (i + this.nx * (j))] -= dt * (this.flux[i+1][j][0][iq] - this.flux[i][j][0][iq]) / (this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)]);
+						this.q[iq + 4 * (i + this.nx * (j))] -= dt * (this.flux[i][j+1][1][iq] - this.flux[i][j][1][iq]) / (this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)]);
 					}
 				}
 			}
@@ -358,7 +354,7 @@ var HydroState = makeClass({
 		this.gamma = 7/5;
 		
 		//x_i,j,dim: cell positions
-		//0 <= i < nx
+		//0 <= i < this.nx
 		this.x = new Float32Array(this.nx * this.nx * 2);
 		var e = 0;
 		for (var j = 0; j < this.nx; ++j) {
@@ -369,7 +365,7 @@ var HydroState = makeClass({
 		}
 		
 		//x_{i-1/2},{j-1/2},dim: interface positions
-		//0 <= i,j < nx+1
+		//0 <= i,j < this.nx+1
 		//0 <= dim < 2
 		this.xi = new Float32Array((this.nx+1) * (this.nx+1) * 2);
 		var e = 0;
@@ -396,16 +392,18 @@ var HydroState = makeClass({
 			}
 		}
 
-		//q_j,i: state vector, stored as q[j][i]
-		//q_0,i: density: rho
-		//q_1,i: momentum: rho * u
-		//q_2,i: momentum: rho * v
-		//q_3,i: work: rho * e
-		this.q = [];
-		for (var i = 0; i < this.nx; ++i) {
-			this.q[i] = [];
-			for (var j = 0; j < this.nx; ++j) {
-				this.q[i][j] = [];
+		//q_i,j,state: state vector, stored as q[state + 4 * (j + this.nx * (i))]
+		//q_i,j,0: density: rho
+		//q_i,j,1: momentum: rho * u
+		//q_i,j,2: momentum: rho * v
+		//q_i,j,3: work: rho * e
+		this.q = new Float32Array(this.nx * this.nx * 4);
+		var e = 0;
+		for (var j = 0; j < this.nx; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					this.q[e] = 0; ++e;
+				}
 			}
 		}
 
@@ -467,14 +465,16 @@ var HydroState = makeClass({
 		this.advectMethod = advectMethods.Burgers;
 	},
 	resetSod : function() {
-		var e = 0;
+		var ix = 0;
+		var iq = 0;
 		for (var j = 0; j < this.nx; ++j) {
 			for (var i = 0; i < this.nx; ++i) {
-				this.q[i][j][0] = (this.x[0 + e] < 30 && this.x[1 + e] < 30) ? 1 : .1;
-				this.q[i][j][1] = 0 * this.q[i][j][0];
-				this.q[i][j][2] = 0 * this.q[i][j][0];
-				this.q[i][j][3] = 1 * this.q[i][j][0];
-				e += 2;
+				this.q[0 + iq] = (this.x[0 + ix] < 30 && this.x[1 + ix] < 30) ? 1 : .1;
+				this.q[1 + iq] = 0 * this.q[0 + iq];
+				this.q[2 + iq] = 0 * this.q[0 + iq];
+				this.q[3 + iq] = 1 * this.q[0 + iq];
+				iq += 4;
+				ix += 2;
 			}
 		}
 	},
@@ -482,14 +482,16 @@ var HydroState = makeClass({
 		var xmid = .5 * (xmin + xmax);
 		var ymid = .5 * (ymin + ymax);
 		var dg = .2 * (xmax - xmin);
-		var e = 0;
+		var ix = 0;
+		var iq = 0;
 		for (var j = 0; j < this.nx; ++j) {
 			for (var i = 0; i < this.nx; ++i) {
-				this.q[i][j][0] = .3 + Math.exp(-(Math.pow(this.x[0 + e] - xmid, 2) + Math.pow(this.x[1 + e] - ymid, 2))/(dg * dg));
-				this.q[i][j][1] = 0 * this.q[i][j][0];
-				this.q[i][j][2] = 0 * this.q[i][j][0];
-				this.q[i][j][3] = 1 * this.q[i][j][0];
-				e += 2;
+				this.q[0 + iq] = .3 + Math.exp(-(Math.pow(this.x[0 + ix] - xmid, 2) + Math.pow(this.x[1 + ix] - ymid, 2))/(dg * dg));
+				this.q[1 + iq] = 0 * this.q[0 + iq];
+				this.q[2 + iq] = 0 * this.q[0 + iq];
+				this.q[3 + iq] = 1 * this.q[0 + iq];
+				ix += 2;
+				iq += 4;
 			}
 		}
 	},
@@ -508,23 +510,25 @@ var HydroState = makeClass({
 		this.boundary();
 
 		//compute pressure
+		var iq = 0;
 		for (var j = 0; j < this.nx; ++j) {
 			for (var i = 0; i < this.nx; ++i) {
-				var rho = this.q[i][j][0];
-				var u = this.q[i][j][1] / rho; 
-				var v = this.q[i][j][2] / rho; 
-				var energyTotal = this.q[i][j][3] / rho; 
+				var rho = this.q[0 + iq];
+				var u = this.q[1 + iq] / rho; 
+				var v = this.q[2 + iq] / rho; 
+				var energyTotal = this.q[3 + iq] / rho; 
 				var energyKinematic = .5 * (u * u + v * v);
 				var energyThermal = energyTotal - energyKinematic;
 				this.pressure[i][j] = (this.gamma - 1) * rho * energyThermal;
+				iq += 4;
 			}
 		}
 		
 		//apply momentum diffusion = pressure
 		for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				this.q[i][j][1] -= dt * (this.pressure[i+1][j] - this.pressure[i-1][j]) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
-				this.q[i][j][2] -= dt * (this.pressure[i][j+1] - this.pressure[i][j-1]) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
+				this.q[1 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i+1][j] - this.pressure[i-1][j]) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
+				this.q[2 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i][j+1] - this.pressure[i][j-1]) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
 			}
 		}
 
@@ -533,12 +537,12 @@ var HydroState = makeClass({
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 				//perhaps ui isn't the best use for velocit here?
 				//perhaps we could derive something from the state variables?
-				var u_inext = this.q[i+1][j][1] / this.q[i+1][j][0];
-				var u_iprev = this.q[i-1][j][1] / this.q[i-1][j][0];
-				var v_inext = this.q[i][j+1][2] / this.q[i][j+1][0];
-				var v_iprev = this.q[i][j-1][2] / this.q[i][j-1][0];
-				this.q[i][j][3] -= dt * (this.pressure[i+1][j] * u_inext - this.pressure[i-1][j] * u_iprev) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
-				this.q[i][j][3] -= dt * (this.pressure[i][j+1] * v_inext - this.pressure[i][j-1] * v_iprev) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
+				var u_inext = this.q[1 + 4 * (i+1 + this.nx * (j))] / this.q[0 + 4 * (i+1 + this.nx * (j))];
+				var u_iprev = this.q[1 + 4 * (i-1 + this.nx * (j))] / this.q[0 + 4 * (i-1 + this.nx * (j))];
+				var v_inext = this.q[2 + 4 * (i + this.nx * (j+1))] / this.q[0 + 4 * (i + this.nx * (j+1))];
+				var v_iprev = this.q[2 + 4 * (i + this.nx * (j-1))] / this.q[0 + 4 * (i + this.nx * (j-1))];
+				this.q[3 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i+1][j] * u_inext - this.pressure[i-1][j] * u_iprev) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
+				this.q[3 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i][j+1] * v_inext - this.pressure[i][j-1] * v_iprev) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
 			}
 		}
 	
@@ -566,15 +570,15 @@ var Hydro = makeClass({
 		//initialize geometry x and y coordinates once since they don't change
 		var centerX = (xmax + xmin) / 2;
 		var centerY = (ymax + ymin) / 2;
-		var e = 0;
+		var iv = 0;
 		var ix = 0;
 		var x = this.state.x;
 		var nx = this.state.nx;
 		for (var j = 0; j < nx; ++j) {
 			for (var i = 0; i < nx; ++i) {
-				this.vertexPositions[e] = x[ix] - centerX; ++e; ++ix;
-				this.vertexPositions[e] = x[ix] - centerY; ++e; ++ix;
-				e++;
+				this.vertexPositions[iv] = x[ix] - centerX; ++iv; ++ix;
+				this.vertexPositions[iv] = x[ix] - centerY; ++iv; ++ix;
+				iv++;
 			}
 		}
 
@@ -589,15 +593,17 @@ var Hydro = makeClass({
 		//update geometry z coordinate
 		var q = this.state.q;
 		var nx = this.state.nx;
-		var e = 2;
-		var f = 0;
+		var iv = 2;
+		var is = 0;
+		var iq = 0;
 		for (var j = 0; j < nx; ++j) {
 			for (var i = 0; i < nx; ++i) {
-				this.vertexPositions[e] = q[i][j][0] * 20.;
-				e += 3;
-				this.vertexStates[f++] = q[i][j][0];
-				this.vertexStates[f++] = Math.sqrt((q[i][j][1] * q[i][j][1] + q[i][j][2] * q[i][j][2]) / (q[i][j][0] * q[i][j][0]));
-				this.vertexStates[f++] = q[i][j][3] / q[i][j][0];
+				this.vertexPositions[iv] = q[0 + iq] * 20.;
+				iv += 3;
+				this.vertexStates[is++] = q[0 + iq];
+				this.vertexStates[is++] = Math.sqrt((q[1 + iq] * q[1 + iq] + q[2 + iq] * q[2 + iq]) / (q[0 + iq] * q[0 + iq]));
+				this.vertexStates[is++] = q[3 + iq] / q[0 + iq];
+				iq += 4;
 			}
 		}
 	}
