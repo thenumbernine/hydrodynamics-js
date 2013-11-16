@@ -362,8 +362,6 @@ var HydroState = makeClass({
 		this.nx = 200;
 		this.cfl =.5;
 		this.gamma = 7/5;
-		var x0 = 0;
-		var x1 = 100;
 		
 		//x_i: cell positions
 		//0 <= i < nx
@@ -372,8 +370,8 @@ var HydroState = makeClass({
 			this.x[i] = [];
 			for (var j = 0; j < this.nx; ++j) {
 				this.x[i][j] = [
-					x0 + (x1 - x0) * i / (this.nx-1),
-					x0 + (x1 - x0) * j / (this.nx-1)
+					xmin + (xmax - xmin) * i / (this.nx-1),
+					ymin + (ymax - ymin) * j / (this.nx-1)
 				];
 			}
 		}
@@ -485,13 +483,12 @@ var HydroState = makeClass({
 		}
 	},
 	resetWave : function() {
-		var x0 = this.x[0][0][0];
-		var x1 = this.x[this.nx-1][this.nx-1][1];
-		var xmid = .5 * (x0 + x1);
-		var dg = .1 * (x1 - x0);
+		var xmid = .5 * (xmin + xmax);
+		var ymid = .5 * (ymin + ymax);
+		var dg = .1 * (xmax - xmin);
 		for (var i = 0; i < this.nx; ++i) {
 			for (var j = 0; j < this.nx; ++j) {
-				this.q[i][j][0] = .3 + .3 * Math.exp(-(Math.pow(this.x[i][j][0]-xmid,2)+Math.pow(this.x[i][j][1]-xmid,2))/(dg*dg));
+				this.q[i][j][0] = .3 + Math.exp(-(Math.pow(this.x[i][j][0]-xmid,2)+Math.pow(this.x[i][j][1]-ymid,2))/(dg*dg));
 				this.q[i][j][1] = 0 * this.q[i][j][0];
 				this.q[i][j][2] = 0 * this.q[i][j][0];
 				this.q[i][j][3] = 1 * this.q[i][j][0];
@@ -668,6 +665,7 @@ $(document).ready(function(){
 		throw e;
 	}
 
+	gl.enable(gl.DEPTH_TEST);
 	//GL.view.ortho = true;
 	//GL.view.zNear = -1;
 	//GL.view.zFar = 1;
