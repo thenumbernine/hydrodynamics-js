@@ -99,7 +99,7 @@ var fluxMethods = {
 	fromm : function(r) { return .5 * (1 + r); },
 
 	//Wikipedia
-	CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
+	CHARM : function(r) { if (r < 0) return 0; return r*(3*r+1)/((r+1)*(r+1)); },
 	HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
 	HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
 	Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
@@ -310,7 +310,6 @@ var advectMethods = {
 		Cs = sqrt(gamma P / rho)
 		*/
 		advect : function(dt) {
-			/* Method 0: interface based rTildes * /
 			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
 				for (var j = 0; j < 3; ++j) {
 					this.deltaQITilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
@@ -318,11 +317,15 @@ var advectMethods = {
 											+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]);
 				}
 			}
+			
+			/* Method 0: interface based rTildes */
+			//works with donor cell advection
+			//crashes on superbee ...
 
 			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
 				for (var j = 0; j < 3; ++j) {
 					var deltaQITilde = this.deltaQITilde[ix][j];
-					if (Math.abs(deltaQITilde > 0)) {
+					if (Math.abs(deltaQITilde) > 0) {
 						if (this.interfaceEigenvalues[j] > 0) {
 							this.rTilde[ix][j] = this.deltaQITilde[ix-1][j] / deltaQITilde;
 						} else {
@@ -332,7 +335,7 @@ var advectMethods = {
 				}
 			}
 			/**/
-			/* Method 1 (working): cell eigen based rTildes */
+			/* Method 1 (working with all limiters): cell eigen based rTildes * /
 			//get cell-centered eigenvalues
 			//only used for r values at the moment
 			//(maybe I can just average left and right?)
@@ -381,8 +384,8 @@ var advectMethods = {
 				//...then transform it into the eigenvector basis associated with the r (rather than the basis associated with each individual q)
 				for (var j = 0; j < 3; ++j) {
 					this.rTilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * r[0] 
-						+ this.interfaceEigenvectorsInverse[ix][1][j] * r[1]
-						+ this.interfaceEigenvectorsInverse[ix][2][j] * r[2];
+										+ this.interfaceEigenvectorsInverse[ix][1][j] * r[1]
+										+ this.interfaceEigenvectorsInverse[ix][2][j] * r[2];
 				}
 			
 			}	
@@ -407,7 +410,6 @@ var advectMethods = {
 			//use them (and eigenvalues at boundaries) to determine fTilde's at boundaries
 			//use them (and eigenvectors at boundaries) to determine f's at boundaries
 			//use them to advect, like good old fluxes advect
-			var deltaFluxTilde = [];
 			var fluxTilde = [];
 			var fluxAvg = [];
 
@@ -423,16 +425,6 @@ var advectMethods = {
 						+ this.interfaceMatrix[ix][2][j] * (this.q[ix-1][2] + this.q[ix][2]));
 				}
 
-				//tilde means in basis of eigenvectors
-				//flux[ix][k] = fluxTilde[ix][j] * interfaceEigenvectors[ix][k][j]
-				for (var j = 0; j < 3; ++j) {
-					//flux in eigenvector basis is the q vector transformed by the inverse then scaled by the eigenvalue
-					deltaFluxTilde[j] = this.interfaceEigenvalues[ix][j] * (
-						this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
-						+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
-						+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]));
-				}
-
 				//calculate flux
 				for (var j = 0; j < 3; ++j) {
 					var theta = 0;
@@ -445,7 +437,12 @@ var advectMethods = {
 					var phi = this.fluxMethod(this.rTilde[ix][j]);
 					var dx = this.xi[ix] - this.xi[ix-1];
 					var epsilon = this.interfaceEigenvalues[ix][j] * dt / dx;
-					fluxTilde[j] = -.5 * deltaFluxTilde[j] * (theta + phi * (epsilon - theta));
+					
+					//flux[ix][k] = fluxTilde[ix][j] * interfaceEigenvectors[ix][k][j]
+					//flux in eigenvector basis is the q vector transformed by the inverse then scaled by the eigenvalue
+					var deltaFluxTilde = this.interfaceEigenvalues[ix][j] * this.deltaQITilde[ix][j];
+					
+					fluxTilde[j] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
 				}
 
 				//reproject fluxTilde back into q
@@ -568,6 +565,7 @@ var HydroState = makeClass({
 		//(before I had converted the previous Godunov methods into a Roe method following the book's notes)
 		//(now I'm trying to implement the book's pseudocode for Roe solver)
 		//(looks like the qTildes are defined at interfaces, not cells...)
+		//tilde means in basis of eigenvectors
 		this.deltaQITilde = [];
 		for (var i = 0; i <= this.nx; ++i) {
 			this.deltaQITilde[i] = [0,0,0];

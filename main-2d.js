@@ -56,38 +56,63 @@ velocity
 hTotal
 speedOfSound
 */
-function buildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocityX, velocityY, hTotal, gamma, normalX, normalY) {
 	//calculate matrix & eigenvalues & vectors at interface from state at interface
-	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
-	//matrix, listed per column
-	matrix[0][0] = 0;
-	matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
-	matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
-	matrix[1][0] = 1;
-	matrix[1][1] = (3 - gamma) * velocity;
-	matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
-	matrix[2][0] = 0;
-	matrix[2][1] = gamma - 1;
-	matrix[2][2] = gamma * velocity;
-
+	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)));
+	var velocityN = velocityX * normalX + velocityY * normalY;
+	var tangentX = -normalY;
+	var tangentY = normalX;
+	var velocityT = velcoityX * tangentX + velocityY * tangentY;
+	
 	//eigenvalues: min, mid, max
-	eigenvalues[0] = velocity - speedOfSound;
-	eigenvalues[1] = velocity;
-	eigenvalues[2] = velocity + speedOfSound;
+	eigenvalues[0] = velocityN - speedOfSound;
+	eigenvalues[1] = velocityN;
+	eigenvalues[2] = velocityN;
+	eigenvalues[3] = velocityN + speedOfSound;
+	
 	//min eigenvector
 	eigenvectors[0][0] = 1;
-	eigenvectors[0][1] = velocity - speedOfSound;
-	eigenvectors[0][2] = hTotal - speedOfSound * velocity;
+	eigenvectors[0][1] = velocityX - speedOfSound * normalX;
+	eigenvectors[0][2] = velocityY - speedOfSound * normalY;
+	eigenvectors[0][3] = hTotal - speedOfSound * velocityN;
 	//mid eigenvector
-	eigenvectors[1][0] = 1;
-	eigenvectors[1][1] = velocity;
-	eigenvectors[1][2] = .5 * velocity * velocity;
-	//max eigenvector
+	eigenvectors[1][0] = 0;
+	eigenvectors[1][1] = speedOfSound * tangentX;
+	eigenvectors[1][2] = speedOfSound * tangentY;
+	eigenvectors[1][3] = speedOfSound * velocityT;
+	//mid eigenvector
 	eigenvectors[2][0] = 1;
-	eigenvectors[2][1] = velocity + speedOfSound;
-	eigenvectors[2][2] = hTotal + speedOfSound * velocity;
+	eigenvectors[2][1] = velocityX;
+	eigenvectors[2][2] = velocityY;
+	eigenvectors[2][3] = .5 * (velocityX * velocityX + velocityY * velocityY);
+	//max eigenvector
+	eigenvectors[3][0] = 1;
+	eigenvectors[3][1] = velocityX + speedOfSound * normalX;
+	eigenvectors[3][2] = velocityY + speedOfSound * normalY;
+	eigenvectors[3][3] = hTotal + speedOfSound * velocityN;
+	
 	//calculate eigenvector inverses ... 
-	mat33invert(eigenvectorsInverse, eigenvectors);
+	mat44invert(eigenvectorsInverse, eigenvectors);
+	
+	//calculate matrix
+	matrix[0][0] = 0;
+	matrix[0][1] = (gamma - 3) / 2 * velocityX * velocityX + (gamma - 1) / 2 * velocityY * velocityY;
+	matrix[0][2] = -velocityX * velocityY;
+	matrix[0][3] = (gamma - 1) * q * q * u - gamma * E * u / rho;//velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
+	matrix[1][0] = 1;
+	matrix[1][1] = (3 - gamma) * velocityX;
+	matrix[1][2] = velocityY;
+	matrix[1][3] = (gamma - 1) / 2 * (3 * velocityX * velocityX + velocityY * velocityY);//hTotal - (gamma - 1) * velocity * velocity;
+	matrix[2][0] = 0;
+	matrix[2][1] = (1 - gamma) * velocityY;
+	matrix[2][2] = velocityX;
+	matrix[2][3] = (1 - gamma) * velocityX * velocityY;
+	matrix[2][0] = 0;
+	matrix[2][1] = gamma - 1;
+	matrix[2][2] = 0;
+	matrix[2][3] = gamma * velocityX;
+
+
 }
 
 var fluxMethods = {
@@ -366,51 +391,61 @@ var advectMethods = {
 			var mindum = undefined;
 			for (var iy = 1; iy < this.nx; ++iy) {
 				for (var ix = 1; ix < this.nx; ++ix) {
+					for (var side = 0; side < 2; ++side) {
+						var iqL = ix - dirs[side][0] + this.nx * (iy - dirs[side][1]);
+						var densityL = this.q[0 + iqL];
+						var velocityXL = this.q[1 + iqL] / densityL;
+						var velocityYL = this.q[2 + iqL] / densityL;
+						var energyTotalL = this.q[3 + iqL] / densityL;
+						var energyKinematicL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
+						var energyThermalL = energyTotalL - energyKinematicL;
+						var pressureL = (this.gamma - 1) * densityL * energyThermalL;
+						var speedOfSoundL = Math.sqrt(this.gamma * prsesureL / densityL);
+						var hTotalL = energyTotalL + pressureL / densityL;
+						var roeWeightL = Math.sqrt(densityL);
+						
+						var iqR = ix + this.nx * iy;
+						var densityR = this.q[0 + iqR];
+						var velocityXR = this.q[1 + iqR] / densityR;
+						var velocityYR = this.q[2 + iqR] / densityR;
+						var energyTotalR = this.q[3 + iqR] / densityR;
+						var energyKinematicR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
+						var energyThermalR = energyTotalR - energyKinematicR;
+						var pressureR = (this.gamma - 1) * densityR * energyThermalR;
+						var speedOfSoundR = Math.sqrt(this.gamma * prsesureR / densityR);
+						var hTotalR = energyTotalR + pressureR / densityR;
+						var roeWeightR = Math.sqrt(densityR);
 					
-					//left/right interface 
+						var denom = roeWeightL + roeWeightR;
+						var velocityX = (roeWeightL * velocityXL + roeWeightR * velocityXR) / denom;
+						var velocityY = (roeWeightL * velocityYL + roeWeightR * velocityYR) / denom;
+						var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
 
-					var densityL = this.q[0 + (ix-1 + this.nx * iy)];
-					var velocityXL = this.q[1 + (ix-1 + this.nx * iy)] / densityL;
-					var velocityYL = this.q[2 + (ix-1 + this.nx * iy)] / densityL;
-					var energyTotalL = this.q[3 + (ix-1 + this.nx * iy)] / densityL;
-					var energyKinematicL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
-					var energyThermalL = energyTotalL - energyKinematicL;
-					var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-					var speedOfSoundL = Math.sqrt(this.gamma * prsesureL / densityL);
-					var hTotalL = energyTotalL + pressureL / densityL;
-					var roeWeightL = Math.sqrt(densityL);
-					
-					var densityR = this.q[0 + (ix + this.nx * iy)];
-					var velocityXR = this.q[1 + (ix + this.nx * iy)] / densityR;
-					var velocityYR = this.q[2 + (ix + this.nx * iy)] / densityR;
-					var energyTotalR = this.q[3 + (ix + this.nx * iy)] / densityR;
-					var energyKinematicR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
-					var energyThermalR = energyTotalR - energyKinematicR;
-					var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-					var speedOfSoundR = Math.sqrt(this.gamma * prsesureR / densityR);
-					var hTotalR = energyTotalR + pressureR / densityR;
-					var roeWeightR = Math.sqrt(densityR);
-				
-					var denom = roeWeightL + roeWeightR;
-					var velocityX = (roeWeightL * velocityXL + roeWeightR * velocityXR) / denom;
-					var velocityY = (roeWeightL * velocityYL + roeWeightR * velocityYR) / denom;
-					var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
+						buildEigenstate(
+							 side + 2 * (ix + (this.nx+1) * iy),	//index into interface element.  from there you'll have to scale by cell size.  Thus manually recreating the automatic storage of C structures. JavaScript, why can't you be more like LuaJIT? 
+							 this.interfaceMatrix,
+							 this.interfaceEigenvalues,
+							 this.interfaceEigenvectors,
+							 this.interfaceEigenvectorsInverse,
+							 velocityX, velocityY, hTotal, this.gamma,
+							 dirs[side][0], dirs[side][1]);
 
-					var rho = this.q[0 + 4 * (ix + this.nx * iy)];
-					var u = this.q[1 + 4 * (ix + this.nx * iy)] / rho;
-					var v = this.q[2 + 4 * (ix + this.nx * iy)] / rho; 
-					var energyTotal = this.q[3 + 4 * (ix + this.nx * iy)] / rho; 
-					var energyKinematic = .5 * (u * u + v * v);
-					var energyThermal = energyTotal - energyKinematic;
-					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
-					var dx = this.xi[0 + 2 * (ix+1 + (this.nx+1) * iy)] - this.xi[0 + 2 * (ix + (this.nx+1) * iy)];
-					var dy = this.xi[1 + 2 * (ix + (this.nx+1) * (iy+1))] - this.xi[1 + 2 * (ix + (this.nx+1) * iy)];
-					//http://en.wikipedia.org/wiki/Courant%E2%80%93Friedrichs%E2%80%93Lewy_condition
-					//var dum = 1 / (speedOfSound + Math.abs(u) / dx + Math.abs(v) / dy); 
-					var dum = dx / (speedOfSound + Math.abs(u));
-					if (mindum === undefined || dum < mindum) mindum = dum;
-					var dum = dy / (speedOfSound + Math.abs(v));
-					if (mindum === undefined || dum < mindum) mindum = dum;
+						var rho = this.q[0 + 4 * (ix + this.nx * iy)];
+						var u = this.q[1 + 4 * (ix + this.nx * iy)] / rho;
+						var v = this.q[2 + 4 * (ix + this.nx * iy)] / rho; 
+						var energyTotal = this.q[3 + 4 * (ix + this.nx * iy)] / rho; 
+						var energyKinematic = .5 * (u * u + v * v);
+						var energyThermal = energyTotal - energyKinematic;
+						var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
+						var dx = this.xi[0 + 2 * (ix+1 + (this.nx+1) * iy)] - this.xi[0 + 2 * (ix + (this.nx+1) * iy)];
+						var dy = this.xi[1 + 2 * (ix + (this.nx+1) * (iy+1))] - this.xi[1 + 2 * (ix + (this.nx+1) * iy)];
+						//http://en.wikipedia.org/wiki/Courant%E2%80%93Friedrichs%E2%80%93Lewy_condition
+						//var dum = 1 / (speedOfSound + Math.abs(u) / dx + Math.abs(v) / dy); 
+						var dum = dx / (speedOfSound + Math.abs(u));
+						if (mindum === undefined || dum < mindum) mindum = dum;
+						var dum = dy / (speedOfSound + Math.abs(v));
+						if (mindum === undefined || dum < mindum) mindum = dum;
+					}
 				}
 			}
 			return this.cfl * mindum;
