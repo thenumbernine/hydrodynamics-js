@@ -318,10 +318,6 @@ var advectMethods = {
 				}
 			}
 			
-			/* Method 0: interface based rTildes */
-			//works with donor cell advection
-			//crashes on superbee ...
-
 			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
 				for (var j = 0; j < 3; ++j) {
 					var deltaQITilde = this.deltaQITilde[ix][j];
@@ -334,62 +330,7 @@ var advectMethods = {
 					}
 				}
 			}
-			/**/
-			/* Method 1 (working with all limiters): cell eigen based rTildes * /
-			//get cell-centered eigenvalues
-			//only used for r values at the moment
-			//(maybe I can just average left and right?)
-			for (var i = 0; i < this.nx; ++i) {
-				var density = this.q[i][0];
-				var velocity = this.q[i][1] / density;
-				var energyTotal = this.q[i][2] / density;
-				var energyKinematic = .5 * velocity * velocity;
-				var energyThermal = energyTotal - energyKinematic;
-				var pressure = (this.gamma - 1) * density * energyThermal;
-				var hTotal = energyTotal + pressure / density;
-				buildEigenstate(this.matrix[i], this.eigenvalues[i], this.eigenvectors[i], this.eigenvectorsInverse[i], velocity, hTotal, this.gamma);
-				for (var j = 0; j < 3; ++j) {
-					this.qTilde[i][j] = this.eigenvectorsInverse[i][0][j] * this.q[i][0] 
-									+ this.eigenvectorsInverse[i][1][j] * this.q[i][1]
-									+ this.eigenvectorsInverse[i][2][j] * this.q[i][2];
-				}
-			}		
-			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
-				for (var j = 0; j < 3; ++j) {
-					var dqTilde = this.qTilde[ix][j] - this.qTilde[ix-1][j];
-					if (Math.abs(dqTilde) > 0) {
-						if (this.interfaceEigenvalues[ix][j] >= 0) {
-							this.rTilde[ix][j] = (this.qTilde[ix-1][j] - this.qTilde[ix-2][j]) / dqTilde;
-						} else {
-							this.rTilde[ix][j] = (this.qTilde[ix+1][j] - this.qTilde[ix][j]) / dqTilde;
-						}
-					}
-				}
-			}	
-			/**/
-			/* Method 2 (not working): use q's for rTilde's (instead of qTildes ... to cut out all the eigen stuff at cell centers) * /
-			var r = [];
-			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
-				//first build r_{i-1/2} by the q's on cell boundaries: q_{i-2}, q_{i-1}, q_i, q_{i+1}
-				for (var j = 0; j < 3; ++j) {
-					var dq = this.q[ix][j] - this.q[ix-1][j];
-					if (Math.abs(dq) > 0) {
-						if (this.interfaceEigenvalues[ix][j] >= 0) {
-							r[j] = (this.q[ix-1][j] - this.q[ix-2][j]) / dq;
-						} else {
-							r[j] = (this.q[ix+1][j] - this.q[ix][j]) / dq;
-						}
-					}
-				}
-				//...then transform it into the eigenvector basis associated with the r (rather than the basis associated with each individual q)
-				for (var j = 0; j < 3; ++j) {
-					this.rTilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * r[0] 
-										+ this.interfaceEigenvectorsInverse[ix][1][j] * r[1]
-										+ this.interfaceEigenvectorsInverse[ix][2][j] * r[2];
-				}
-			
-			}	
-			/**/
+
 			//..and keep the boundary r's zero	
 			for (var j = 0; j < 3; ++j) {
 				this.rTilde[0][j] = this.rTilde[1][j] = this.rTilde[this.nx-1][j] = this.rTilde[this.nx][j] = 0;
@@ -542,22 +483,6 @@ var HydroState = makeClass({
 		this.rTilde = [];
 		for (var i = 0; i < this.nx+1; ++i) {
 			this.rTilde[i] = [0,0,0];
-		}
-
-		//used for Riemann
-		//calculated in advect
-		// used for finding r values
-		this.qTilde = [];
-		this.matrix = [];
-		this.eigenvalues = [];
-		this.eigenvectors = [];
-		this.eigenvectorsInverse = [];
-		for (var i = 0; i < this.nx; ++i) {
-			this.qTilde[i] = [0,0,0];
-			this.matrix[i] = [[1,0,0], [0,1,0], [0,0,1]];
-			this.eigenvalues[i] = [0, 0, 0];
-			this.eigenvectors[i] = [[1,0,0], [0,1,0], [0,0,1]];
-			this.eigenvectorsInverse[i] = [[1,0,0], [0,1,0], [0,0,1]];
 		}
 
 		//state change over interface in interface Roe eigenspace
