@@ -181,7 +181,8 @@ var advectMethods = {
 				var energyKinematic = .5 * u * u;
 				var energyThermal = energyTotal - energyKinematic;
 				var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
-				var dum = (this.xi[i+1] - this.xi[i]) / (speedOfSound + Math.abs(u));
+				var dx = this.xi[i+1] - this.xi[i];
+				var dum = dx / (speedOfSound + Math.abs(u));
 				if (mindum === undefined || dum < mindum) mindum = dum;
 			}
 			if (mindum != mindum) throw 'nan';

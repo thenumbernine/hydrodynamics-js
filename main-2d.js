@@ -209,8 +209,13 @@ var advectMethods = {
 					var energyKinematic = .5 * (u * u + v * v);
 					var energyThermal = energyTotal - energyKinematic;
 					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
-					//just xi? yi too?
-					var dum = (this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)]) / (speedOfSound + Math.sqrt(u * u + v * v));
+					var dx = this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)];
+					var dy = this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)];
+					//http://en.wikipedia.org/wiki/Courant%E2%80%93Friedrichs%E2%80%93Lewy_condition
+					//var dum = 1 / (speedOfSound + Math.abs(u) / dx + Math.abs(v) / dy); 
+					var dum = dx / (speedOfSound + Math.abs(u));
+					if (mindum === undefined || dum < mindum) mindum = dum;
+					var dum = dy / (speedOfSound + Math.abs(v));
 					if (mindum === undefined || dum < mindum) mindum = dum;
 					iq += 4;
 				}
@@ -299,6 +304,8 @@ var advectMethods = {
 				//construct flux:
 				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
 					for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+						var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
+						var dy = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
 						
 						//left
 						//flux limiter
@@ -309,8 +316,7 @@ var advectMethods = {
 							this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] = this.ui[0 + 2 * (i + (this.nx+1) * (j))] * this.q[iq + 4 * (i + this.nx * (j))];
 						}
 						var delta = phi * (this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i-1 + this.nx * (j))]);
-						var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
-						this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] += delta * .5 * Math.abs(this.ui[0 + 2 * (i + (this.nx+1) * (j))]) * (1 - Math.abs(this.ui[0 + 2 * (i + (this.nx+1) * (j))] * dt / dx));
+						this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] += delta * .5 * Math.abs(this.ui[0 + 2 * (i + (this.nx+1) * (j))]) * (1 - Math.abs(this.ui[0 + 2 * (i + (this.nx+1) * (j))] * dt * dy / dx));
 					
 						//top
 						//flux limiter
@@ -321,8 +327,7 @@ var advectMethods = {
 							this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] = this.ui[1 + 2 * (i + (this.nx+1) * (j))] * this.q[iq + 4 * (i + this.nx * (j))];
 						}
 						var delta = phi * (this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j-1))]);
-						var dx = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
-						this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] += delta * .5 * Math.abs(this.ui[1 + 2 * (i + (this.nx+1) * (j))]) * (1 - Math.abs(this.ui[1 + 2 * (i + (this.nx+1) * (j))] * dt / dx));
+						this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] += delta * .5 * Math.abs(this.ui[1 + 2 * (i + (this.nx+1) * (j))]) * (1 - Math.abs(this.ui[1 + 2 * (i + (this.nx+1) * (j))] * dt * dx / dy));
 					}
 				}
 				//now for ghost boundaries
