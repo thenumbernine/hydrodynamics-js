@@ -473,7 +473,7 @@ var HydroState = makeClass({
 
 		//solver configuration
 		this.boundaryMethod = boundaryMethods.mirror;
-		this.fluxMethod = fluxMethods.upwind;
+		this.fluxMethod = fluxMethods.superbee;
 		this.advectMethod = advectMethods.Burgers;
 	},
 	resetSod : function() {
@@ -759,6 +759,7 @@ $(document).ready(function(){
 	refreshView();
 	
 	//start it off
+	$(window).resize(onresize);
 	onresize();
 	update();
 });
