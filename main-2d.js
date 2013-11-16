@@ -315,7 +315,7 @@ var advectMethods = {
 							this.flux[i][j][0][qi] = this.ui[i][j][0] * this.q[i][j][qi];
 						}
 						var delta = phi * (this.q[i][j][qi] - this.q[i-1][j][qi]);
-						var dx = this.x[i][j][0] - this.x[i-1][j][0];
+						var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
 						this.flux[i][j][0][qi] += delta * .5 * Math.abs(this.ui[i][j][0]) * (1 - Math.abs(this.ui[i][j][0] * dt / dx));
 					
 						//top
@@ -327,7 +327,7 @@ var advectMethods = {
 							this.flux[i][j][1][qi] = this.ui[i][j][1] * this.q[i][j][qi];
 						}
 						var delta = phi * (this.q[i][j][qi] - this.q[i][j-1][qi]);
-						var dx = this.x[i][j][1] - this.x[i][j-1][1];
+						var dx = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
 						this.flux[i][j][1][qi] += delta * .5 * Math.abs(this.ui[i][j][1]) * (1 - Math.abs(this.ui[i][j][1] * dt / dx));
 						if (this.flux[i][j][1][qi] != this.flux[i][j][1][qi]) throw 'nan';
 					}
@@ -365,14 +365,12 @@ var HydroState = makeClass({
 		
 		//x_i: cell positions
 		//0 <= i < nx
-		this.x = [];//new Float32Array(this.nx);
-		for (var i = 0; i < this.nx; ++i) {
-			this.x[i] = [];
-			for (var j = 0; j < this.nx; ++j) {
-				this.x[i][j] = [
-					xmin + (xmax - xmin) * i / (this.nx-1),
-					ymin + (ymax - ymin) * j / (this.nx-1)
-				];
+		this.x = new Float32Array(this.nx * this.nx * 2);
+		var e = 0;
+		for (var j = 0; j < this.nx; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				this.x[e] = xmin + (xmax - xmin) * i / (this.nx-1); ++e;
+				this.x[e] = ymin + (ymax - ymin) * j / (this.nx-1); ++e;
 			}
 		}
 		
@@ -386,18 +384,18 @@ var HydroState = makeClass({
 				var J = Math.min(j, this.nx-1);
 				this.xi[i][j] = [];
 				if (i == 0) {
-					this.xi[i][j][0] = 2 * this.x[1][J][0] - this.x[2][J][0];
+					this.xi[i][j][0] = 2 * this.x[0 + 2 * (1 + this.nx * J)] - this.x[0 + 2 * (2 + this.nx * J)];
 				} else if (i == this.nx) {
-					this.xi[i][j][0] = 2 * this.x[this.nx-1][J][0] - this.x[this.nx-2][J][0];
+					this.xi[i][j][0] = 2 * this.x[0 + 2 * (this.nx-1 + this.nx * J)] - this.x[0 + 2 * (this.nx-2 + this.nx * J)];
 				} else {
-					this.xi[i][j][0] = .5*(this.x[i][J][0] + this.x[i-1][J][0]);
+					this.xi[i][j][0] = .5*(this.x[0 + 2 * (i + this.nx * J)] + this.x[0 + 2 * (i-1 + this.nx * J)]);
 				}
 				if (j == 0) {
-					this.xi[i][j][1] = 2 * this.x[I][1][1] - this.x[I][2][1];
+					this.xi[i][j][1] = 2 * this.x[1 + 2 * (I + this.nx * 1)] - this.x[1 + 2 * (I + this.nx * 2)];
 				} else if (j == this.nx) {
-					this.xi[i][j][1] = 2 * this.x[I][this.nx-1][1] - this.x[I][this.nx-2][1];
+					this.xi[i][j][1] = 2 * this.x[1 + 2 * (I + this.nx * (this.nx-1))] - this.x[1 + 2 * (I + this.nx * (this.nx-2))];
 				} else {
-					this.xi[i][j][1] = .5*(this.x[I][j][1] + this.x[I][j-1][1]);
+					this.xi[i][j][1] = .5*(this.x[1 + 2 * (I + this.nx * j)] + this.x[1 + 2 * (I + this.nx * (j-1))]);
 				}
 			}
 		}
@@ -473,9 +471,9 @@ var HydroState = makeClass({
 		this.advectMethod = advectMethods.Burgers;
 	},
 	resetSod : function() {
-		for (var i = 0; i < this.nx; ++i) {
-			for (var j = 0; j < this.nx; ++j) {
-				this.q[i][j][0] = (this.x[i][j][0] < 30 && this.x[i][j][1] < 30) ? 1 : .1;
+		for (var j = 0; j < this.nx; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				this.q[i][j][0] = (this.x[0 + 2 * (i + this.nx * j)] < 30 && this.x[1 + 2 * (i + this.nx * j)] < 30) ? 1 : .1;
 				this.q[i][j][1] = 0 * this.q[i][j][0];
 				this.q[i][j][2] = 0 * this.q[i][j][0];
 				this.q[i][j][3] = 1 * this.q[i][j][0];
@@ -488,7 +486,7 @@ var HydroState = makeClass({
 		var dg = .1 * (xmax - xmin);
 		for (var i = 0; i < this.nx; ++i) {
 			for (var j = 0; j < this.nx; ++j) {
-				this.q[i][j][0] = .3 + Math.exp(-(Math.pow(this.x[i][j][0]-xmid,2)+Math.pow(this.x[i][j][1]-ymid,2))/(dg*dg));
+				this.q[i][j][0] = .3 + Math.exp(-(Math.pow(this.x[0 + 2 * (i + this.nx * j)]-xmid,2)+Math.pow(this.x[1 + 2 * (i + this.nx * j)]-ymid,2))/(dg*dg));
 				this.q[i][j][1] = 0 * this.q[i][j][0];
 				this.q[i][j][2] = 0 * this.q[i][j][0];
 				this.q[i][j][3] = 1 * this.q[i][j][0];
@@ -525,8 +523,8 @@ var HydroState = makeClass({
 		//apply momentum diffusion = pressure
 		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
-				this.q[i][j][1] -= dt * (this.pressure[i+1][j] - this.pressure[i-1][j]) / (this.x[i+1][j][0] - this.x[i-1][j][0]);
-				this.q[i][j][2] -= dt * (this.pressure[i][j+1] - this.pressure[i][j-1]) / (this.x[i][j+1][1] - this.x[i][j-1][1]);
+				this.q[i][j][1] -= dt * (this.pressure[i+1][j] - this.pressure[i-1][j]) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
+				this.q[i][j][2] -= dt * (this.pressure[i][j+1] - this.pressure[i][j-1]) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
 			}
 		}
 
@@ -539,8 +537,8 @@ var HydroState = makeClass({
 				var u_iprev = this.q[i-1][j][1] / this.q[i-1][j][0];
 				var v_inext = this.q[i][j+1][2] / this.q[i][j+1][0];
 				var v_iprev = this.q[i][j-1][2] / this.q[i][j-1][0];
-				this.q[i][j][3] -= dt * (this.pressure[i+1][j] * u_inext - this.pressure[i-1][j] * u_iprev) / (this.x[i+1][j][0] - this.x[i-1][j][0]);
-				this.q[i][j][3] -= dt * (this.pressure[i][j+1] * v_inext - this.pressure[i][j-1] * v_iprev) / (this.x[i][j+1][1] - this.x[i][j-1][1]);
+				this.q[i][j][3] -= dt * (this.pressure[i+1][j] * u_inext - this.pressure[i-1][j] * u_iprev) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
+				this.q[i][j][3] -= dt * (this.pressure[i][j+1] * v_inext - this.pressure[i][j-1] * v_iprev) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
 			}
 		}
 	
@@ -569,12 +567,13 @@ var Hydro = makeClass({
 		var centerX = (xmax + xmin) / 2;
 		var centerY = (ymax + ymin) / 2;
 		var e = 0;
+		var xi = 0;
 		var x = this.state.x;
 		var nx = this.state.nx;
-		for (var i = 0; i < nx; ++i) {
-			for (var j = 0; j < nx; ++j) {
-				this.vertexPositions[e++] = x[i][j][0] - centerX;
-				this.vertexPositions[e++] = x[i][j][1] - centerY;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				this.vertexPositions[e] = x[xi] - centerX; ++e; ++xi;
+				this.vertexPositions[e] = x[xi] - centerY; ++e; ++xi;
 				e++;
 			}
 		}
@@ -588,13 +587,12 @@ var Hydro = makeClass({
 		this.state.update();
 	
 		//update geometry z coordinate
-		var x = this.state.x;
 		var q = this.state.q;
 		var nx = this.state.nx;
 		var e = 2;
 		var f = 0;
-		for (var i = 0; i < nx; ++i) {
-			for (var j = 0; j < nx; ++j) {
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
 				this.vertexPositions[e] = q[i][j][0] * 20.;
 				e += 3;
 				this.vertexStates[f++] = q[i][j][0];
@@ -694,8 +692,8 @@ $(document).ready(function(){
 	for (var j = 0; j < hydro.state.nx-1; ++j) {
 		var indexes = [];
 		for (var i = 0; i < hydro.state.nx; ++i) {
-			indexes.push(i+j*hydro.state.nx);
-			indexes.push(i+(j+1)*hydro.state.nx);
+			indexes.push(i + j*hydro.state.nx);
+			indexes.push(i + (j+1)*hydro.state.nx);
 		}
 		new GL.SceneObject({
 			mode : gl.TRIANGLE_STRIP,
