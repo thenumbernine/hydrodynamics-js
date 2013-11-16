@@ -228,37 +228,27 @@ var advectMethods = {
 			//get velocity at interfaces from state
 			for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
 				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-					//left boundary's du/dx and dv/dx
-					this.ui[i][j][0][0] = .5 * (this.q[i][j][1] / this.q[i][j][0] + this.q[i-1][j][1] / this.q[i-1][j][0]);
-					this.ui[i][j][0][1] = .5 * (this.q[i][j][2] / this.q[i][j][0] + this.q[i-1][j][2] / this.q[i-1][j][0]);
-					//top boundary's du/dy and dv/dy
-					this.ui[i][j][1][0] = .5 * (this.q[i][j][1] / this.q[i][j][0] + this.q[i][j-1][1] / this.q[i][j-1][0]);
-					this.ui[i][j][1][1] = .5 * (this.q[i][j][2] / this.q[i][j][0] + this.q[i][j-1][2] / this.q[i][j-1][0]);
+					//left boundary's du/dx (velocity gradient tangent to edge)
+					this.ui[i][j][0] = .5 * (this.q[i][j][1] / this.q[i][j][0] + this.q[i-1][j][1] / this.q[i-1][j][0]);
+					//top boundary's dv/dy
+					this.ui[i][j][1] = .5 * (this.q[i][j][2] / this.q[i][j][0] + this.q[i][j-1][2] / this.q[i][j-1][0]);
 				}
 			}
 			//boundary zero
 			for (var i = 0; i <= this.nx; ++i) {
 				for (var j = 0; j < this.nghost; ++j) {
 					//left boundary, left and top sides, zero vector
-					this.ui[j][i][0][0] = 0;
-					this.ui[j][i][0][1] = 0;
-					this.ui[j][i][1][0] = 0;
-					this.ui[j][i][1][1] = 0;
+					this.ui[j][i][0] = 0;
+					this.ui[j][i][1] = 0;
 					//right boundary, left and top sides, zero vector
-					this.ui[this.nx-j][i][0][0] = 0;
-					this.ui[this.nx-j][i][0][1] = 0;
-					this.ui[this.nx-j][i][1][0] = 0;
-					this.ui[this.nx-j][i][1][1] = 0;
+					this.ui[this.nx-j][i][0] = 0;
+					this.ui[this.nx-j][i][1] = 0;
 					//top boundary, left and top sides, zero vector
-					this.ui[i][j][0][0] = 0;
-					this.ui[i][j][0][1] = 0;
-					this.ui[i][j][1][0] = 0;
-					this.ui[i][j][1][1] = 0;
+					this.ui[i][j][0] = 0;
+					this.ui[i][j][1] = 0;
 					//bottom boundary, left and top sides, zero vector
-					this.ui[i][this.nx-j][0][0] = 0;
-					this.ui[i][this.nx-j][0][1] = 0;
-					this.ui[i][this.nx-j][1][0] = 0;
-					this.ui[i][this.nx-j][1][1] = 0;
+					this.ui[i][this.nx-j][0] = 0;
+					this.ui[i][this.nx-j][1] = 0;
 				}
 			}
 
@@ -273,7 +263,7 @@ var advectMethods = {
 						if (dq != dq) throw 'nan';
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
-							if (this.ui[i][j][0][0] >= 0) {
+							if (this.ui[i][j][0] >= 0) {
 								this.r[i][j][0][qi] = (this.q[i-1][j][qi] - this.q[i-2][j][qi]) / dq;
 							} else {
 								this.r[i][j][0][qi] = (this.q[i+1][j][qi] - this.q[i][j][qi]) / dq;
@@ -288,7 +278,7 @@ var advectMethods = {
 						if (dq != dq) throw 'nan';
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
-							if (this.ui[i][j][1][1] >= 0) {
+							if (this.ui[i][j][1] >= 0) {
 								this.r[i][j][1][qi] = (this.q[i][j-1][qi] - this.q[i][j-2][qi]) / dq;
 							} else {
 								this.r[i][j][1][qi] = (this.q[i][j+1][qi] - this.q[i][j][qi]) / dq;
@@ -319,26 +309,26 @@ var advectMethods = {
 						//left
 						//flux limiter
 						var phi = this.fluxMethod(this.r[i][j][0][qi]);
-						if (this.ui[i][j][0][0] >= 0) {
-							this.flux[i][j][0][qi] = this.ui[i][j][0][0] * this.q[i-1][j][qi];
+						if (this.ui[i][j][0] >= 0) {
+							this.flux[i][j][0][qi] = this.ui[i][j][0] * this.q[i-1][j][qi];
 						} else {
-							this.flux[i][j][0][qi] = this.ui[i][j][0][0] * this.q[i][j][qi];
+							this.flux[i][j][0][qi] = this.ui[i][j][0] * this.q[i][j][qi];
 						}
 						var delta = phi * (this.q[i][j][qi] - this.q[i-1][j][qi]);
 						var dx = this.x[i][j][0] - this.x[i-1][j][0];
-						this.flux[i][j][0][qi] += delta * .5 * Math.abs(this.ui[i][j][0][0]) * (1 - Math.abs(this.ui[i][j][0][0] * dt / dx));
+						this.flux[i][j][0][qi] += delta * .5 * Math.abs(this.ui[i][j][0]) * (1 - Math.abs(this.ui[i][j][0] * dt / dx));
 					
 						//top
 						//flux limiter
 						var phi = this.fluxMethod(this.r[i][j][1][qi]);
-						if (this.ui[i][j][1][1] >= 0) {
-							this.flux[i][j][1][qi] = this.ui[i][j][1][1] * this.q[i][j-1][qi];
+						if (this.ui[i][j][1] >= 0) {
+							this.flux[i][j][1][qi] = this.ui[i][j][1] * this.q[i][j-1][qi];
 						} else {
-							this.flux[i][j][1][qi] = this.ui[i][j][1][1] * this.q[i][j][qi];
+							this.flux[i][j][1][qi] = this.ui[i][j][1] * this.q[i][j][qi];
 						}
 						var delta = phi * (this.q[i][j][qi] - this.q[i][j-1][qi]);
 						var dx = this.x[i][j][1] - this.x[i][j-1][1];
-						this.flux[i][j][1][qi] += delta * .5 * Math.abs(this.ui[i][j][1][1]) * (1 - Math.abs(this.ui[i][j][1][1] * dt / dx));
+						this.flux[i][j][1][qi] += delta * .5 * Math.abs(this.ui[i][j][1]) * (1 - Math.abs(this.ui[i][j][1] * dt / dx));
 						if (this.flux[i][j][1][qi] != this.flux[i][j][1][qi]) throw 'nan';
 					}
 				}
@@ -471,7 +461,7 @@ var HydroState = makeClass({
 			for (var j = 0; j < this.nx+1; ++j) {
 				this.ui[i][j] = [];
 				for (var side = 0; side < 2; ++side) {
-					this.ui[i][j][side] = [0,0];
+					this.ui[i][j][side] = 0;
 				}
 			}
 		}
