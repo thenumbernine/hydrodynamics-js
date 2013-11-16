@@ -91,7 +91,7 @@ function buildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse,
 }
 
 var fluxMethods = {
-	upwind : function(r) { return 0; },
+	donorCell : function(r) { return 0; },
 	laxWendroff : function(r) { return 1; },
 	
 	//these two are no good with the Godunov (Riemann) solver
@@ -251,31 +251,30 @@ var advectMethods = {
 			for (var ix = 1; ix < this.nx; ++ix) {
 				//compute Roe averaged interface values
 				var densityL = this.q[ix-1][0];
-				var densityR = this.q[ix][0];
 				var velocityL = this.q[ix-1][1] / densityL;
-				var velocityR = this.q[ix][1] / densityR;
 				var energyTotalL = this.q[ix-1][2] / densityL;
-				var energyTotalR = this.q[ix][2] / densityR;
-				
 				var energyKinematicL = .5 * velocityL * velocityL;
 				var energyThermalL = energyTotalL - energyKinematicL;
 				var pressureL = (this.gamma - 1) * densityL * energyThermalL;
 				var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
 				var hTotalL = energyTotalL + pressureL / densityL;
+				var roeWeightL = Math.sqrt(densityL);
 				
+				var densityR = this.q[ix][0];
+				var velocityR = this.q[ix][1] / densityR;
+				var energyTotalR = this.q[ix][2] / densityR;
 				var energyKinematicR = .5 * velocityR * velocityR;
 				var energyThermalR = energyTotalR - energyKinematicR;
 				var pressureR = (this.gamma - 1) * densityR * energyThermalR;
 				var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
 				var hTotalR = energyTotalR + pressureR / densityR;
-			
-				var weightL = Math.sqrt(densityL);
-				var weightR = Math.sqrt(densityR);
-				var denom = weightL + weightR;
+				var roeWeightR = Math.sqrt(densityR);
+				
+				var denom = roeWeightL + roeWeightR;
+				var velocity = (roeWeightL * velocityL + roeWeightR * velocityR) / denom;
+				var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
 
-				var velocity = (weightL * velocityL + weightR * velocityR) / denom;
-				var hTotal = (weightL * hTotalL + weightR * hTotalR) / denom;
-
+				//compute eigenvectors and values at the interface based on Roe averages
 				buildEigenstate(
 					this.interfaceMatrix[ix],
 					this.interfaceEigenvalues[ix], 
@@ -311,6 +310,29 @@ var advectMethods = {
 		Cs = sqrt(gamma P / rho)
 		*/
 		advect : function(dt) {
+			/* Method 0: interface based rTildes * /
+			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
+				for (var j = 0; j < 3; ++j) {
+					this.deltaQITilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
+											+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
+											+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]);
+				}
+			}
+
+			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
+				for (var j = 0; j < 3; ++j) {
+					var deltaQITilde = this.deltaQITilde[ix][j];
+					if (Math.abs(deltaQITilde > 0)) {
+						if (this.interfaceEigenvalues[j] > 0) {
+							this.rTilde[ix][j] = this.deltaQITilde[ix-1][j] / deltaQITilde;
+						} else {
+							this.rTilde[ix][j] = this.deltaQITilde[ix+1][j] / deltaQITilde;
+						}
+					}
+				}
+			}
+			/**/
+			/* Method 1 (working): cell eigen based rTildes */
 			//get cell-centered eigenvalues
 			//only used for r values at the moment
 			//(maybe I can just average left and right?)
@@ -325,12 +347,10 @@ var advectMethods = {
 				buildEigenstate(this.matrix[i], this.eigenvalues[i], this.eigenvectors[i], this.eigenvectorsInverse[i], velocity, hTotal, this.gamma);
 				for (var j = 0; j < 3; ++j) {
 					this.qTilde[i][j] = this.eigenvectorsInverse[i][0][j] * this.q[i][0] 
-							+ this.eigenvectorsInverse[i][1][j] * this.q[i][1]
-							+ this.eigenvectorsInverse[i][2][j] * this.q[i][2];
+									+ this.eigenvectorsInverse[i][1][j] * this.q[i][1]
+									+ this.eigenvectorsInverse[i][2][j] * this.q[i][2];
 				}
-			}
-			
-			/* Method 1 (working): cell eigen based rTildes */
+			}		
 			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
 				for (var j = 0; j < 3; ++j) {
 					var dqTilde = this.qTilde[ix][j] - this.qTilde[ix-1][j];
@@ -412,48 +432,6 @@ var advectMethods = {
 						+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
 						+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]));
 				}
-				
-				/*
-				//using roe averages...
-				var densityL = this.q[ix-1][0];
-				if (isnan(densityL)) throw 'nan';
-				var densityR = this.q[ix][0];
-				if (isnan(densityR)) throw 'nan';
-				var roeWeightL = Math.sqrt(densityL);
-				var roeWeightR = Math.sqrt(densityR);
-				var densityRoeAvg = roeWeightL * roeWeightR;
-				var velocityL = this.q[ix-1][1] / densityL; 
-				var velocityR = this.q[ix][1] / densityR;
-				var deltaVelocity = velocityR - velocityL;
-				var velocityRoeAvg = (roeWeightL * velocityL + roeWeightR * velocityR) / (roeWeightL + roeWeightR);
-				
-			
-				//...getting negative pressure...
-				var energyTotalL = this.q[ix-1][2] / densityL; 
-				var energyTotalR = this.q[ix][2] / densityR; 
-				var energyKinematicL = .5 * velocityL * velocityL;
-				var energyKinematicR = .5 * velocityR * velocityR;
-				var energyThermalL = energyTotalL - energyKinematicL;
-				var energyThermalR = energyTotalR - energyKinematicR;
-				var pressureL = (this.gamma - 1) * densityL * energyThermalL;			
-				if (isnan(pressureL)) throw 'nan';
-				var pressureR = (this.gamma - 1) * densityR * energyThermalR;			
-				if (isnan(pressureR)) throw 'nan';
-				var deltaPressure = pressureR - pressureL;	
-				if (isnan(deltaPressure)) throw 'nan';
-				
-				var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
-				if (isnan(speedOfSoundL)) throw 'nan';
-				var hTotalL = energyTotalL + pressureL / densityL;
-				if (isnan(hTotalL)) throw 'nan';
-				var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
-				if (isnan(speedOfSoundR)) throw 'nan';
-				var hTotalR = energyTotalR + pressureR / densityR;
-				if (isnan(hTotalR)) throw 'nan';
-				var speedOfSoundRoeAvg = (roeWeightL * speedOfSoundL + roeWeightR * speedOfSoundR) / (roeWeightL + roeWeightR);
-				if (isnan(speedOfSoundRoeAvg)) throw 'nan';
-				deltaFluxTilde[0] = (deltaPressure - velocityRoeAvg * speedOfSoundRoeAvg * deltaVelocity) / (2 * speedOfSoundRoeAvg);
-				*/
 
 				//calculate flux
 				for (var j = 0; j < 3; ++j) {
@@ -529,7 +507,10 @@ var HydroState = makeClass({
 		//p_i: pressure
 		this.pressure = new Float32Array(this.nx);
 	
+		
 		//used for Burgers
+		
+		
 		//r_{i-1/2}	
 		this.r = [];
 		for (var i = 0; i < this.nx+1; ++i) {
@@ -580,6 +561,16 @@ var HydroState = makeClass({
 			this.eigenvalues[i] = [0, 0, 0];
 			this.eigenvectors[i] = [[1,0,0], [0,1,0], [0,0,1]];
 			this.eigenvectorsInverse[i] = [[1,0,0], [0,1,0], [0,0,1]];
+		}
+
+		//state change over interface in interface Roe eigenspace
+		//used for Riemann
+		//(before I had converted the previous Godunov methods into a Roe method following the book's notes)
+		//(now I'm trying to implement the book's pseudocode for Roe solver)
+		//(looks like the qTildes are defined at interfaces, not cells...)
+		this.deltaQITilde = [];
+		for (var i = 0; i <= this.nx; ++i) {
+			this.deltaQITilde[i] = [0,0,0];
 		}
 
 		//number of ghost cells
