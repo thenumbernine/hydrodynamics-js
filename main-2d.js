@@ -225,26 +225,26 @@ var advectMethods = {
 			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
 				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
 					//left boundary's du/dx (velocity gradient tangent to edge)
-					this.ui[i][j][0] = .5 * (this.q[1 + 4 * (i + this.nx * (j))] / this.q[0 + 4 * (i + this.nx * (j))] + this.q[1 + 4 * (i-1 + this.nx * (j))] / this.q[0 + 4 * (i-1 + this.nx * (j))]);
+					this.ui[0 + 2 * (i + (this.nx+1) * (j))] = .5 * (this.q[1 + 4 * (i + this.nx * (j))] / this.q[0 + 4 * (i + this.nx * (j))] + this.q[1 + 4 * (i-1 + this.nx * (j))] / this.q[0 + 4 * (i-1 + this.nx * (j))]);
 					//top boundary's dv/dy
-					this.ui[i][j][1] = .5 * (this.q[2 + 4 * (i + this.nx * (j))] / this.q[0 + 4 * (i + this.nx * (j))] + this.q[2 + 4 * (i + this.nx * (j-1))] / this.q[0 + 4 * (i + this.nx * (j-1))]);
+					this.ui[1 + 2 * (i + (this.nx+1) * (j))] = .5 * (this.q[2 + 4 * (i + this.nx * (j))] / this.q[0 + 4 * (i + this.nx * (j))] + this.q[2 + 4 * (i + this.nx * (j-1))] / this.q[0 + 4 * (i + this.nx * (j-1))]);
 				}
 			}
 			//boundary zero
 			for (var j = 0; j < this.nghost; ++j) {
 				for (var i = 0; i <= this.nx; ++i) {
 					//left boundary, left and top sides, zero vector
-					this.ui[j][i][0] = 0;
-					this.ui[j][i][1] = 0;
+					this.ui[0 + 2 * (j + (this.nx+1) * (i))] = 0;
+					this.ui[1 + 2 * (j + (this.nx+1) * (i))] = 0;
 					//right boundary, left and top sides, zero vector
-					this.ui[this.nx-j][i][0] = 0;
-					this.ui[this.nx-j][i][1] = 0;
+					this.ui[0 + 2 * (this.nx-j + (this.nx+1) * (i))] = 0;
+					this.ui[1 + 2 * (this.nx-j + (this.nx+1) * (i))] = 0;
 					//top boundary, left and top sides, zero vector
-					this.ui[i][j][0] = 0;
-					this.ui[i][j][1] = 0;
+					this.ui[0 + 2 * (i + (this.nx+1) * (j))] = 0;
+					this.ui[1 + 2 * (i + (this.nx+1) * (j))] = 0;
 					//bottom boundary, left and top sides, zero vector
-					this.ui[i][this.nx-j][0] = 0;
-					this.ui[i][this.nx-j][1] = 0;
+					this.ui[0 + 2 * (i + (this.nx+1) * (this.nx-j))] = 0;
+					this.ui[1 + 2 * (i + (this.nx+1) * (this.nx-j))] = 0;
 				}
 			}
 
@@ -258,26 +258,26 @@ var advectMethods = {
 						var dq = this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i-1 + this.nx * (j))];
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
-							if (this.ui[i][j][0] >= 0) {
-								this.r[i][j][0][iq] = (this.q[iq + 4 * (i-1 + this.nx * (j))] - this.q[iq + 4 * (i-2 + this.nx * (j))]) / dq;
+							if (this.ui[0 + 2 * (i + (this.nx+1) * (j))] >= 0) {
+								this.r[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] = (this.q[iq + 4 * (i-1 + this.nx * (j))] - this.q[iq + 4 * (i-2 + this.nx * (j))]) / dq;
 							} else {
-								this.r[i][j][0][iq] = (this.q[iq + 4 * (i+1 + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j))]) / dq;
+								this.r[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] = (this.q[iq + 4 * (i+1 + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j))]) / dq;
 							}
 						} else {
-							this.r[i][j][0][iq] = 0;
+							this.r[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] = 0;
 						}
 						
 						//top boundary
 						var dq = this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j-1))];
 						if (Math.abs(dq) > 0) {
 							//left interface left velocity
-							if (this.ui[i][j][1] >= 0) {
-								this.r[i][j][1][iq] = (this.q[iq + 4 * (i + this.nx * (j-1))] - this.q[iq + 4 * (i + this.nx * (j-2))]) / dq;
+							if (this.ui[1 + 2 * (i + (this.nx+1) * (j))] >= 0) {
+								this.r[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] = (this.q[iq + 4 * (i + this.nx * (j-1))] - this.q[iq + 4 * (i + this.nx * (j-2))]) / dq;
 							} else {
-								this.r[i][j][1][iq] = (this.q[iq + 4 * (i + this.nx * (j+1))] - this.q[iq + 4 * (i + this.nx * (j))]) / dq;
+								this.r[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] = (this.q[iq + 4 * (i + this.nx * (j+1))] - this.q[iq + 4 * (i + this.nx * (j))]) / dq;
 							}
 						} else {
-							this.r[i][j][1][iq] = 0;
+							this.r[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] = 0;
 						}
 					}
 				}
@@ -286,10 +286,10 @@ var advectMethods = {
 				for (var j = 0; j < this.nghost; ++j) {
 					for (var i = 0; i <= this.nx; ++i) {
 						for (var side = 0; side < 2; ++side) {
-							this.r[i][j][side][iq] = 0;
-							this.r[i][this.nx-j][side][iq] = 0;
-							this.r[j][i][side][iq] = 0;
-							this.r[this.nx-j][i][side][iq] = 0;
+							this.r[iq + 4 * (side + 2 * (i + (this.nx+1) * (j)))] = 0;
+							this.r[iq + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+							this.r[iq + 4 * (side + 2 * (j + (this.nx+1) * (i)))] = 0;
+							this.r[iq + 4 * (side + 2 * (this.nx-j + (this.nx+1) * (i)))] = 0;
 						}
 					}
 				}
@@ -300,37 +300,37 @@ var advectMethods = {
 						
 						//left
 						//flux limiter
-						var phi = this.fluxMethod(this.r[i][j][0][iq]);
-						if (this.ui[i][j][0] >= 0) {
-							this.flux[i][j][0][iq] = this.ui[i][j][0] * this.q[iq + 4 * (i-1 + this.nx * (j))];
+						var phi = this.fluxMethod(this.r[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))]);
+						if (this.ui[0 + 2 * (i + (this.nx+1) * (j))] >= 0) {
+							this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] = this.ui[0 + 2 * (i + (this.nx+1) * (j))] * this.q[iq + 4 * (i-1 + this.nx * (j))];
 						} else {
-							this.flux[i][j][0][iq] = this.ui[i][j][0] * this.q[iq + 4 * (i + this.nx * (j))];
+							this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] = this.ui[0 + 2 * (i + (this.nx+1) * (j))] * this.q[iq + 4 * (i + this.nx * (j))];
 						}
 						var delta = phi * (this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i-1 + this.nx * (j))]);
 						var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
-						this.flux[i][j][0][iq] += delta * .5 * Math.abs(this.ui[i][j][0]) * (1 - Math.abs(this.ui[i][j][0] * dt / dx));
+						this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))] += delta * .5 * Math.abs(this.ui[0 + 2 * (i + (this.nx+1) * (j))]) * (1 - Math.abs(this.ui[0 + 2 * (i + (this.nx+1) * (j))] * dt / dx));
 					
 						//top
 						//flux limiter
-						var phi = this.fluxMethod(this.r[i][j][1][iq]);
-						if (this.ui[i][j][1] >= 0) {
-							this.flux[i][j][1][iq] = this.ui[i][j][1] * this.q[iq + 4 * (i + this.nx * (j-1))];
+						var phi = this.fluxMethod(this.r[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))]);
+						if (this.ui[1 + 2 * (i + (this.nx+1) * (j))] >= 0) {
+							this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] = this.ui[1 + 2 * (i + (this.nx+1) * (j))] * this.q[iq + 4 * (i + this.nx * (j-1))];
 						} else {
-							this.flux[i][j][1][iq] = this.ui[i][j][1] * this.q[iq + 4 * (i + this.nx * (j))];
+							this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] = this.ui[1 + 2 * (i + (this.nx+1) * (j))] * this.q[iq + 4 * (i + this.nx * (j))];
 						}
 						var delta = phi * (this.q[iq + 4 * (i + this.nx * (j))] - this.q[iq + 4 * (i + this.nx * (j-1))]);
 						var dx = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
-						this.flux[i][j][1][iq] += delta * .5 * Math.abs(this.ui[i][j][1]) * (1 - Math.abs(this.ui[i][j][1] * dt / dx));
+						this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))] += delta * .5 * Math.abs(this.ui[1 + 2 * (i + (this.nx+1) * (j))]) * (1 - Math.abs(this.ui[1 + 2 * (i + (this.nx+1) * (j))] * dt / dx));
 					}
 				}
 				//now for ghost boundaries
 				for (var j = 0; j < this.nghost-1; ++j) {
 					for (var i = 0; i <= this.nx; ++i) {
 						for (var side = 0; side < 2; ++side) {
-							this.flux[i][j][side][iq] = 0;
-							this.flux[i][this.nx-j][side][iq] = 0;
-							this.flux[j][i][side][iq] = 0;
-							this.flux[this.nx-j][i][side][iq] = 0;
+							this.flux[iq + 4 * (side + 2 * (i + (this.nx+1) * (j)))] = 0;
+							this.flux[iq + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+							this.flux[iq + 4 * (side + 2 * (j + (this.nx+1) * (i)))] = 0;
+							this.flux[iq + 4 * (side + 2 * (this.nx-j + (this.nx+1) * (i)))] = 0;
 						}
 					}
 				}
@@ -338,8 +338,8 @@ var advectMethods = {
 				//update cells
 				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-						this.q[iq + 4 * (i + this.nx * (j))] -= dt * (this.flux[i+1][j][0][iq] - this.flux[i][j][0][iq]) / (this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)]);
-						this.q[iq + 4 * (i + this.nx * (j))] -= dt * (this.flux[i][j+1][1][iq] - this.flux[i][j][1][iq]) / (this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)]);
+						this.q[iq + 4 * (i + this.nx * (j))] -= dt * (this.flux[iq + 4 * (0 + 2 * (i+1 + (this.nx+1) * (j)))] - this.flux[iq + 4 * (0 + 2 * (i + (this.nx+1) * (j)))]) / (this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)]);
+						this.q[iq + 4 * (i + this.nx * (j))] -= dt * (this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j+1)))] - this.flux[iq + 4 * (1 + 2 * (i + (this.nx+1) * (j)))]) / (this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)]);
 					}
 				}
 			}
@@ -409,49 +409,47 @@ var HydroState = makeClass({
 
 		this.resetSod();
 		
-		//p_i: pressure
-		this.pressure = [];//new Float32Array(this.nx);
-		for (var i = 0; i < this.nx; ++i) {
-			this.pressure[i] = [];
-			for (var j = 0; j < this.nx; ++j) {
-				this.pressure[i][j] = 0;
+		//p_i,j: pressure
+		this.pressure = new Float32Array(this.nx * this.nx);
+		var e = 0;
+		for (var j = 0; j < this.nx; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				this.pressure[e] = 0; ++e;
 			}
 		}
 
 		//used for Burgers
 		//r_{i-1/2},{j-1/2},side,state	
-		this.r = [];
-		for (var i = 0; i < this.nx+1; ++i) {
-			this.r[i] = [];
-			for (var j = 0; j < this.nx+1; ++j) {
-				this.r[i][j] = [];
+		this.r = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);;
+		for (var j = 0; j <= this.nx; ++j) {
+			for (var i = 0; i <= this.nx; ++i) {
 				for (var side = 0; side < 2; ++side) {
-					this.r[i][j][side] = [0,0,0,0];
+					for (var state = 0; state < 4; ++state) {
+						this.r[state + 4 * (side + 2 * (i + (this.nx+1) * (j)))] = 0;
+					}
 				}
 			}
 		}
 		
 		//f_{i-1/2},{j-1/2}: cell flux
-		this.flux = [];
-		for (var i = 0; i < this.nx+1; ++i) {
-			this.flux[i] = [];
-			for (var j = 0; j < this.nx+1; ++j) {
-				this.flux[i][j] = [
-					[0,0,0,0],
-					[0,0,0,0]
-				];
+		this.flux = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);
+		for (var j = 0; j < this.nx+1; ++j) {
+			for (var i = 0; i < this.nx+1; ++i) {
+				for (var side = 0; side < 2; ++side) {
+					for (var state = 0; state < 4; ++state) {
+						this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * (j)))] = 0;
+					}
+				}
 			}
 		}
 		
 		//only used with Burger's eqn advection code
-		//u_{i-1/2}: interface velocity
-		this.ui = [];//new Float32Array(this.nx+1);
-		for (var i = 0; i < this.nx+1; ++i) {
-			this.ui[i] = [];
-			for (var j = 0; j < this.nx+1; ++j) {
-				this.ui[i][j] = [];
+		//u_{i-1/2},{j-1/2},dim: interface velocity
+		this.ui = new Float32Array((this.nx+1) * (this.nx+1) * 2);
+		for (var j = 0; j <= this.nx; ++j) {
+			for (var i = 0; i <= this.nx; ++i) {
 				for (var side = 0; side < 2; ++side) {
-					this.ui[i][j][side] = 0;
+					this.ui[side + 2 * (i + (this.nx+1) * (j))] = 0;
 				}
 			}
 		}
@@ -519,7 +517,7 @@ var HydroState = makeClass({
 				var energyTotal = this.q[3 + iq] / rho; 
 				var energyKinematic = .5 * (u * u + v * v);
 				var energyThermal = energyTotal - energyKinematic;
-				this.pressure[i][j] = (this.gamma - 1) * rho * energyThermal;
+				this.pressure[i + this.nx * (j)] = (this.gamma - 1) * rho * energyThermal;
 				iq += 4;
 			}
 		}
@@ -527,8 +525,8 @@ var HydroState = makeClass({
 		//apply momentum diffusion = pressure
 		for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				this.q[1 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i+1][j] - this.pressure[i-1][j]) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
-				this.q[2 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i][j+1] - this.pressure[i][j-1]) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
+				this.q[1 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i+1 + this.nx * (j)] - this.pressure[i-1 + this.nx * (j)]) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
+				this.q[2 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i + this.nx * (j+1)] - this.pressure[i + this.nx * (j-1)]) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
 			}
 		}
 
@@ -541,8 +539,8 @@ var HydroState = makeClass({
 				var u_iprev = this.q[1 + 4 * (i-1 + this.nx * (j))] / this.q[0 + 4 * (i-1 + this.nx * (j))];
 				var v_inext = this.q[2 + 4 * (i + this.nx * (j+1))] / this.q[0 + 4 * (i + this.nx * (j+1))];
 				var v_iprev = this.q[2 + 4 * (i + this.nx * (j-1))] / this.q[0 + 4 * (i + this.nx * (j-1))];
-				this.q[3 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i+1][j] * u_inext - this.pressure[i-1][j] * u_iprev) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
-				this.q[3 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i][j+1] * v_inext - this.pressure[i][j-1] * v_iprev) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
+				this.q[3 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i+1 + this.nx * (j)] * u_inext - this.pressure[i-1 + this.nx * (j)] * u_iprev) / (this.x[0 + 2 * (i+1 + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)]);
+				this.q[3 + 4 * (i + this.nx * (j))] -= dt * (this.pressure[i + this.nx * (j+1)] * v_inext - this.pressure[i + this.nx * (j-1)] * v_iprev) / (this.x[1 + 2 * (i + this.nx * (j+1))] - this.x[1 + 2 * (i + this.nx * (j-1))]);
 			}
 		}
 	
