@@ -199,18 +199,20 @@ var advectMethods = {
 	Burgers : {
 		initStep : function() {
 			var mindum = undefined;
+			var iq = 0;
 			for (var j = 0; j < this.nx; ++j) {
 				for (var i = 0; i < this.nx; ++i) {
-					var rho = this.q[0 + 4 * (i + this.nx * (j))];
-					var u = this.q[1 + 4 * (i + this.nx * (j))] / rho;
-					var v = this.q[2 + 4 * (i + this.nx * (j))] / rho; 
-					var energyTotal = this.q[3 + 4 * (i + this.nx * (j))] / rho; 
+					var rho = this.q[0 + iq];
+					var u = this.q[1 + iq] / rho;
+					var v = this.q[2 + iq] / rho; 
+					var energyTotal = this.q[3 + iq] / rho; 
 					var energyKinematic = .5 * (u * u + v * v);
 					var energyThermal = energyTotal - energyKinematic;
 					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
 					//just xi? yi too?
 					var dum = (this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)]) / (speedOfSound + Math.sqrt(u * u + v * v));
 					if (mindum === undefined || dum < mindum) mindum = dum;
+					iq += 4;
 				}
 			}
 			return this.cfl * mindum;
@@ -418,14 +420,19 @@ var HydroState = makeClass({
 			}
 		}
 
+		//TODO it is tempting to merge r, f, and ui into an edge structure
+		//and associate them with the nodes on either side of them,
+		//but then I would lose out on the 2nd-order contributions to the flux limiter.
+
 		//used for Burgers
 		//r_{i-1/2},{j-1/2},side,state	
 		this.r = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);;
+		var e = 0;
 		for (var j = 0; j <= this.nx; ++j) {
 			for (var i = 0; i <= this.nx; ++i) {
 				for (var side = 0; side < 2; ++side) {
 					for (var state = 0; state < 4; ++state) {
-						this.r[state + 4 * (side + 2 * (i + (this.nx+1) * (j)))] = 0;
+						this.r[e] = 0; ++e;
 					}
 				}
 			}
@@ -433,11 +440,12 @@ var HydroState = makeClass({
 		
 		//f_{i-1/2},{j-1/2}: cell flux
 		this.flux = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);
-		for (var j = 0; j < this.nx+1; ++j) {
-			for (var i = 0; i < this.nx+1; ++i) {
+		var e = 0;
+		for (var j = 0; j <= this.nx; ++j) {
+			for (var i = 0; i <= this.nx; ++i) {
 				for (var side = 0; side < 2; ++side) {
 					for (var state = 0; state < 4; ++state) {
-						this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * (j)))] = 0;
+						this.flux[e] = 0; ++e;
 					}
 				}
 			}
@@ -446,10 +454,11 @@ var HydroState = makeClass({
 		//only used with Burger's eqn advection code
 		//u_{i-1/2},{j-1/2},dim: interface velocity
 		this.ui = new Float32Array((this.nx+1) * (this.nx+1) * 2);
+		var e = 0;
 		for (var j = 0; j <= this.nx; ++j) {
 			for (var i = 0; i <= this.nx; ++i) {
 				for (var side = 0; side < 2; ++side) {
-					this.ui[side + 2 * (i + (this.nx+1) * (j))] = 0;
+					this.ui[e] = 0; ++e;
 				}
 			}
 		}
@@ -509,6 +518,7 @@ var HydroState = makeClass({
 
 		//compute pressure
 		var iq = 0;
+		var ip = 0;
 		for (var j = 0; j < this.nx; ++j) {
 			for (var i = 0; i < this.nx; ++i) {
 				var rho = this.q[0 + iq];
@@ -517,7 +527,8 @@ var HydroState = makeClass({
 				var energyTotal = this.q[3 + iq] / rho; 
 				var energyKinematic = .5 * (u * u + v * v);
 				var energyThermal = energyTotal - energyKinematic;
-				this.pressure[i + this.nx * (j)] = (this.gamma - 1) * rho * energyThermal;
+				this.pressure[ip] = (this.gamma - 1) * rho * energyThermal;
+				++ip;
 				iq += 4;
 			}
 		}
