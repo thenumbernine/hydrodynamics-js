@@ -577,6 +577,21 @@ var Hydro = makeClass({
 		//geometry
 		this.vertexPositions = new Float32Array(3*this.state.nx*this.state.nx);
 		this.vertexStates = new Float32Array(3*this.state.nx*this.state.nx);
+	
+		//initialize geometry x and y coordinates once since they don't change
+		var centerX = (xmax + xmin) / 2;
+		var centerY = (ymax + ymin) / 2;
+		var e = 0;
+		var x = this.state.x;
+		var nx = this.state.nx;
+		for (var i = 0; i < nx; ++i) {
+			for (var j = 0; j < nx; ++j) {
+				this.vertexPositions[e++] = x[i][j][0] - centerX;
+				this.vertexPositions[e++] = x[i][j][1] - centerY;
+				e++;
+			}
+		}
+
 	},
 	update : function() {
 		//todo adm or something
@@ -585,19 +600,16 @@ var Hydro = makeClass({
 		//then test for errors and split when needed
 		this.state.update();
 	
-		//update geometry
+		//update geometry z coordinate
 		var x = this.state.x;
 		var q = this.state.q;
 		var nx = this.state.nx;
-		var e = 0;
+		var e = 2;
 		var f = 0;
-		var centerX = (xmax + xmin) / 2;
-		var centerY = (ymax + ymin) / 2;
 		for (var i = 0; i < nx; ++i) {
 			for (var j = 0; j < nx; ++j) {
-				this.vertexPositions[e++] = x[i][j][0] - centerX;
-				this.vertexPositions[e++] = x[i][j][1] - centerY;
-				this.vertexPositions[e++] = q[i][j][0] * 20.;
+				this.vertexPositions[e] = q[i][j][0] * 20.;
+				e += 3;
 				this.vertexStates[f++] = q[i][j][0];
 				this.vertexStates[f++] = Math.sqrt((q[i][j][1] * q[i][j][1] + q[i][j][2] * q[i][j][2]) / (q[i][j][0] * q[i][j][0]));
 				this.vertexStates[f++] = q[i][j][3] / q[i][j][0];
