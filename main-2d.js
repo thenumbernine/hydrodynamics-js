@@ -580,18 +580,13 @@ var advectMethods = {
 		
 			var fluxAvg = [];	//4
 			var fluxTilde = [];	//4
-			var sideLengths = [];	//2
 			
 			//transform cell q's into cell qTilde's (eigenspace)
 			for (var iy = 1; iy < this.nx; ++iy) {
 				for (var ix = 1; ix < this.nx; ++ix) {
-					var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
-					var dy = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
-					var volume = dx * dy;
-					sideLengths[0] = dx;
-					sideLengths[1] = dy;
-				
 					for (var side = 0; side < 2; ++side) {
+						var dx = this.xi[side + 2 * (ix + (this.nx+1) * iy)] 
+							- this.xi[side + 2 * (ix-dirs[side][0] + (this.nx+1) * (iy-dirs[side][1]))];
 						
 						//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 						//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
@@ -617,7 +612,7 @@ var advectMethods = {
 							var phi = this.fluxMethod(this.rTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))]);
 							if (isnan(phi)) throw 'nan';
 
-							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] * dt * volume / (sideLengths[side] * sideLengths[side]);
+							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] * dt / dx; 
 							if (isnan(epsilon)) throw 'nan';
 
 							var deltaFluxTilde = this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))]
@@ -665,7 +660,7 @@ var advectMethods = {
 						var dx = this.xi[xiIndexR] - this.xi[xiIndex];
 						for (var state = 0; state < 4; ++state) {
 							this.q[state + 4 * (i + this.nx * j)] -= 
-								(this.flux[state + 4 * (side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][0])))]
+								(this.flux[state + 4 * (side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][1])))]
 									- this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))]) * dt / dx;
 							if (isnan(this.q[state + 4 * (i + this.nx * j)])) throw 'nan';	
 						}
