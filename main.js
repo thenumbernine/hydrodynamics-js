@@ -310,9 +310,9 @@ var advectMethods = {
 		Cs = sqrt(gamma P / rho)
 		*/
 		advect : function(dt) {
-			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
+			for (var ix = 1; ix < this.nx; ++ix) {
 				for (var j = 0; j < 3; ++j) {
-					this.deltaQITilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
+					this.interfaceDeltaQTilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
 											+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
 											+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]);
 				}
@@ -320,12 +320,12 @@ var advectMethods = {
 			
 			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
 				for (var j = 0; j < 3; ++j) {
-					var deltaQITilde = this.deltaQITilde[ix][j];
-					if (Math.abs(deltaQITilde) > 0) {
+					var interfaceDeltaQTilde = this.interfaceDeltaQTilde[ix][j];
+					if (Math.abs(interfaceDeltaQTilde) > 0) {
 						if (this.interfaceEigenvalues[j] > 0) {
-							this.rTilde[ix][j] = this.deltaQITilde[ix-1][j] / deltaQITilde;
+							this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix-1][j] / interfaceDeltaQTilde;
 						} else {
-							this.rTilde[ix][j] = this.deltaQITilde[ix+1][j] / deltaQITilde;
+							this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
 						}
 					}
 				}
@@ -356,6 +356,7 @@ var advectMethods = {
 
 			//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 			//(i.e. qi[ix] is between q[ix-1] and q[ix])
+			//Looks good according to "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro, p.191
 			for (var ix = 1; ix < this.nx; ++ix) {
 				//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 				//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
@@ -381,7 +382,9 @@ var advectMethods = {
 					
 					//flux[ix][k] = fluxTilde[ix][j] * interfaceEigenvectors[ix][k][j]
 					//flux in eigenvector basis is the q vector transformed by the inverse then scaled by the eigenvalue
-					var deltaFluxTilde = this.interfaceEigenvalues[ix][j] * this.deltaQITilde[ix][j];
+					//should the eigenvalue be incorperated here, after flux limiter is taken into account, or beforehand?
+					//1D says after, but notes say before ...
+					var deltaFluxTilde = this.interfaceEigenvalues[ix][j] * this.interfaceDeltaQTilde[ix][j];
 					
 					fluxTilde[j] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
 				}
@@ -395,6 +398,8 @@ var advectMethods = {
 				}
 
 			}
+			
+			//zero boundary flux
 			for (var j = 0; j < 3; ++j) {
 				this.flux[0][j] = this.flux[this.nx][j] = 0;
 			}
@@ -487,13 +492,10 @@ var HydroState = makeClass({
 
 		//state change over interface in interface Roe eigenspace
 		//used for Riemann
-		//(before I had converted the previous Godunov methods into a Roe method following the book's notes)
-		//(now I'm trying to implement the book's pseudocode for Roe solver)
-		//(looks like the qTildes are defined at interfaces, not cells...)
 		//tilde means in basis of eigenvectors
-		this.deltaQITilde = [];
+		this.interfaceDeltaQTilde = [];
 		for (var i = 0; i <= this.nx; ++i) {
-			this.deltaQITilde[i] = [0,0,0];
+			this.interfaceDeltaQTilde[i] = [0,0,0];
 		}
 
 		//number of ghost cells
