@@ -318,6 +318,11 @@ var advectMethods = {
 				}
 			}
 			
+			for (var j = 0; j < 3; ++j) {
+				this.interfaceDeltaQTilde[0][j] = 0;
+				this.interfaceDeltaQTilde[this.nx][j] = 0;
+			}
+			
 			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
 				for (var j = 0; j < 3; ++j) {
 					var interfaceDeltaQTilde = this.interfaceDeltaQTilde[ix][j];
@@ -327,6 +332,8 @@ var advectMethods = {
 						} else {
 							this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
 						}
+					} else {
+						this.rTilde[ix][j] = 0;
 					}
 				}
 			}

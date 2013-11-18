@@ -89,8 +89,6 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	//http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf has tangent velocity 
 
 	//I'm going with http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
-	//...but it looks like their tangent vector is <y,-x>, (-90' rotation)
-	// whereas I'm going to use <-y,x> (+90' rotation)
 
 	//min eigenvector
 	eigenvectors[0 + 4 * (0 + 4 * offset)] = 1;
@@ -141,11 +139,16 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 			var s = 0;
 			var identCheck = 0;
 			for (var k = 0; k < 4; ++k) {
+				/** /
 				s += eigenvectorsInverse[i + 4 * (k + 4 * offset)] * eigenvectors[k + 4 * (j + 4 * offset)] * eigenvalues[k + 4 * offset];
 				identCheck += eigenvectorsInverse[i + 4 * (k + 4 * offset)] * eigenvectors[k + 4 * (j + 4 * offset)];
+				/**/
+				s += eigenvectors[i + 4 * (k + 4 * offset)] * eigenvalues[k + 4 * offset] * eigenvectorsInverse[k + 4 * (j + 4 * offset)];
+				identCheck += eigenvectors[i + 4 * (k + 4 * offset)] * eigenvectorsInverse[k + 4 * (j + 4 * offset)];
+				/**/
 			}
 			matrix[i + 4 * (j + 4 * offset)] = s;
-			/** /
+			/**/
 			var epsilon = 1e-5;
 			if (Math.abs(identCheck - (i == j ? 1 : 0)) > epsilon) throw 'bad eigen basis';
 			/**/
@@ -318,13 +321,13 @@ var advectMethods = {
 			//get velocity at interfaces from state
 			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
 				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-					var iu = 2 * (i + (this.nx+1) * j);
+					var uiIndex = 2 * (i + (this.nx+1) * j);
 					for (var side = 0; side < 2; ++side) {
-						var iq1 = 4 * (i + this.nx * j);
-						var iq2 = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
-						this.ui[side + iu] = .5 * (
-							this.q[1+side + iq1] / this.q[0 + iq1] + 
-							this.q[1+side + iq2] / this.q[0 + iq2]);
+						var qIndexR = 4 * (i + this.nx * j);
+						var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
+						this.ui[side + uiIndex] = .5 * (
+							this.q[1+side + qIndexR] / this.q[0 + qIndexR] + 
+							this.q[1+side + qIndexL] / this.q[0 + qIndexL]);
 					}
 				}
 			}
@@ -384,37 +387,34 @@ var advectMethods = {
 				}
 
 
-				var sideLengths = [];	//[2]
 				//construct flux:
 				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
 					for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-						var dx = this.x[0 + 2 * (i + this.nx * j)] - this.x[0 + 2 * (i-1 + this.nx * j)];
-						var dy = this.x[1 + 2 * (i + this.nx * j)] - this.x[1 + 2 * (i + this.nx * (j-1))];
-						var volume = dx * dy;
-						sideLengths[0] = dx;
-						sideLengths[1] = dy;
-					
 						//flux calculation 
 						for (var side = 0; side < 2; ++side) {
-							var ir = state + 4 * (side + 2 * (i + (this.nx+1) * j));
+							var dx = this.x[side + 2 * (i + this.nx * j)] 
+								- this.x[side + 2 * (i-dirs[side][0] + this.nx * (j-dirs[side][1]))];
+							
+							var rIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 							//apply limiter
-							var phi = this.fluxMethod(this.r[ir]);
-							var iu = side + 2 * (i + (this.nx+1) * j);
-							var iflux = state + 4 * (side + 2 * (i + (this.nx+1) * j));
-							var iqL = state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
-							var iqR = state + 4 * (i + this.nx * j);
-							if (this.ui[iu] >= 0) {
-								this.flux[iflux] = this.ui[iu] * this.q[iqL];
+							var phi = this.fluxMethod(this.r[rIndex]);
+							var uiIndex = side + 2 * (i + (this.nx+1) * j);
+							var fluxIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
+							var qIndexL = state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
+							var qIndexR = state + 4 * (i + this.nx * j);
+							if (this.ui[uiIndex] >= 0) {
+								this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexL];
 							} else {
-								this.flux[iflux] = this.ui[iu] * this.q[iqR];
+								this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexR];
 							}
-							var delta = phi * (this.q[iqR] - this.q[iqL]);
-							this.flux[iflux] += delta * .5
-								* Math.abs(this.ui[iu])
-								* (1 - Math.abs(this.ui[iu] * dt * volume / (sideLengths[side] * sideLengths[side])));
+							var delta = phi * (this.q[qIndexR] - this.q[qIndexL]);
+							this.flux[fluxIndex] += delta * .5
+								* Math.abs(this.ui[uiIndex])
+								* (1 - Math.abs(this.ui[uiIndex] * dt / dx));
 						}
 					}
 				}
+				
 				//now for ghost boundaries
 				for (var j = 0; j < this.nghost-1; ++j) {
 					for (var i = 0; i <= this.nx; ++i) {
@@ -431,9 +431,9 @@ var advectMethods = {
 				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 						for (var side = 0; side < 2; ++side) {
-							var ixR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
-							var ixL = side + 2 * (i + (this.nx+1) * j);
-							var dx = this.xi[ixR] - this.xi[ixL];
+							var xiIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+							var xiIndexL = side + 2 * (i + (this.nx+1) * j);
+							var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
 							var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
 							var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 							var df = this.flux[ifluxR] - this.flux[ifluxL];
@@ -447,10 +447,10 @@ var advectMethods = {
 	Riemann : {
 		initStep : function() {
 			var mindum = undefined;
-			for (var iy = 1; iy < this.nx; ++iy) {
-				for (var ix = 1; ix < this.nx; ++ix) {
+			for (var j = 1; j < this.nx; ++j) {
+				for (var i = 1; i < this.nx; ++i) {
 					for (var side = 0; side < 2; ++side) {
-						var qIndexL = 4 * (ix - dirs[side][0] + this.nx * (iy - dirs[side][1]));
+						var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
 						var densityL = this.q[0 + qIndexL];
 						var velocityXL = this.q[1 + qIndexL] / densityL;
 						var velocityYL = this.q[2 + qIndexL] / densityL;
@@ -462,7 +462,7 @@ var advectMethods = {
 						var hTotalL = energyTotalL + pressureL / densityL;
 						var roeWeightL = Math.sqrt(densityL);
 						
-						var qIndexR = 4 * (ix + this.nx * iy);
+						var qIndexR = 4 * (i + this.nx * j);
 						var densityR = this.q[0 + qIndexR];
 						var velocityXR = this.q[1 + qIndexR] / densityR;
 						var velocityYR = this.q[2 + qIndexR] / densityR;
@@ -478,86 +478,95 @@ var advectMethods = {
 						var velocityX = (roeWeightL * velocityXL + roeWeightR * velocityXR) / denom;
 						var velocityY = (roeWeightL * velocityYL + roeWeightR * velocityYR) / denom;
 						var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
-						if (isnan(velocityX)) throw 'nan';
-						if (isnan(velocityY)) throw 'nan';
-						if (isnan(hTotal)) throw 'nan';
-
-						if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) throw 'cannot calculate speed of sound';
 						
 						buildEigenstate(
 							 //index into interface element.  
 							 //from there you'll have to scale by cell size.  
 							 //Thus manually recreating the automatic storage of C structures. 
 							 //JavaScript, why can't you be more like LuaJIT? 
-							 side + 2 * (ix + (this.nx+1) * iy),	
+							 side + 2 * (i + (this.nx+1) * j),	
 							 this.interfaceMatrix,	//dim^2 = 16
 							 this.interfaceEigenvalues,	//dim = 4
 							 this.interfaceEigenvectors,	//dim^2 = 16
 							 this.interfaceEigenvectorsInverse,	//dim^2 = 16
 							 velocityX, velocityY, hTotal, this.gamma,
 							 dirs[side][0], dirs[side][1]);
-						
-						if (isnan(this.interfaceEigenvalues[0 + 4 * (side + 2 * (ix + (this.nx+1) * iy))])) throw 'nan';
-						if (isnan(this.interfaceEigenvalues[1 + 4 * (side + 2 * (ix + (this.nx+1) * iy))])) throw 'nan';
-						if (isnan(this.interfaceEigenvalues[2 + 4 * (side + 2 * (ix + (this.nx+1) * iy))])) throw 'nan';
-						if (isnan(this.interfaceEigenvalues[3 + 4 * (side + 2 * (ix + (this.nx+1) * iy))])) throw 'nan';
 
 						var maxLambda = Math.max(0, 
-							this.interfaceEigenvalues[0+4*(side+2*(ix+(this.nx+1)*iy))],
-							this.interfaceEigenvalues[1+4*(side+2*(ix+(this.nx+1)*iy))],
-							this.interfaceEigenvalues[2+4*(side+2*(ix+(this.nx+1)*iy))],
-							this.interfaceEigenvalues[3+4*(side+2*(ix+(this.nx+1)*iy))]);
+							this.interfaceEigenvalues[0+4*(side+2*(i+(this.nx+1)*j))],
+							this.interfaceEigenvalues[1+4*(side+2*(i+(this.nx+1)*j))],
+							this.interfaceEigenvalues[2+4*(side+2*(i+(this.nx+1)*j))],
+							this.interfaceEigenvalues[3+4*(side+2*(i+(this.nx+1)*j))]);
 						var minLambda = Math.min(0, 
-							this.interfaceEigenvalues[0+4*(side+2*(ix+(this.nx+1)*iy))],
-							this.interfaceEigenvalues[1+4*(side+2*(ix+(this.nx+1)*iy))],
-							this.interfaceEigenvalues[2+4*(side+2*(ix+(this.nx+1)*iy))],
-							this.interfaceEigenvalues[3+4*(side+2*(ix+(this.nx+1)*iy))]);
-						var dx = this.xi[side + 2 * (ix+dirs[side][0] + (this.nx+1) * (iy+dirs[side][1]))] 
-							- this.xi[side + 2 * (ix + (this.nx+1) * iy)];
+							this.interfaceEigenvalues[0+4*(side+2*(i+(this.nx+1)*j))],
+							this.interfaceEigenvalues[1+4*(side+2*(i+(this.nx+1)*j))],
+							this.interfaceEigenvalues[2+4*(side+2*(i+(this.nx+1)*j))],
+							this.interfaceEigenvalues[3+4*(side+2*(i+(this.nx+1)*j))]);
+						var dx = this.xi[side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][1]))] 
+							- this.xi[side + 2 * (i + (this.nx+1) * j)];
 						var dum = dx / (maxLambda - minLambda);
 						if (mindum === undefined || dum < mindum) mindum = dum;
 					}
 				}
 			}
-			if (isnan(mindum)) throw 'nan';
 			return this.cfl * mindum;
 	
 		},
 		advect : function(dt) {
-			for (var iy = 1; iy < this.nx; ++iy) {
-				for (var ix = 1; ix < this.nx; ++ix) {
+			for (var j = 1; j < this.nx; ++j) {
+				for (var i = 1; i < this.nx; ++i) {
 					for (var side = 0; side < 2; ++side) {
 						for (var state = 0; state < 4; ++state) {
 							//find state change across interface in the basis of the eigenspace at the interface
 							var sum = 0;
 							for (var k = 0; k < 4; ++k) {
 									//reproject into interface eigenspace
-								sum += this.interfaceEigenvectorsInverse[state + 4 * (k + 4 * (side + 2 * (ix + (this.nx+1) * iy)))]
+								sum += this.interfaceEigenvectorsInverse[state + 4 * (k + 4 * (side + 2 * (i + (this.nx+1) * j)))]
 									//flux difference
-									* (this.q[k + 4 * (ix + this.nx * iy)] 
-										- this.q[k + 4 * (ix - dirs[side][0] + this.nx * (iy - dirs[side][1]))])
+									* (this.q[k + 4 * (i + this.nx * j)] 
+										- this.q[k + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))])
 							}
-							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] = sum;
+							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = sum;
+						}
+					}
+				}
+			}
+			//boundary zero
+			for (var j = 0; j < this.nghost-1; ++j) {
+				for (var i = 0; i <= this.nx; ++i) {
+					for (var side = 0; side < 2; ++side) {
+						for (var state = 0; state < 4; ++state) {
+							//left boundary, left and top sides, zero vector
+							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (j + (this.nx+1) * i))] = 0;
+							//right boundary, left and top sides, zero vector
+							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+							//top boundary, left and top sides, zero vector
+							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
+							//bottom boundary, left and top sides, zero vector
+							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
 						}
 					}
 				}
 			}
 
-			for (var iy = this.nghost; iy < this.nx + this.nghost - 3; ++iy) {
-				for (var ix = this.nghost; ix < this.nx + this.nghost - 3; ++ix) {
+
+			for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
+				for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
 					for (var side = 0; side < 2; ++side) {
 						for (var state = 0; state < 4; ++state) {
-							var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))];
+							var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))];
 							if (Math.abs(interfaceDeltaQTilde) > 0) {
-								if (this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] > 0) {
-									this.rTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] = 
-										this.interfaceDeltaQTilde[state + 4 * (side + 2 * (ix - dirs[side][0] + (this.nx+1) * (iy - dirs[side][1])))]
+								if (this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] > 0) {
+									this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
+										this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1])))]
 										/ interfaceDeltaQTilde;
 								} else {
-									this.rTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] = 
-										this.interfaceDeltaQTilde[state + 4 * (side + 2 * (ix + dirs[side][0] + (this.nx+1) * (iy + dirs[side][1])))]
+									this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
+										this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])))]
 										/ interfaceDeltaQTilde;
 								}
+							} else {
+								this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
 							}
 						}
 					}
@@ -582,20 +591,20 @@ var advectMethods = {
 			var fluxTilde = [];	//4
 			
 			//transform cell q's into cell qTilde's (eigenspace)
-			for (var iy = 1; iy < this.nx; ++iy) {
-				for (var ix = 1; ix < this.nx; ++ix) {
+			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
+				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
 					for (var side = 0; side < 2; ++side) {
-						var dx = this.xi[side + 2 * (ix + (this.nx+1) * iy)] 
-							- this.xi[side + 2 * (ix-dirs[side][0] + (this.nx+1) * (iy-dirs[side][1]))];
+						var dx = this.xi[side + 2 * (i + (this.nx+1) * j)] 
+							- this.xi[side + 2 * (i-dirs[side][0] + (this.nx+1) * (j-dirs[side][1]))];
 						
 						//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 						//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
 						for (var state = 0; state < 4; ++state) {
 							var sum = 0;
 							for (var k = 0; k < 4; ++k) {
-								sum += this.interfaceMatrix[state + 4 * (k + 4 * (side + 2 * (ix + (this.nx+1) * iy)))]
-									* (this.q[k + 4 * (ix - dirs[side][0] + this.nx * (iy - dirs[side][1]))]
-										+ this.q[k + 4 * (ix + this.nx * iy)]);
+								sum += this.interfaceMatrix[state + 4 * (k + 4 * (side + 2 * (i + (this.nx+1) * j)))]
+									* (this.q[k + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))]
+										+ this.q[k + 4 * (i + this.nx * j)]);
 							}
 							fluxAvg[state] = .5 * sum;
 						}
@@ -603,24 +612,20 @@ var advectMethods = {
 						//calculate flux
 						for (var state = 0; state < 4; ++state) {
 							var theta = 0;
-							if (this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] >= 0) {
+							if (this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] >= 0) {
 								theta = 1;
 							} else {
 								theta = -1;
 							}
 						
-							var phi = this.fluxMethod(this.rTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))]);
-							if (isnan(phi)) throw 'nan';
+							var phi = this.fluxMethod(this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))]);
 
-							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] * dt / dx; 
-							if (isnan(epsilon)) throw 'nan';
+							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] * dt / dx; 
 
-							var deltaFluxTilde = this.interfaceEigenvalues[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))]
-								* this.interfaceDeltaQTilde[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))];
-							if (isnan(deltaFluxTilde)) throw 'nan';
+							var deltaFluxTilde = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))]
+								* this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))];
 
 							fluxTilde[state] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
-							if (isnan(fluxTilde[state])) throw 'nan';
 						}
 					
 						//reproject fluxTilde back into q
@@ -628,11 +633,9 @@ var advectMethods = {
 							var sum = 0;
 							for (var k = 0; k < 4; ++k) {
 								sum += fluxTilde[k]
-									* this.interfaceEigenvectors[state + 4 * (k + 4 * (side + 2 * (ix + (this.nx+1) * iy)))];
+									* this.interfaceEigenvectors[state + 4 * (k + 4 * (side + 2 * (i + (this.nx+1) * j)))];
 							}
-							if (isnan(sum)) throw 'nan';
-							this.flux[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))] = fluxAvg[state] + sum;
-							if (isnan(this.flux[state + 4 * (side + 2 * (ix + (this.nx+1) * iy))])) throw 'nan';
+							this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = fluxAvg[state] + sum;
 						}
 					}
 				}
@@ -640,13 +643,15 @@ var advectMethods = {
 		
 			//zero boundary flux
 			//..and keep the boundary r's zero	
-			for (var i = 0; i <= this.nx; ++i) {
-				for (var side = 0; side < 2; ++side) {
-					for (var state = 0; state < 4; ++state) {
-						this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * 0))] = 0;
-						this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * this.nx))] = 0;
-						this.flux[state + 4 * (side + 2 * (0 + (this.nx+1) * i))] = 0;
-						this.flux[state + 4 * (side + 2 * (this.nx + (this.nx+1) * i))] = 0;
+			for (var j = 0; j < this.nghost-1; ++j) {
+				for (var i = 0; i <= this.nx; ++i) {
+					for (var side = 0; side < 2; ++side) {
+						for (var state = 0; state < 4; ++state) {
+							this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
+							this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+							this.flux[state + 4 * (side + 2 * (j + (this.nx+1) * i))] = 0;
+							this.flux[state + 4 * (side + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+						}
 					}
 				}
 			}
@@ -655,14 +660,14 @@ var advectMethods = {
 			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 					for (var side = 0; side < 2; ++side) {
-						var xiIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
-						var xiIndex = side + 2 * (i + (this.nx+1) * j);
-						var dx = this.xi[xiIndexR] - this.xi[xiIndex];
 						for (var state = 0; state < 4; ++state) {
-							this.q[state + 4 * (i + this.nx * j)] -= 
-								(this.flux[state + 4 * (side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][1])))]
-									- this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))]) * dt / dx;
-							if (isnan(this.q[state + 4 * (i + this.nx * j)])) throw 'nan';	
+							var xiIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+							var xiIndexL = side + 2 * (i + (this.nx+1) * j);
+							var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
+							var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
+							var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
+							var df = this.flux[ifluxR] - this.flux[ifluxL];
+							this.q[state + 4 * (i + this.nx * j)] -= dt * df / dx;
 						}
 					}
 				}
@@ -934,12 +939,12 @@ var HydroState = makeClass({
 					//a more robust method would be to take both velocity components and dot them with the interface tangent
 					var uR = this.q[1+side + qIndexR] / this.q[0 + qIndexR];
 					var uL = this.q[1+side + qIndexL] / this.q[0 + qIndexL];
-					var ipR = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
-					var ipL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-					var ixR = side + 2 * (i + dirs[side][0] + this.nx * (j + dirs[side][1]));
-					var ixL = side + 2 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
-					var dx = this.x[ixR] - this.x[ixL];
-					this.q[3 + qIndex] -= dt * (this.pressure[ipR] * uR - this.pressure[ipL] * uL) / dx;
+					var pIndexR = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
+					var pIndexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+					var xIndexR = side + 2 * (i + dirs[side][0] + this.nx * (j + dirs[side][1]));
+					var xIndexL = side + 2 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
+					var dx = this.x[xIndexR] - this.x[xIndexL];
+					this.q[3 + qIndex] -= dt * (this.pressure[pIndexR] * uR - this.pressure[pIndexL] * uL) / dx;
 				}
 			}
 		}
@@ -968,15 +973,15 @@ var Hydro = makeClass({
 		//initialize geometry x and y coordinates once since they don't change
 		var centerX = (xmax + xmin) / 2;
 		var centerY = (ymax + ymin) / 2;
-		var iv = 0;
-		var ix = 0;
+		var vIndex = 0;
+		var xIndex = 0;
 		var x = this.state.x;
 		var nx = this.state.nx;
 		for (var j = 0; j < nx; ++j) {
 			for (var i = 0; i < nx; ++i) {
-				this.vertexPositions[iv] = x[ix] - centerX; ++iv; ++ix;
-				this.vertexPositions[iv] = x[ix] - centerY; ++iv; ++ix;
-				iv++;
+				this.vertexPositions[vIndex] = x[xIndex] - centerX; ++vIndex; ++xIndex;
+				this.vertexPositions[vIndex] = x[xIndex] - centerY; ++vIndex; ++xIndex;
+				vIndex++;
 			}
 		}
 
@@ -996,7 +1001,17 @@ var Hydro = makeClass({
 		var qIndex = 0;
 		for (var j = 0; j < nx; ++j) {
 			for (var i = 0; i < nx; ++i) {
+				//density -> height
 				this.vertexPositions[iv] = q[0 + qIndex] * 20.;
+				//left/right density flux -> height
+				//this.vertexPositions[iv] = 20 * this.state.flux[0 + 4 * (0 + 2 * (i + (nx+1) * j))];
+				//up/down density flux -> height
+				//this.vertexPositions[iv] = 20 * this.state.flux[0 + 4 * (1 + 2 * (i + (nx+1) * j))];
+				//combined density flux
+				//this.vertexPositions[iv] = 20 * (this.state.flux[0 + 4 * (0 + 2 * (i + (nx+1) * j))] + this.state.flux[0 + 4 * (1 + 2 * (i + (nx+1) * j))]);
+				//left/right normal eigenvalue
+				//this.vertexPositions[iv] = 20 * this.state.interfaceEigenvalues[1 + 4 * (0 + 2 * (i + (nx+1) * j))];
+
 				iv += 3;
 				this.vertexStates[is++] = q[0 + qIndex];
 				this.vertexStates[is++] = Math.sqrt((q[1 + qIndex] * q[1 + qIndex] + q[2 + qIndex] * q[2 + qIndex]) / (q[0 + qIndex] * q[0 + qIndex]));
