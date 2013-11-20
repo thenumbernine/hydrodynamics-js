@@ -3,10 +3,11 @@
 	<head>
 		<title>Learning Hydrodynamics - WebGL</title>
 		
-		<script type='text/javascript' src='../js/jquery-1.10.0.min.js'></script>
-		<script type='text/javascript' src='../js/util.js'></script>
-		<script type='text/javascript' src='../js/gl-matrix.2.2.0.min.js'></script>
-		<script type='text/javascript' src='../js/gl-util.js'></script>
+		<script type='text/javascript' src='/js/jquery-1.10.0.min.js'></script>
+		<script type='text/javascript' src='/js/util.js'></script>
+		<script type='text/javascript' src='/js/gl-matrix.2.2.0.min.js'></script>
+		<script type='text/javascript' src='/js/gl-util.js'></script>
+		<script type='text/javascript' src='/js/gl-util-gradient.js'></script>
 		<script type='text/javascript' src='/js/mouse3d.js'></script>
 		<script type='text/javascript' src='main-2d.js'></script>
 		
@@ -21,20 +22,21 @@ _gaq.push(['_trackPageview']);
 })();
 </script>
 		<script id='water-vsh' type='x-shader/x-vertex'>
-attribute vec3 vertex;
-attribute vec3 state;
-varying vec3 statev;
+attribute vec2 vertex;
+attribute float state;
+varying float statev;
 uniform mat4 mvMat;
 uniform mat4 projMat;
 void main() {
 	statev = state;
-	gl_Position = projMat * mvMat * vec4(vertex.xyz, 1.);
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
 }
 		</script>
 		<script id='water-fsh' type='x-shader/x-fragment'>
-varying vec3 statev;
+varying float statev;
+uniform sampler2D hsvTex;
 void main() {
-	gl_FragColor = vec4(statev, 1.);;
+	gl_FragColor = texture2D(hsvTex, vec2(statev, .5)); 
 }
 		</script>
 
@@ -71,6 +73,7 @@ a:active {
 		<div id='panel' style='overflow-x:hidden; width:400px; z-index:1, width:300px; position:absolute; background-color:rgba(0,0,0,.75)'>
 			<button id='reset-sod'>Reset Sod</button>
 			<button id='reset-wave'>Reset Wave</button>
+			<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button>
 			<br>
 			Boundary:
 			<select id='boundary'></select><br>
