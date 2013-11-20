@@ -423,7 +423,7 @@ var advectMethods = {
 							var delta = phi * (this.q[qIndexR] - this.q[qIndexL]);
 							this.flux[fluxIndex] += delta * .5
 								* Math.abs(this.ui[uiIndex])
-								* (1 - Math.abs(this.ui[uiIndex] * volume * dt / (dxi[side] * dxi[side])));
+								* (1 - Math.abs(this.ui[uiIndex] * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
 						}
 					}
 				}
@@ -461,7 +461,7 @@ var advectMethods = {
 							var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
 							var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 							var df = this.flux[ifluxR] - this.flux[ifluxL];
-							this.q[state + 4 * (i + this.nx * j)] -= dt * df * volume / (dxi[side] * dxi[side]);
+							this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
 						}
 					}
 				}
@@ -649,7 +649,7 @@ var advectMethods = {
 						
 							var phi = this.fluxMethod(this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))]);
 
-							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] * volume * dt / (dxi[side] * dxi[side]); 
+							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
 
 							var deltaFluxTilde = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))]
 								* this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))];
@@ -708,7 +708,7 @@ var advectMethods = {
 							var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
 							var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 							var df = this.flux[ifluxR] - this.flux[ifluxL];
-							this.q[state + 4 * (i + this.nx * j)] -= dt * df * volume / (dxi[side] * dxi[side]);
+							this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
 						}
 					}
 				}
@@ -1040,7 +1040,7 @@ var HydroState = makeClass({
 					var uL = this.q[1+side + qIndexL] / this.q[0 + qIndexL];
 					var pIndexR = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
 					var pIndexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-					this.q[3 + qIndex] -= dt * (this.pressure[pIndexR] * uR - this.pressure[pIndexL] * uL) * volume / (dxi[side] * dxi[side]);
+					this.q[3 + qIndex] -= dt * (this.pressure[pIndexR] * uR - this.pressure[pIndexL] * uL) / dxi[side];//* volume / (dxi[side] * dxi[side]);
 				}
 			}
 		}
@@ -1111,8 +1111,10 @@ var Hydro = makeClass({
 				++e;
 			}
 		}
-		this.lastDataMin = dataMin;
-		this.lastDataMax = dataMax;
+		if (this.updateLastDataRange) {
+			this.lastDataMin = dataMin;
+			this.lastDataMax = dataMax;
+		}
 	}
 });
 
@@ -1159,6 +1161,28 @@ $(document).ready(function(){
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	buildSelect('advect-method', 'advectMethod', advectMethods);
 
+	hydro.lastDataMin = 0;
+	hydro.lastDataMax = 1;
+	hydro.updateLastDataRange = false;
+	$('#dataRangeScaleNormalized').change(function() {
+		if (!$(this).is(':checked')) return;
+		hydro.updateLastDataRange = true;
+	});
+	$('#dataRangeScaleFixed').change(function() {
+		if (!$(this).is(':checked')) return;
+		hydro.updateLastDataRange = false;
+		hydro.lastDataMin = Number($('#dataRangeFixedMin').val()); 
+		hydro.lastDataMax = Number($('#dataRangeFixedMax').val()); 
+	});
+	$('#dataRangeFixedMin').change(function() {
+		if (hydro.updateLastDataRange) return;
+		hydro.lastDataMin = Number($('#dataRangeFixedMin').val()); 
+	});
+	$('#dataRangeFixedMax').change(function() {
+		if (hydro.updateLastDataRange) return;
+		hydro.lastDataMax = Number($('#dataRangeFixedMax').val()); 
+	});
+
 	canvas = $('<canvas>', {
 		css : {
 			left : 0,
@@ -1186,11 +1210,11 @@ $(document).ready(function(){
 	var hsvTex = new GL.GradientTexture({
 		width:256, 
 		colors:[
-			[0,0,0],
-			[0,0,1],
-			[1,0,0],
+			[.25,0,.5],
+			[0,0,.75],
+			[0,1,0],
 			[1,1,0],
-			[1,1,1]
+			[1,0,0],
 		],
 		dontRepeat : true
 	});

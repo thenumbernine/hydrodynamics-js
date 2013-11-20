@@ -71,9 +71,9 @@ a:active {
 	</head>
 	<body style='margin:0px; overflow:hidden'>
 		<div id='panel' style='overflow-x:hidden; width:400px; z-index:1, width:300px; position:absolute; background-color:rgba(0,0,0,.75)'>
-			<button id='reset-sod'>Reset Sod</button>
-			<button id='reset-wave'>Reset Wave</button>
-			<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button>
+			<button id='reset-sod'>Reset Sod</button><br>
+			<button id='reset-wave'>Reset Wave</button><br>
+			<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button><br>
 			<br>
 			Boundary:
 			<select id='boundary'></select><br>
@@ -82,6 +82,14 @@ a:active {
 			Advect:
 			<select id='advect-method'></select><br>
 			
+			<br>
+			Range:<br>
+			<input id='dataRangeScaleNormalized' type='radio' name='dataRangeScale'/>Normalized Range<br>
+			<input id='dataRangeScaleFixed' type='radio' name='dataRangeScale' checked='checked'/>Fixed Range<br>
+			Fixed Min <input id='dataRangeFixedMin' value='0'/><br>
+			Fixed Max <input id='dataRangeFixedMax' value='.1'/><br>
+			<br>
+		
 			<input type='radio' group='1' onclick='location.href="index.html"'>1D</input><br>
 			<input type='radio' group='1' checked>2D</input><br>
 		</div>
