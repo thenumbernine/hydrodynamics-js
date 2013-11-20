@@ -12,10 +12,7 @@ var xmin = -.5;
 var xmax = .5; 
 var ymin = -.5;
 var ymax = .5;
-var xmin = 0;
-var xmax = 200; 
-var ymin = 0;
-var ymax = 200;
+var useNoise = true;
 var mouse;
 
 //interface directions
@@ -903,6 +900,10 @@ var HydroState = makeClass({
 				var rho = ((x < (.7 * xmin + .3 * xmax) && y < (.7 * ymin + .3 * ymax)) ? 1 : .1);
 				var u = 0;
 				var v = 0;
+				if (useNoise) {
+					u += (Math.random() - .5) * 2 * .01;
+					v += (Math.random() - .5) * 2 * .01;
+				}
 				var energyKinematic = .5 * (u * u + v * v);
 				var energyThermal = 1;
 				var energyTotal = energyKinematic + energyThermal;
@@ -927,9 +928,13 @@ var HydroState = makeClass({
 				var y = this.x[1 + xIndex];
 				var dx = x - xmid;
 				var dy = y - ymid;
-				var rho = 3 * Math.exp(-(dx * dx + dy * dy)/(dg * dg)) + .1;
+				var rho = 3 * Math.exp(-(dx * dx + dy * dy) / (dg * dg)) + .1;
 				var u = 0; 
 				var v = 0;
+				if (useNoise) {
+					u += (Math.random() - .5) * 2 * .01;
+					v += (Math.random() - .5) * 2 * .01;
+				}
 				var energyKinematic = .5 * (u * u + v * v);
 				var energyThermal = 1;
 				var energyTotal = energyKinematic + energyThermal;
@@ -942,6 +947,7 @@ var HydroState = makeClass({
 			}
 		}
 	},
+	//http://www.astro.princeton.edu/~jstone/Athena/tests/kh/kh.html
 	resetKelvinHemholtz : function() {
 		var xmid = .5 * (xmin + xmax);
 		var xIndex = 0;
@@ -950,11 +956,14 @@ var HydroState = makeClass({
 			for (var i = 0; i < this.nx; ++i) {
 				var x = this.x[0 + xIndex];
 				var y = this.x[1 + xIndex];
-				var yInTheMiddle = y > (.75 * ymin + .25 * ymax)
-								&& y < (.25 * ymin + .75 * ymax);
+				var yInTheMiddle = y > (.75 * ymin + .25 * ymax) && y < (.25 * ymin + .75 * ymax);
 				var rho = yInTheMiddle ? 2 : 1;
-				var u = (yInTheMiddle ? .5 : -.5) + (Math.random() - .5) * 2 * .01;
+				var u = yInTheMiddle ? .5 : -.5;
 				var v = 0;
+				if (useNoise) {
+					u += (Math.random() - .5) * 2 * .01;
+					v += (Math.random() - .5) * 2 * .01;
+				}
 				var energyKinematic = .5 * (u * u + v * v);
 				var energyThermal = 1;
 				var energyTotal = energyKinematic + energyThermal;
@@ -1094,16 +1103,22 @@ var Hydro = makeClass({
 		var pressure = this.state.pressure;
 		var nx = this.state.nx;
 		var e = 0;
+	
+		//density
+		var dataMin = q[0];
+		var dataMax = q[0];
+		//pressure
+		//var dataMin = pressure[0];
+		//var dataMax = pressure[0] + 1e-9;
 		
-		var dataMin = pressure[0];
-		var dataMax = pressure[0] + 1e-9;
 		var lastDataRange = this.lastDataMax - this.lastDataMin;	
 		for (var j = 0; j < nx; ++j) {
 			for (var i = 0; i < nx; ++i) {
 				//density
-				//var s = q[0 + 4 * e];
+				var s = q[0 + 4 * e];
 				//pressure
-				var s = pressure[e];
+				//var s = pressure[e];
+				
 				if (s < dataMin) dataMin = s;
 				if (s > dataMax) dataMax = s;
 				
@@ -1114,6 +1129,12 @@ var Hydro = makeClass({
 		if (this.updateLastDataRange) {
 			this.lastDataMin = dataMin;
 			this.lastDataMax = dataMax;
+			var thisTick = Math.floor(Date.now() / 1000);
+			if (this.lastDataRangeUpdateTime != thisTick) {
+				this.lastDataRangeUpdateTime = thisTick;
+				$('#dataRangeFixedMin').val(this.lastDataMin);
+				$('#dataRangeFixedMax').val(this.lastDataMax);
+			}
 		}
 	}
 });
@@ -1161,9 +1182,9 @@ $(document).ready(function(){
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	buildSelect('advect-method', 'advectMethod', advectMethods);
 
-	hydro.lastDataMin = 0;
-	hydro.lastDataMax = 1;
-	hydro.updateLastDataRange = false;
+	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
+	hydro.lastDataMax = Number($('#dataRangeFixedMax').val());
+	hydro.updateLastDataRange = true;
 	$('#dataRangeScaleNormalized').change(function() {
 		if (!$(this).is(':checked')) return;
 		hydro.updateLastDataRange = true;
@@ -1205,14 +1226,13 @@ $(document).ready(function(){
 	GL.view.ortho = true;
 	GL.view.zNear = -1;
 	GL.view.zFar = 1;
-	GL.view.fovY = 125;
+	GL.view.fovY = 125 / 200 * (xmax - xmin);
 
 	var hsvTex = new GL.GradientTexture({
 		width:256, 
 		colors:[
-			[.25,0,.5],
-			[0,0,.75],
-			[0,1,0],
+			[0,0,.5],
+			[0,0,1],
 			[1,1,0],
 			[1,0,0],
 		],
