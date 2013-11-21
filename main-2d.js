@@ -3,6 +3,12 @@
 2D: Burger at least
 2D ADM
 2D unstructured
+
+sources:
+http://www.mpia.de/homes/dullemon/lectures/fluiddynamics/
+http://www.cfdbooks.com/cfdcodes.html
+"Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro
+http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does not
 */
 
 var panel;
@@ -17,35 +23,6 @@ var mouse;
 
 //interface directions
 var dirs = [[1,0], [0,1]];
-
-function isnan(x) { x = Number(x); return x != x; }
-
-function mat33invert(out, a) {
-	var det = a[0][0] * a[1][1] * a[2][2]
-			+ a[1][0] * a[2][1] * a[0][2]
-			+ a[2][0] * a[0][1] * a[1][2]
-			- a[2][0] * a[1][1] * a[0][2]
-			- a[1][0] * a[0][1] * a[2][2]
-			- a[0][0] * a[2][1] * a[1][2];
-	if (det == 0) {
-		for (var j = 0; j < 3; ++j) {
-			for (var i = 0; i < 3; ++i) {
-				console.log('a('+i+','+j+') = '+a[j][i]);
-			}
-		}
-		throw 'singular!';
-	}
-	var invDet = 1 / det;
-	for (var j = 0; j < 3; ++j) {
-		var j1 = (j + 1) % 3;
-		var j2 = (j + 2) % 3;
-		for (var i = 0; i < 3; ++i) {
-			var i1 = (i + 1) % 3;
-			var i2 = (i + 2) % 3;
-			out[i][j] = invDet * (a[j1][i1] * a[j2][i2] - a[j1][i2] * a[j2][i1]);
-		}
-	}
-}
 
 /*
 output:
@@ -75,18 +52,6 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	eigenvalues[1 + 4 * offset] = velocityN;
 	eigenvalues[2 + 4 * offset] = velocityN;
 	eigenvalues[3 + 4 * offset] = velocityN + speedOfSound;
-
-	//mid/tangent eigenvector, velocity components:
-	//http://www.cfdbooks.com/cfdcodes has a speed of sound scale ...
-	//"Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro does not
-	//http://www.mpia.de/homes/dullemon/lectures/fluiddynamics/Chapter_7.pdf also does not
-	//http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does not
-
-	//mid/tangent eigenvector, energy component:
-	//http://www.cfdbooks.com/cfdcodes has tangent velocity times speed of sound (he sure likes scaling things by the speed of sound)
-	//"Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro has the tangent velocity
-	//http://www.mpia.de/homes/dullemon/lectures/fluiddynamics/Chapter_7.pdf has the tangent velocity squared
-	//http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf has tangent velocity 
 
 	//I'm going with http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 
@@ -715,10 +680,10 @@ var advectMethods = {
 };
 
 var HydroState = makeClass({ 
-	init : function() {
-		this.nx = 200;
+	init : function(args) {
+		this.nx = args.size;
 		this.cfl =.5;
-		this.gamma = 7/5;
+		this.gamma = args.gamma;
 		
 		//x_i,j,dim: cell positions
 		//0 <= i < this.nx
@@ -1026,30 +991,16 @@ var HydroState = makeClass({
 		var dxi = [];
 		for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				
-				var xIndexR = 0 + 2 * (i + dirs[0][0] + this.nx * (j + dirs[0][1]));
-				var xIndexL = 0 + 2 * (i - dirs[0][0] + this.nx * (j - dirs[0][1]));
-				var dx = this.x[xIndexR] - this.x[xIndexL];
-				
-				var xIndexR = 1 + 2 * (i + dirs[1][0] + this.nx * (j + dirs[1][1]));
-				var xIndexL = 1 + 2 * (i - dirs[1][0] + this.nx * (j - dirs[1][1]));
-				var dy = this.x[xIndexR] - this.x[xIndexL];
-
-				var volume = dx * dy;
-				dxi[0] = dx;
-				dxi[1] = dy;
-				
 				var qIndex = 4 * (i + this.nx * j);
 				for (var side = 0; side < 2; ++side) {
-					var qIndexR = 4 * (i + dirs[side][0] + this.nx * (j + dirs[side][1]));
-					var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
+					var plusIndex = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
+					var minusIndex = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
 					//this is pulling the coordinate associated with the interface's direction
 					//a more robust method would be to take both velocity components and dot them with the interface tangent
-					var uR = this.q[1+side + qIndexR] / this.q[0 + qIndexR];
-					var uL = this.q[1+side + qIndexL] / this.q[0 + qIndexL];
-					var pIndexR = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
-					var pIndexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-					this.q[3 + qIndex] -= dt * (this.pressure[pIndexR] * uR - this.pressure[pIndexL] * uL) / dxi[side];//* volume / (dxi[side] * dxi[side]);
+					var uR = this.q[1+side + 4 * plusIndex] / this.q[0 + 4 * plusIndex];
+					var uL = this.q[1+side + 4 * minusIndex] / this.q[0 + 4 * minusIndex];
+					this.q[3 + qIndex] -= dt * (this.pressure[plusIndex] * uR - this.pressure[minusIndex] * uL) 
+								/ (this.x[side + 2 * plusIndex] - this.x[side + 2 * minusIndex]);
 				}
 			}
 		}
@@ -1069,7 +1020,10 @@ var HydroState = makeClass({
 
 var Hydro = makeClass({
 	init : function() {
-		this.state = new HydroState();
+		this.state = new HydroState({
+			size : 200, 
+			gamma : 7/5
+		});
 	
 		//geometry
 		this.vertexPositions = new Float32Array(2*this.state.nx*this.state.nx);
@@ -1096,7 +1050,6 @@ var Hydro = makeClass({
 		//...and a once-unrefined ... over mergeable cells only?
 		//then test for errors and split when needed
 		this.state.update();
-		
 
 		//update geometry z coordinate
 		var q = this.state.q;
@@ -1171,6 +1124,9 @@ function buildSelect(id, key, map) {
 	});
 }
 
+var sceneObjects = [];
+var colorSchemes = {};
+
 $(document).ready(function(){
 	panel = $('#panel');	
 
@@ -1228,7 +1184,7 @@ $(document).ready(function(){
 	GL.view.zFar = 1;
 	GL.view.fovY = 125 / 200 * (xmax - xmin);
 
-	var hsvTex = new GL.GradientTexture({
+	colorSchemes.Heat = new GL.GradientTexture({
 		width:256, 
 		colors:[
 			[0,0,.5],
@@ -1239,6 +1195,42 @@ $(document).ready(function(){
 		dontRepeat : true
 	});
 
+	var isobarSize = 16;
+	var isobarData = new Uint8Array(isobarSize);
+	for (var i = 1; i < isobarSize; i += 2) {
+		isobarData[i] = 255;
+	}
+	colorSchemes['B&W'] = new GL.Texture2D({
+		width : isobarSize,
+		height : 1,
+		format : gl.LUMINANCE,
+		internalFormat : gl.LUMINANCE,
+		data : isobarData,
+		minFilter : gl.LINEAR,
+		magFilter : gl.NEAREST,
+		generateMipmap : true,
+		wrap : {s : gl.REPEAT, t : gl.CLAMP_TO_EDGE }
+	});
+
+	colorSchemes.Heat.bind();
+
+	for (var k in colorSchemes) {
+		(function(){
+			var v = colorSchemes[k];
+			$('#color-scheme').append($('<option>', {
+				value : k,
+				text : k
+			}));
+		})();
+	}
+	$('#color-scheme').change(function() {
+		var k = $(this).val();
+		var v = colorSchemes[k];
+		console.log('setting to ',k,v);
+		$.each(sceneObjects, function(k, sceneObject) {
+			gl.bindTexture(gl.TEXTURE_2D, v.obj);
+		});
+	});
 
 	var shader = new GL.ShaderProgram({
 		vertexCodeID : 'water-vsh',
@@ -1265,7 +1257,7 @@ $(document).ready(function(){
 			indexes.push(i + j*hydro.state.nx);
 			indexes.push(i + (j+1)*hydro.state.nx);
 		}
-		new GL.SceneObject({
+		sceneObjects.push(new GL.SceneObject({
 			mode : gl.TRIANGLE_STRIP,
 			indexes : new GL.ElementArrayBuffer({data:indexes}),
 			attrs : {
@@ -1273,13 +1265,10 @@ $(document).ready(function(){
 				state : waveStateBuf
 			},
 			uniforms : {
-				hsvTex : 0
+				tex : 0
 			},
-			texs : [
-				hsvTex
-			],
 			shader : shader
-		});
+		}));
 	}
 	
 	var zoomFactor = .0003;	// upon mousewheel

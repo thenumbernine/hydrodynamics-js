@@ -34,9 +34,9 @@ void main() {
 		</script>
 		<script id='water-fsh' type='x-shader/x-fragment'>
 varying float statev;
-uniform sampler2D hsvTex;
+uniform sampler2D tex;
 void main() {
-	gl_FragColor = texture2D(hsvTex, vec2(statev, .5)); 
+	gl_FragColor = texture2D(tex, vec2(statev, .5)); 
 }
 		</script>
 
@@ -81,13 +81,15 @@ a:active {
 			<select id='flux-limiter'></select><br>
 			Advect:
 			<select id='advect-method'></select><br>
-			
+			Color Scheme:
+			<select id='color-scheme'></select><br>
+
 			<br>
 			Range:<br>
 			<input id='dataRangeScaleNormalized' type='radio' name='dataRangeScale' checked='checked'/>Normalized Range<br>
 			<input id='dataRangeScaleFixed' type='radio' name='dataRangeScale'/>Fixed Range<br>
-			Fixed Min <input id='dataRangeFixedMin' value='0'/><br>
-			Fixed Max <input id='dataRangeFixedMax' value='.1'/><br>
+			Min <input id='dataRangeFixedMin' value='0'/><br>
+			Max <input id='dataRangeFixedMax' value='.1'/><br>
 			<br>
 		
 			<input type='radio' group='1' onclick='location.href="index.html"'>1D</input><br>
