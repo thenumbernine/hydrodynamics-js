@@ -1134,6 +1134,10 @@ $(document).ready(function(){
 	$('#reset-wave').click(function(){ hydro.state.resetWave(); });
 	$('#reset-kelvin-hemholtz').click(function(){ hydro.state.resetKelvinHemholtz(); });
 
+	$('#use-noise').change(function() {
+		useNoise = $(this).is(':checked');
+	});
+
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	buildSelect('advect-method', 'advectMethod', advectMethods);

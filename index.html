@@ -96,7 +96,16 @@ a:active {
 			<select id='flux-limiter'></select><br>
 			Advect:
 			<select id='advect-method'></select><br>
-		
+			Integrator:
+			<select id='integration-method'></select><br>
+	
+			<br>
+			Timestep:<br>
+			<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based<br>
+			<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
+			<input id='timeStepValue' value='1'/><br>
+			<br>
+
 			<input type='radio' group='1' checked>1D</input><br>
 			<input type='radio' group='1' onclick='location.href="index-2d.html"'>2D</input><br>
 		</div>

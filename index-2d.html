@@ -74,6 +74,7 @@ a:active {
 			<button id='reset-sod'>Reset Sod</button><br>
 			<button id='reset-wave'>Reset Wave</button><br>
 			<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button><br>
+			<input id='use-noise' type='checkbox' name='useNoise' checked='true'/>Perturb Initial Velocity</input><br>
 			<br>
 			Boundary:
 			<select id='boundary'></select><br>
@@ -86,14 +87,14 @@ a:active {
 
 			<br>
 			Range:<br>
-			<input id='dataRangeScaleNormalized' type='radio' name='dataRangeScale' checked='checked'/>Normalized Range<br>
-			<input id='dataRangeScaleFixed' type='radio' name='dataRangeScale'/>Fixed Range<br>
+			<input id='dataRangeScaleNormalized' type='radio' group='dataRangeScale' name='dataRangeScale' checked='checked'/>Normalized Range<br>
+			<input id='dataRangeScaleFixed' type='radio' group='dataRangeScale' name='dataRangeScale'/>Fixed Range<br>
 			Min <input id='dataRangeFixedMin' value='0'/><br>
 			Max <input id='dataRangeFixedMax' value='.1'/><br>
 			<br>
 		
-			<input type='radio' group='1' onclick='location.href="index.html"'>1D</input><br>
-			<input type='radio' group='1' checked>2D</input><br>
+			<input type='radio' group='dimension' onclick='location.href="index.html"'>1D</input><br>
+			<input type='radio' group='dimension' checked>2D</input><br>
 		</div>
 		<div id='webglfail' style='display:none'>
 			Sorry, your browser does not support WebGL<br>
