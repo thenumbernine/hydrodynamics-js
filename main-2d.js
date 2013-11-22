@@ -265,8 +265,8 @@ var advectMethods = {
 					var u = this.q[1 + qIndex] / rho;
 					var v = this.q[2 + qIndex] / rho; 
 					var energyTotal = this.q[3 + qIndex] / rho; 
-					var energyKinematic = .5 * (u * u + v * v);
-					var energyThermal = energyTotal - energyKinematic;
+					var energyKinetic = .5 * (u * u + v * v);
+					var energyThermal = energyTotal - energyKinetic;
 					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
 					var dx = this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)];
 					var dy = this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)];
@@ -441,8 +441,8 @@ var advectMethods = {
 						var velocityXL = this.q[1 + qIndexL] / densityL;
 						var velocityYL = this.q[2 + qIndexL] / densityL;
 						var energyTotalL = this.q[3 + qIndexL] / densityL;
-						var energyKinematicL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
-						var energyThermalL = energyTotalL - energyKinematicL;
+						var energyKineticL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
+						var energyThermalL = energyTotalL - energyKineticL;
 						var pressureL = (this.gamma - 1) * densityL * energyThermalL;
 						var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
 						var hTotalL = energyTotalL + pressureL / densityL;
@@ -453,8 +453,8 @@ var advectMethods = {
 						var velocityXR = this.q[1 + qIndexR] / densityR;
 						var velocityYR = this.q[2 + qIndexR] / densityR;
 						var energyTotalR = this.q[3 + qIndexR] / densityR;
-						var energyKinematicR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
-						var energyThermalR = energyTotalR - energyKinematicR;
+						var energyKineticR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
+						var energyThermalR = energyTotalR - energyKineticR;
 						var pressureR = (this.gamma - 1) * densityR * energyThermalR;
 						var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
 						var hTotalR = energyTotalR + pressureR / densityR;
@@ -869,9 +869,9 @@ var HydroState = makeClass({
 					u += (Math.random() - .5) * 2 * .01;
 					v += (Math.random() - .5) * 2 * .01;
 				}
-				var energyKinematic = .5 * (u * u + v * v);
+				var energyKinetic = .5 * (u * u + v * v);
 				var energyThermal = 1;
-				var energyTotal = energyKinematic + energyThermal;
+				var energyTotal = energyKinetic + energyThermal;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u; 
 				this.q[2 + qIndex] = rho * v; 
@@ -900,9 +900,9 @@ var HydroState = makeClass({
 					u += (Math.random() - .5) * 2 * .01;
 					v += (Math.random() - .5) * 2 * .01;
 				}
-				var energyKinematic = .5 * (u * u + v * v);
+				var energyKinetic = .5 * (u * u + v * v);
 				var energyThermal = 1;
-				var energyTotal = energyKinematic + energyThermal;
+				var energyTotal = energyKinetic + energyThermal;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u;
 				this.q[2 + qIndex] = rho * v;
@@ -929,9 +929,11 @@ var HydroState = makeClass({
 					u += (Math.random() - .5) * 2 * .01;
 					v += (Math.random() - .5) * 2 * .01;
 				}
-				var energyKinematic = .5 * (u * u + v * v);
-				var energyThermal = 1;
-				var energyTotal = energyKinematic + energyThermal;
+				//P = (gamma - 1) rho (eTotal - eKinetic)
+				//eTotal = P / ((gamma - 1) rho) + eKinetic
+				var pressure = 2.5;
+				var energyKinetic = .5 * (u * u + v * v);
+				var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic; 
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u; 
 				this.q[2 + qIndex] = rho * v;
@@ -965,8 +967,8 @@ var HydroState = makeClass({
 				var u = this.q[1 + qIndex] / rho; 
 				var v = this.q[2 + qIndex] / rho; 
 				var energyTotal = this.q[3 + qIndex] / rho; 
-				var energyKinematic = .5 * (u * u + v * v);
-				var energyThermal = energyTotal - energyKinematic;
+				var energyKinetic = .5 * (u * u + v * v);
+				var energyThermal = energyTotal - energyKinetic;
 				this.pressure[pIndex] = (this.gamma - 1) * rho * energyThermal;
 				++pIndex;
 				qIndex += 4;
@@ -1230,7 +1232,6 @@ $(document).ready(function(){
 	$('#color-scheme').change(function() {
 		var k = $(this).val();
 		var v = colorSchemes[k];
-		console.log('setting to ',k,v);
 		$.each(sceneObjects, function(k, sceneObject) {
 			gl.bindTexture(gl.TEXTURE_2D, v.obj);
 		});
