@@ -1,9 +1,4 @@
 /*
-1D ADM
-2D: Burger at least
-2D ADM
-2D unstructured
-
 sources:
 http://www.mpia.de/homes/dullemon/lectures/fluiddynamics/
 http://www.cfdbooks.com/cfdcodes.html
@@ -13,18 +8,44 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does 
 
 var panel;
 var canvas;
+
 var xmin = -.5;
 var xmax = .5; 
 var ymin = -.5;
 var ymax = .5;
+
 var useNoise = true;
+var noiseAmplitude = .01;
+
+var useCFL = false;
+var fixedDT = .001;
+
 var mouse;
 
 var drawToScreenShader;
 
-//interface directions
-var dirs = [[1,0], [0,1]];
+var kernelVertexShader;
 
+var solidShader;
+var copyShader;
+
+var resetSodShader;
+var resetWaveShader;
+var resetKelvinHemholtzShader;
+
+var computePressureShader;
+var applyPressureToMomentumShader;
+
+var burgersComputeInterfaceVelocityShader;
+var burgersComputeFluxSlopeShader = [];	//per dim
+var burgersComputeFluxShader = [];
+var burgersUpdateStateShader;
+
+var encodeTempTex;
+var encodeShader;
+
+//coordinate names
+var coordNames = ['x', 'y'];
 
 //provide a function with a mult-line comment
 //this returns the comment as a string
@@ -155,44 +176,46 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	/**/
 }
 
-var fluxMethods = {
-	donorCell : function(r) { return 0; },
-	laxWendroff : function(r) { return 1; },
-	
-	beamWarming : function(r) { return r; },
-	fromm : function(r) { return .5 * (1 + r); },
-
-	//Wikipedia
-	CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
-	HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
-	HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
-	Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
-	minmod : function(r) { return Math.max(0, Math.min(r,1) ); },
-	Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2	
-	ospre : function(r) { return .5 * (r*r + r) / (r*r + r + 1); },
-	smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
-	Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
-	UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
-	vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
-	vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
-	
-	vanLeer : function(r) { return (r + Math.abs(r)) / (1 + Math.abs(r)); },
-	MC : function(r) { return Math.max(0, Math.min(2, .5 * (1 + r), 2 * r)); },
-	superbee : function(r) { return Math.max(0,Math.min(1,2*r),Math.min(2,r)); }
-};
-
 var boundaryMethods = {
 	periodic : function() {
-		//TODO set all lookup texture wraps to REPEAT
+		//set all lookup texture wraps to REPEAT
+		$.each([
+			this.qTex,
+			this.nextQTex,
+			this.pressureTex,
+			this.fluxTex[0],
+			this.fluxTex[1],
+			this.rTex[0],
+			this.rTex[1],
+			this.uiTex
+		], function(i, tex) {
+			tex.bind();
+			tex.setWrap({s : gl.REPEAT, t : gl.REPEAT});
+		});
 	},
+	/*
 	mirror : function(nx,q) {
 		//TODO set all lookup texture wraps to REPEAT_MIRROR 
 	},
 	dirichlet : function() {
 		//TODO set all lookup texture wraps to ... zero?
 	},
+	*/
 	constant : function(nx,q) {
 		//TODO set all lookup texture wraps to ... CLAMP
+		$.each([
+			this.qTex,
+			this.nextQTex,
+			this.pressureTex,
+			this.fluxTex[0],
+			this.fluxTex[1],
+			this.rTex[0],
+			this.rTex[1],
+			this.uiTex
+		], function(i, tex) {
+			tex.bind();
+			tex.setWrap({s : gl.CLAMP_TO_EDGE, t : gl.CLAMP_TO_EDGE});
+		});
 	}
 };
 
@@ -201,8 +224,6 @@ var advectMethods = {
 	Burgers : {
 		initStep : function() {
 			//TODO reduce to determien CFL
-			//until then, fixed!
-			return .001;
 		},
 		advect : function(dt) {
 			
@@ -218,7 +239,7 @@ var advectMethods = {
 				callback : function() {
 					//get velocity at interfaces from state
 					GL.unitQuad.draw({
-						shader : thiz.burgersComputeInterfaceVelocityShader,
+						shader : burgersComputeInterfaceVelocityShader,
 						texs : [thiz.qTex]
 					});
 				}
@@ -229,7 +250,7 @@ var advectMethods = {
 				this.fbo.draw({
 					callback : function() {
 						GL.unitQuad.draw({
-							shader : thiz.burgersComputeFluxSlopeShader[side],
+							shader : burgersComputeFluxSlopeShader[side],
 							texs : [
 								thiz.qTex, 
 								thiz.uiTex
@@ -245,7 +266,7 @@ var advectMethods = {
 				this.fbo.draw({
 					callback : function() {
 						GL.unitQuad.draw({
-							shader : thiz.burgersComputeFluxShader[side],
+							shader : burgersComputeFluxShader[side],
 							uniforms : {
 								dt_dx : dt / dxi[side]
 							},
@@ -264,7 +285,7 @@ var advectMethods = {
 			this.fbo.draw({
 				callback : function() {
 					GL.unitQuad.draw({
-						shader : thiz.burgersUpdateStateShader,
+						shader : burgersUpdateStateShader,
 						uniforms : {
 							side : side,
 							dt_dx : [
@@ -541,6 +562,26 @@ var HydroState = makeClass({
 		this.gamma = args.gamma;
 
 		var step = [1/this.nx, 1/this.nx];
+		
+		this.fbo = new GL.Framebuffer({
+			width : this.nx,
+			height : this.nx
+		});
+
+		//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
+		encodeTempTex = new GL.Texture2D({
+			internalFormat : gl.RGBA,
+			format : gl.RGBA,
+			type : gl.UNSIGNED_BYTE,
+			width : this.nx,
+			height : this.nx,
+			minFilter : gl.NEAREST,
+			magFilter : gl.NEAREST,
+			wrap : {
+				s : gl.REPEAT,
+				t : gl.REPEAT
+			}
+		});
 
 		this.noiseTex = new GL.Texture2D({
 			internalFormat : gl.RGBA,
@@ -563,8 +604,9 @@ var HydroState = makeClass({
 				];
 			}
 		});
+		//window.noiseTexData = getFloatTexData(this.fbo, this.noiseTex);
 
-		var kernelVertexShader = new GL.VertexShader({
+		kernelVertexShader = new GL.VertexShader({
 			code : GL.vertexPrecision + mlstr(function(){/*
 attribute vec2 vertex;
 varying vec2 pos;
@@ -575,7 +617,7 @@ void main() {
 */})
 		});
 
-		this.resetSodShader = new GL.ShaderProgram({
+		resetSodShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -610,7 +652,7 @@ void main() {
 			}
 		});
 
-		this.resetWaveShader = new GL.ShaderProgram({
+		resetWaveShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -623,7 +665,8 @@ void main() {
 	float dg = .2 * (rangeMax.x - rangeMin.x);
 	vec2 rangeMid = .5 * (rangeMax + rangeMin);
 	vec2 gridPosFromCenter = gridPos - .5 * rangeMid;
-	float rho = 3. * exp(-dot(gridPosFromCenter, gridPosFromCenter) / (dg * dg)) + .1;
+	//Note I turned this down from 3. to 2. because GPU is currently using fixed step sizes
+	float rho = 2. * exp(-dot(gridPosFromCenter, gridPosFromCenter) / (dg * dg)) + .1;
 	vec2 vel = vec2(0., 0.);
 	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
 	float energyKinetic = .5 * dot(vel, vel);
@@ -640,7 +683,7 @@ void main() {
 			}
 		});
 
-		this.resetKelvinHemholtzShader = new GL.ShaderProgram({
+		resetKelvinHemholtzShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -683,7 +726,7 @@ void main() {
 			//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
 		});
 
-		this.burgersComputeInterfaceVelocityShader = new GL.ShaderProgram({
+		burgersComputeInterfaceVelocityShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -706,10 +749,8 @@ void main() {
 			}
 		});
 
-		var coordNames = ['x', 'y'];
-		this.burgersComputeFluxSlopeShader = [];
 		$.each(coordNames, function(i, coordName) {
-			thiz.burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
+			burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
 				fragmentCode : (mlstr(function(){/*
 varying vec2 pos;
@@ -750,11 +791,12 @@ void main() {
 			});
 		});
 
-		this.burgersComputeFluxShader = [];
 		$.each(coordNames, function(i, coordName) {
-			thiz.burgersComputeFluxShader[i] = new GL.ShaderProgram({
+			burgersComputeFluxShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
 				fragmentCode : mlstr(function(){/*
+//for now only donor cell works
+//I'm suspicious the others' errors is related to the fact that texture neighbors are erroneous for sizes <=64 and >=1024
 vec4 fluxLimiter(vec4 r) {
 	return vec4(0.);		//donorCell 
 	//return vec4(1.);		//laxWendroff
@@ -762,18 +804,18 @@ vec4 fluxLimiter(vec4 r) {
 	//return .5 * (1. + r);	//fromm
 #if 0
 	//Wikipedia
-	CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
-	HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
-	HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
-	Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
-	minmod : function(r) { return Math.max(0, Math.min(r,1) ); },
-	Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2	
-	ospre : function(r) { return .5 * (r*r + r) / (r*r + r + 1); },
-	smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
-	Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
-	UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
-	vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
-	vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
+	//CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
+	//HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
+	//HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
+	//Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
+	//minmod : function(r) { return Math.max(0, Math.min(r,1) ); },
+	//Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2	
+	//ospre : function(r) { return .5 * (r*r + r) / (r*r + r + 1); },
+	//smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
+	//Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
+	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
+	//vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
+	//vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
 #endif
 	//return (r + abs(r)) / (1. + abs(r));	//vanLeer
 	//return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));	//MC
@@ -818,7 +860,7 @@ void main() {
 			});
 		});
 
-		this.burgersUpdateStateShader = new GL.ShaderProgram({
+		burgersUpdateStateShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -847,7 +889,7 @@ void main() {
 			}
 		});
 
-		this.computePressureShader = new GL.ShaderProgram({
+		computePressureShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -873,7 +915,7 @@ void main() {
 			}
 		});
 
-		this.applyPressureToMomentumShader = new GL.ShaderProgram({
+		applyPressureToMomentumShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -908,7 +950,7 @@ void main() {
 			}
 		});
 		
-		this.applyPressureToWorkShader = new GL.ShaderProgram({
+		applyPressureToWorkShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -954,7 +996,7 @@ void main() {
 			}
 		});
 
-		this.solidShader = new GL.ShaderProgram({
+		solidShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 uniform vec4 color;
@@ -968,7 +1010,7 @@ void main() {
 			}
 		});
 
-		this.copyShader = new GL.ShaderProgram({
+		copyShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -983,11 +1025,6 @@ void main() {
 				srcTex : 0,
 				offset : [0,0]
 			}
-		});
-
-		this.fbo = new GL.Framebuffer({
-			width : this.nx,
-			height : this.nx
 		});
 
 		//I'm skipping on x_i,j
@@ -1161,7 +1198,7 @@ void main() {
 
 		//solver configuration
 		this.boundaryMethod = boundaryMethods.periodic;
-		this.fluxMethod = fluxMethods.superbee;
+		//this.fluxMethod = fluxMethods.superbee;
 		this.advectMethod = advectMethods.Burgers;
 	},
 	resetSod : function() {
@@ -1171,9 +1208,9 @@ void main() {
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				GL.unitQuad.draw({
-					shader : thiz.resetSodShader,
+					shader : resetSodShader,
 					uniforms : {
-						noiseAmplitude : useNoise ? 0.01 : 0
+						noiseAmplitude : useNoise ? noiseAmplitude : 0
 					},
 					texs : [thiz.noiseTex]
 				});
@@ -1187,9 +1224,9 @@ void main() {
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				GL.unitQuad.draw({
-					shader : thiz.resetWaveShader,
+					shader : resetWaveShader,
 					uniforms : {
-						noiseAmplitude : useNoise ? 0.01 : 0
+						noiseAmplitude : useNoise ? noiseAmplitude : 0
 					},
 					texs : [thiz.noiseTex]
 				});
@@ -1204,9 +1241,9 @@ void main() {
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				GL.unitQuad.draw({
-					shader : thiz.resetKelvinHemholtzShader,
+					shader : resetKelvinHemholtzShader,
 					uniforms : {
-						noiseAmplitude : useNoise ? 0.01 : 0
+						noiseAmplitude : useNoise ? noiseAmplitude : 0
 					},
 					texs : [thiz.noiseTex]
 				});
@@ -1214,8 +1251,6 @@ void main() {
 		});
 	},
 	boundary : function() {
-		return;
-		
 		this.boundaryMethod();
 	},
 	step : function(dt) {
@@ -1238,7 +1273,7 @@ void main() {
 				//compute pressure
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				GL.unitQuad.draw({
-					shader : thiz.computePressureShader,
+					shader : computePressureShader,
 					texs : [thiz.qTex]
 				});
 			}
@@ -1250,7 +1285,7 @@ void main() {
 				//apply momentum diffusion
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				GL.unitQuad.draw({
-					shader : thiz.applyPressureToMomentumShader,
+					shader : applyPressureToMomentumShader,
 					uniforms : {
 						dt_dx : [dt / dx, dt / dy]
 					},
@@ -1266,7 +1301,7 @@ void main() {
 				//apply work diffusion
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				GL.unitQuad.draw({
-					shader : thiz.applyPressureToWorkShader,
+					shader : applyPressureToWorkShader,
 					uniforms : {
 						dt_dx : [dt / dx, dt / dy]
 					},
@@ -1281,80 +1316,16 @@ void main() {
 	},
 	update : function() {
 		//get timestep
-		var dt = this.advectMethod.initStep.call(this);
+		//TODO GPU driven CFL computation
+		var dt;
+		if (useCFL) {
+			dt = this.advectMethod.initStep.call(this);
+		} else {
+			dt = fixedDT;
+		}
 
 		//do the update
 		this.step(dt);
-	},
-
-	/*
-	args
-		min : min range (inclusive)
-		max : max range (inclusive)
-	*/
-	drawQuad : function(args) {
-		GL.unitQuad.draw(args);
-		return;
-		
-		if (this.quadVtxBuf === undefined) {
-			this.quadVtxBuf = new GL.ArrayBuffer({
-				dim : 2,
-				count : 4,
-				usage : gl.DYNAMIC_DRAW,
-				keep : true
-			});
-		}
-	
-		if (this.quad === undefined) {
-			this.quad = new GL.SceneObject({
-				mode : gl.TRIANGLE_STRIP,
-				attrs : {
-					vertex : this.quadVtxBuf
-				},
-				parent : null,
-				static : true
-			});
-		}
-
-		this.quadVtxBuf.data[0] = args.min[0] / this.nx;
-		this.quadVtxBuf.data[1] = args.min[1] / this.nx;
-		this.quadVtxBuf.data[2] = args.max[0] / this.nx;
-		this.quadVtxBuf.data[3] = args.min[1] / this.nx;
-		this.quadVtxBuf.data[4] = args.min[0] / this.nx;
-		this.quadVtxBuf.data[5] = args.max[1] / this.nx;
-		this.quadVtxBuf.data[6] = args.max[0] / this.nx;
-		this.quadVtxBuf.data[7] = args.max[1] / this.nx;
-		this.quadVtxBuf.updateData();
-		this.quad.draw(args);
-	},
-	drawLine : function(args) {
-		return;
-
-		if (this.lineVtxBuf === undefined) {
-			this.lineVtxBuf = new GL.ArrayBuffer({
-				dim : 2,
-				count : 2,
-				usage : gl.DYNAMIC_DRAW,
-				keep : true
-			});
-			if (this.line === undefined) {
-				this.line = new GL.SceneObject({
-					mode : gl.LINE_STRIP,
-					attrs : {
-						vertex : this.lineVtxBuf
-					},
-					parent : null,
-					static : true
-				});
-			}
-
-			this.lineVtxBuf.data[0] = (args.src[0]+.5) / this.nx;
-			this.lineVtxBuf.data[1] = (args.src[1]+.5) / this.nx;
-			this.lineVtxBuf.data[2] = (args.dst[0]+.5) / this.nx;
-			this.lineVtxBuf.data[3] = (args.dst[1]+.5) / this.nx;
-			this.lineVtxBuf.updateData();
-			this.line.draw(args);
-		}
 	},
 
 	swapQTexs : function() {
@@ -1436,6 +1407,85 @@ function buildSelect(id, key, map) {
 	});
 }
 
+//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
+//encode shader test function
+var exp2Table = [
+	2.168404E-19, 4.336809E-19, 8.673617E-19, 1.734723E-18,
+	3.469447E-18, 6.938894E-18, 1.387779E-17, 2.775558E-17,
+	5.551115E-17, 1.110223E-16, 2.220446E-16, 4.440892E-16,
+	8.881784E-16, 1.776357E-15, 3.552714E-15, 7.105427E-15,
+	1.421085E-14, 2.842171E-14, 5.684342E-14, 1.136868E-13,
+	2.273737E-13, 4.547474E-13, 9.094947E-13, 1.818989E-12,
+	3.637979E-12, 7.275958E-12, 1.455192E-11, 2.910383E-11,
+	5.820766E-11, 1.164153E-10, 2.328306E-10, 4.656613E-10,
+	9.313226E-10, 1.862645E-09, 3.725290E-09, 7.450581E-09,
+	1.490116E-08, 2.980232E-08, 5.960464E-08, 1.192093E-07,
+	2.384186E-07, 4.768372E-07, 9.536743E-07, 1.907349E-06,
+	3.814697E-06, 7.629395E-06, 1.525879E-05, 3.051758E-05,
+	6.103516E-05, 1.220703E-04, 2.441406E-04, 4.882812E-04,
+	9.765625E-04, 1.953125E-03, 3.906250E-03, 7.812500E-03,
+	1.562500E-02, 3.125000E-02, 6.250000E-02, 1.250000E-01,
+	2.500000E-01, 5.000000E-01, 1.000000E+00, 2.000000E+00,
+	4.000000E+00, 8.000000E+00, 1.600000E+01, 3.200000E+01,
+	6.400000E+01, 1.280000E+02, 2.560000E+02, 5.120000E+02,
+	1.024000E+03, 2.048000E+03, 4.096000E+03, 8.192000E+03,
+	1.638400E+04, 3.276800E+04, 6.553600E+04, 1.310720E+05,
+	2.621440E+05, 5.242880E+05, 1.048576E+06, 2.097152E+06,
+	4.194304E+06, 8.388608E+06, 1.677722E+07, 3.355443E+07,
+	6.710886E+07, 1.342177E+08, 2.684355E+08, 5.368709E+08,
+	1.073742E+09, 2.147484E+09, 4.294967E+09, 8.589935E+09,
+	1.717987E+10, 3.435974E+10, 6.871948E+10, 1.374390E+11,
+	2.748779E+11, 5.497558E+11, 1.099512E+12, 2.199023E+12,
+	4.398047E+12, 8.796093E+12, 1.759219E+13, 3.518437E+13,
+	7.036874E+13, 1.407375E+14, 2.814750E+14, 5.629500E+14,
+	1.125900E+15, 2.251800E+15, 4.503600E+15, 9.007199E+15,
+	1.801440E+16, 3.602880E+16, 7.205759E+16, 1.441152E+17,
+	2.882304E+17, 5.764608E+17, 1.152922E+18, 2.305843E+18
+];
+function decodeFloatArray(input, output) {
+	var
+		m, e, i_sign,
+		i, i4, len;
+
+	for (i = 0, len = output.length; i < len; i += 1) {
+		i4 = i * 4;
+		m = input[i4 + 1] * 3.921569E-03
+			+ input[i4 + 2] * 1.537870E-05
+			+ input[i4 + 3] * 6.030863E-08;
+		e = input[i4 + 0];
+		i_sign = 0;
+
+		if (e & 0x80) {
+			i_sign = 1;
+			e &= ~0x80;
+		}
+		if (e & 0x40) {
+			m = -m;
+			e &= ~0x40;
+		}
+		if (i_sign) {
+			e = -e;
+		}
+		output[i] = m * exp2Table[e + 62];
+	}
+}
+function getFloatTexData(fbo, tex) {
+	var destUint8Array = new Uint8Array(encodeTempTex.width * encodeTempTex.height * 4);
+	var destFloat32Array = new Float32Array(encodeTempTex.width * encodeTempTex.height);
+	gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
+	fbo.setColorAttachmentTex2D(0, encodeTempTex);
+	fbo.draw({
+		callback : function() {
+			GL.unitQuad.draw({
+				shader : encodeShader
+			});
+			gl.readPixels(0, 0, encodeTempTex.width, encodeTempTex.height, encodeTempTex.format, encodeTempTex.type, destUint8Array);
+		}
+	});
+	decodeFloatArray(destUint8Array, destFloat32Array);
+}
+
+
 var sceneObjects = [];
 
 var currentColorScheme;
@@ -1477,8 +1527,8 @@ $(document).ready(function(){
 	});
 
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
-	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
-	buildSelect('advect-method', 'advectMethod', advectMethods);
+	//buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
+	//buildSelect('advect-method', 'advectMethod', advectMethods);
 
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
 	hydro.lastDataMax = Number($('#dataRangeFixedMax').val());
@@ -1502,6 +1552,12 @@ $(document).ready(function(){
 		hydro.lastDataMax = Number($('#dataRangeFixedMax').val()); 
 	});
 
+	$('#timeStepValue').val(fixedDT);
+	$('#timeStepValue').change(function() {
+		var v = Number($(this).val());
+		if (v != v) return;	//stupid javascript ... convert anything it doesn't understand to NaNs...
+		fixedDT = v;
+	});
 
 	//init gl stuff
 
@@ -1555,8 +1611,59 @@ $(document).ready(function(){
 		var k = $(this).val();
 		currentColorScheme = colorSchemes[k];
 	});
-		
+	
 	//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
+	encodeShader = new GL.ShaderProgram({
+		vertexShader : kernelVertexShader,
+		fragmentPrecision : 'best',
+		fragmentCode : mlstr(function(){/*
+float shift_right(float v, float amt) {
+	v = floor(v) + 0.5;
+	return floor(v / exp2(amt));
+}
+
+float shift_left(float v, float amt) {
+	return floor(v * exp2(amt) + 0.5);
+}
+
+float mask_last(float v, float bits) {
+	return mod(v, shift_left(1.0, bits));
+}
+
+float extract_bits(float num, float from, float to) {
+	from = floor(from + 0.5);
+	to = floor(to + 0.5);
+	return mask_last(shift_right(num, from), to - from);
+}
+
+vec4 encode_float(float val) {
+	if (val == 0.0)
+		return vec4(0, 0, 0, 0);
+	float sign = val > 0.0 ? 0.0 : 1.0;
+	val = abs(val);
+	float exponent = floor(log2(val));
+	float biased_exponent = exponent + 127.0;
+	float fraction = ((val / exp2(exponent)) - 1.0) * 8388608.0;
+	
+	float t = biased_exponent / 2.0;
+	float last_bit_of_biased_exponent = fract(t) * 2.0;
+	float remaining_bits_of_biased_exponent = floor(t);
+	
+	float byte4 = extract_bits(fraction, 0.0, 8.0) / 255.0;
+	float byte3 = extract_bits(fraction, 8.0, 16.0) / 255.0;
+	float byte2 = (last_bit_of_biased_exponent * 128.0 + extract_bits(fraction, 16.0, 23.0)) / 255.0;
+	float byte1 = (sign * 128.0 + remaining_bits_of_biased_exponent) / 255.0;
+	return vec4(byte4, byte3, byte2, byte1);
+}
+
+uniform sampler2D tex;
+varying vec2 pos;
+void main() {
+	vec4 data = texture2D(tex, pos);
+	gl_FragColor = encode_float(data.r);
+}
+*/})
+	});
 
 	drawToScreenShader = new GL.ShaderProgram({
 		vertexCode : mlstr(function(){/*
