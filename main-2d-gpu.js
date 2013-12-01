@@ -182,204 +182,17 @@ var fluxMethods = {
 };
 
 var boundaryMethods = {
-	none : function() {},	//purely debugging
 	periodic : function() {
-		var thiz = this;
-		this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
-		this.fbo.draw({
-			callback : function() {
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
-
-				//initial copy
-				thiz.drawQuad({
-					min : [0,0],
-					max : [thiz.nx, thiz.nx],
-					shader : thiz.copyShader,
-					texs : [thiz.qTex]
-				});
-
-				//left reads right
-				thiz.drawLine({
-					src : [0,0],
-					dst : [0, thiz.nx-1],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [(thiz.nx - 5)/thiz.nx, 0]
-					},
-					texs : [thiz.qTex]
-				});
-				thiz.drawLine({
-					src : [1,0],
-					dst : [1, thiz.nx-1],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [(thiz.nx - 5)/thiz.nx, 0]
-					},
-					texs : [thiz.qTex]
-				});
-				
-				//right reads left
-				thiz.drawLine({
-					src : [thiz.nx-3, 0],
-					dst : [thiz.nx-3, thiz.nx-1],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [-(thiz.nx-5)/thiz.nx, 0]
-					},
-					texs : [thiz.qTex]
-				});
-				thiz.drawLine({
-					src : [thiz.nx-2, 0],
-					dst : [thiz.nx-2, thiz.nx-1],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [-(thiz.nx-5)/thiz.nx, 0]
-					},
-					texs : [thiz.qTex]
-				});
-
-				//bottom reads top
-				thiz.drawLine({
-					src : [0,0],
-					dst : [thiz.nx-1, 0],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [0, (thiz.nx - 5)/thiz.nx]
-					},
-					texs : [thiz.qTex]
-				});
-				thiz.drawLine({
-					src : [0,1],
-					dst : [thiz.nx-1, 1],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [0, (thiz.nx - 5)/thiz.nx]
-					},
-					texs : [thiz.qTex]
-				});
-
-				//top reads bottom
-				thiz.drawLine({
-					src : [0, thiz.nx-3],
-					dst : [thiz.nx-1, thiz.nx-3],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [0, -(thiz.nx-5)/thiz.nx]
-					},
-					texs : [thiz.qTex]
-				});
-				thiz.drawLine({
-					src : [0, thiz.nx-2],
-					dst : [thiz.nx-1, thiz.nx-2],
-					shader : thiz.copyShader,
-					uniforms : {
-						offset : [0, -(thiz.nx-5)/thiz.nx]
-					},
-					texs : [thiz.qTex]
-				});
-		
-			}
-		});
-		this.swapQTexs();
+		//TODO set all lookup texture wraps to REPEAT
 	},
 	mirror : function(nx,q) {
-
-		for (var i = 0; i < nx; ++i) {
-			//top
-			q[0 + 4 * (i + nx * (0))] = q[0 + 4 * (i + nx * (3))];
-			q[0 + 4 * (i + nx * (1))] = q[0 + 4 * (i + nx * (2))];
-			q[0 + 4 * (i + nx * (nx-2))] = q[0 + 4 * (i + nx * (nx-3))];
-			q[0 + 4 * (i + nx * (nx-1))] = q[0 + 4 * (i + nx * (nx-4))];
-			q[1 + 4 * (i + nx * (0))] = -q[1 + 4 * (i + nx * (3))];
-			q[1 + 4 * (i + nx * (1))] = -q[1 + 4 * (i + nx * (2))];
-			q[1 + 4 * (i + nx * (nx-2))] = -q[1 + 4 * (i + nx * (nx-3))];
-			q[1 + 4 * (i + nx * (nx-1))] = -q[1 + 4 * (i + nx * (nx-4))];
-			q[2 + 4 * (i + nx * (0))] = -q[2 + 4 * (i + nx * (3))];
-			q[2 + 4 * (i + nx * (1))] = -q[2 + 4 * (i + nx * (2))];
-			q[2 + 4 * (i + nx * (nx-2))] = -q[2 + 4 * (i + nx * (nx-3))];
-			q[2 + 4 * (i + nx * (nx-1))] = -q[2 + 4 * (i + nx * (nx-4))];
-			q[3 + 4 * (i + nx * (0))] = q[3 + 4 * (i + nx * (3))];
-			q[3 + 4 * (i + nx * (1))] = q[3 + 4 * (i + nx * (2))];
-			q[3 + 4 * (i + nx * (nx-2))] = q[3 + 4 * (i + nx * (nx-3))];
-			q[3 + 4 * (i + nx * (nx-1))] = q[3 + 4 * (i + nx * (nx-4))];
-			//left
-			q[0 + 4 * (0 + nx * i)] = q[0 + 4 * (3 + nx * i)];
-			q[0 + 4 * (1 + nx * i)] = q[0 + 4 * (2 + nx * i)];
-			q[0 + 4 * (nx-2 + nx * i)] = q[0 + 4 * (nx-3 + nx * i)];
-			q[0 + 4 * (nx-1 + nx * i)] = q[0 + 4 * (nx-4 + nx * i)];
-			q[1 + 4 * (0 + nx * i)] = -q[1 + 4 * (3 + nx * i)];
-			q[1 + 4 * (1 + nx * i)] = -q[1 + 4 * (2 + nx * i)];
-			q[1 + 4 * (nx-2 + nx * i)] = -q[1 + 4 * (nx-3 + nx * i)];
-			q[1 + 4 * (nx-1 + nx * i)] = -q[1 + 4 * (nx-4 + nx * i)];
-			q[2 + 4 * (0 + nx * i)] = -q[2 + 4 * (3 + nx * i)];
-			q[2 + 4 * (1 + nx * i)] = -q[2 + 4 * (2 + nx * i)];
-			q[2 + 4 * (nx-2 + nx * i)] = -q[2 + 4 * (nx-3 + nx * i)];
-			q[2 + 4 * (nx-1 + nx * i)] = -q[2 + 4 * (nx-4 + nx * i)];
-			q[3 + 4 * (0 + nx * i)] = q[3 + 4 * (3 + nx * i)];
-			q[3 + 4 * (1 + nx * i)] = q[3 + 4 * (2 + nx * i)];
-			q[3 + 4 * (nx-2 + nx * i)] = q[3 + 4 * (nx-3 + nx * i)];
-			q[3 + 4 * (nx-1 + nx * i)] = q[3 + 4 * (nx-4 + nx * i)];
-		}
+		//TODO set all lookup texture wraps to REPEAT_MIRROR 
 	},
 	dirichlet : function() {
-		var thiz = this;
-		this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
-		this.fbo.draw({
-			callback : function() {
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
-
-				//initial copy
-				thiz.drawQuad({
-					min : [0,0],
-					max : [thiz.nx, thiz.nx],
-					shader : thiz.copyShader,
-					texs : [thiz.qTex]
-				});
-			
-				//left 
-				thiz.drawQuad({
-					min : [0,0],
-					max : [2, thiz.nx],
-					shader : thiz.solidShader,
-					texs : [thiz.qTex]
-				});
-			
-				//right 
-				thiz.drawQuad({
-					min : [thiz.nx-4, 0],
-					max : [thiz.nx, thiz.nx],
-					shader : thiz.solidShader,
-					texs : [thiz.qTex]
-				});
-
-				//bottom 
-				thiz.drawQuad({
-					min : [0,0],
-					max : [thiz.nx, 2],
-					shader : thiz.solidShader,
-					texs : [thiz.qTex]
-				});
-						
-				//top 
-				thiz.drawQuad({
-					min : [0, thiz.nx-4],
-					max : [thiz.nx, thiz.nx],
-					shader : thiz.solidShader,
-					texs : [thiz.qTex]
-				});
-			}
-		});
-		this.swapQTexs();
+		//TODO set all lookup texture wraps to ... zero?
 	},
 	constant : function(nx,q) {
-		for (var i = 0; i < nx; ++i) {
-			for (var state = 0; state < 4; ++state) {
-				q[state + 4 * (i + nx * (0))] = q[state + 4 * (i + nx * (1))] = q[state + 4 * (i + nx * (2))];
-				q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * (nx-3))];
-				q[state + 4 * (0 + nx * i)] = q[state + 4 * (1 + nx * i)] = q[state + 4 * (2 + nx * i)];
-				q[state + 4 * (nx-1 + nx * i)] = q[state + 4 * (nx-2 + nx * i)] = q[state + 4 * (nx-3 + nx * i)];
-			}
-		}
+		//TODO set all lookup texture wraps to ... CLAMP
 	}
 };
 
@@ -404,13 +217,10 @@ var advectMethods = {
 			this.fbo.draw({
 				callback : function() {
 					//get velocity at interfaces from state
-					thiz.drawQuad({
-						min : [0,0],
-						max : [thiz.nx, thiz.nx],
+					GL.unitQuad.draw({
 						shader : thiz.burgersComputeInterfaceVelocityShader,
 						texs : [thiz.qTex]
 					});
-					thiz.zeroBorder(thiz.nghost, thiz.nx);
 				}
 			});
 		
@@ -418,18 +228,13 @@ var advectMethods = {
 				this.fbo.setColorAttachmentTex2D(0, this.rTex[side]);
 				this.fbo.draw({
 					callback : function() {
-						thiz.drawQuad({
-							min : [0,0],
-							max : [thiz.nx, thiz.nx],
+						GL.unitQuad.draw({
 							shader : thiz.burgersComputeFluxSlopeShader[side],
 							texs : [
 								thiz.qTex, 
 								thiz.uiTex
 							]
 						});
-						
-						//boundary zero
-						thiz.zeroBorder(thiz.nghost, thiz.nx);
 					}
 				});
 			}
@@ -439,9 +244,7 @@ var advectMethods = {
 				this.fbo.setColorAttachmentTex2D(0, this.fluxTex[side]);
 				this.fbo.draw({
 					callback : function() {
-						thiz.drawQuad({
-							min : [0,0],
-							max : [thiz.nx, thiz.nx],
+						GL.unitQuad.draw({
 							shader : thiz.burgersComputeFluxShader[side],
 							uniforms : {
 								dt_dx : dt / dxi[side]
@@ -452,9 +255,6 @@ var advectMethods = {
 								thiz.rTex[side]
 							]
 						});
-					
-						//boundary zero
-						thiz.zeroBorder(thiz.nghost-1, thiz.nx);
 					}
 				});
 			}
@@ -463,9 +263,7 @@ var advectMethods = {
 			this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
 			this.fbo.draw({
 				callback : function() {
-					thiz.drawQuad({
-						min : [0,0],
-						max : [thiz.nx, thiz.nx],
+					GL.unitQuad.draw({
 						shader : thiz.burgersUpdateStateShader,
 						uniforms : {
 							side : side,
@@ -480,9 +278,6 @@ var advectMethods = {
 							thiz.fluxTex[1]
 						]
 					});
-				
-					//boundary zero
-					thiz.zeroBorder(thiz.nghost-1, thiz.nx);
 				}
 			});
 			this.swapQTexs();
@@ -1365,7 +1160,7 @@ void main() {
 		this.nghost = 2;
 
 		//solver configuration
-		this.boundaryMethod = boundaryMethods.none;
+		this.boundaryMethod = boundaryMethods.periodic;
 		this.fluxMethod = fluxMethods.superbee;
 		this.advectMethod = advectMethods.Burgers;
 	},
@@ -1442,9 +1237,7 @@ void main() {
 			callback : function() {
 				//compute pressure
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				thiz.drawQuad({
-					min : [0,0],
-					max : [thiz.nx-1, thiz.nx-1],
+				GL.unitQuad.draw({
 					shader : thiz.computePressureShader,
 					texs : [thiz.qTex]
 				});
@@ -1456,17 +1249,7 @@ void main() {
 			callback : function() {
 				//apply momentum diffusion
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-			
-				thiz.drawQuad({
-					min : [0,0],
-					max : [thiz.nx, thiz.nx],
-					shader : thiz.copyShader,
-					texs : [thiz.qTex]
-				});
-			
-				thiz.drawQuad({
-					min : [thiz.nghost, thiz.nghost],
-					max : [thiz.nx - 1 - thiz.nghost, thiz.nx - 1 - thiz.nghost],
+				GL.unitQuad.draw({
 					shader : thiz.applyPressureToMomentumShader,
 					uniforms : {
 						dt_dx : [dt / dx, dt / dy]
@@ -1482,17 +1265,7 @@ void main() {
 			callback : function() {
 				//apply work diffusion
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-			
-				thiz.drawQuad({
-					min : [0,0],
-					max : [thiz.nx, thiz.nx],
-					shader : thiz.copyShader,
-					texs : [thiz.qTex]
-				});
-				
-				thiz.drawQuad({
-					min : [thiz.nghost, thiz.nghost],
-					max : [thiz.nx - 1 - thiz.nghost, thiz.nx - 1 - thiz.nghost],
+				GL.unitQuad.draw({
 					shader : thiz.applyPressureToWorkShader,
 					uniforms : {
 						dt_dx : [dt / dx, dt / dy]
@@ -1589,36 +1362,6 @@ void main() {
 		var tmp = this.qTex;
 		this.qTex = this.nextQTex;
 		this.nextQTex = this.qTex;
-	},
-
-	zeroBorder : function(border, size) {
-		return;
-
-		//boundary zero
-		//left
-		this.drawQuad({
-			min : [0, 0],
-			max : [border, size],
-			shader : this.solidShader
-		});
-		//right
-		this.drawQuad({
-			min : [size - border - 1, 0],
-			max : [size, size],
-			shader : this.solidShader
-		});
-		//bottom
-		this.drawQuad({
-			min : [0, 0],
-			max : [size, border],
-			shader : this.solidShader
-		});
-		//top
-		this.drawQuad({
-			min : [0, size - border - 1],
-			max : [size, size],
-			shader : this.solidShader
-		});
 	}
 });
 
@@ -1653,18 +1396,23 @@ function update() {
 	
 	//draw
 	GL.draw();
+	
+	currentColorScheme.bind(0);
+	hydro.state.qTex.bind(1);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
 	GL.unitQuad.draw({
 		shader : drawToScreenShader,
 		uniforms : {
 			lastMin : hydro.lastDataMin,
 			lastMax : hydro.lastDataMax
-		},
-		texs : [
-			currentColorScheme,
-			hydro.state.qTex
-		]
+		}
 	});
-	
+
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	hydro.state.qTex.unbind(1);
+	currentColorScheme.unbind(0);
+
 	requestAnimFrame(update);
 }
 

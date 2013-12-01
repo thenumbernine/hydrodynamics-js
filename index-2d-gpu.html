@@ -61,25 +61,30 @@ a:active {
 			<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button><br>
 			<input id='use-noise' type='checkbox' name='useNoise' checked='true'/>Perturb Initial Velocity</input><br>
 			<br>
+			<!--		
 			Boundary:
 			<select id='boundary'></select><br>
 			Flux Limiter:
 			<select id='flux-limiter'></select><br>
 			Advect:
 			<select id='advect-method'></select><br>
+			-->
 			Color Scheme:
 			<select id='color-scheme'></select><br>
 
 			<br>
 			Range:<br>
+			<!--	
 			<input id='dataRangeScaleNormalized' type='radio' group='dataRangeScale' name='dataRangeScale' disabled='true'/>Normalized Range<br>
 			<input id='dataRangeScaleFixed' type='radio' group='dataRangeScale' name='dataRangeScale' checked='checked'/>Fixed Range<br>
+			-->
 			Min <input id='dataRangeFixedMin' value='0'/><br>
 			Max <input id='dataRangeFixedMax' value='1'/><br>
 			<br>
 		
 			<input type='radio' group='dimension' onclick='location.href="index.html"'>1D</input><br>
-			<input type='radio' group='dimension' checked>2D</input><br>
+			<input type='radio' group='dimension' onclick='location.href="index-2d.html"'>2D</input><br>
+			<input type='radio' group='dimension' checked>2D GPU</input><br>
 		</div>
 		<div id='webglfail' style='display:none'>
 			Sorry, your browser does not support WebGL<br>
