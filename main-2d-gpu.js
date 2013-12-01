@@ -18,9 +18,13 @@ var useNoise = true;
 var noiseAmplitude = .01;
 
 var useCFL = false;
-var fixedDT = .001;
+var fixedDT = .0005;
 
 var mouse;
+
+var FloatTexture2D;
+
+var quadVtxBuf, quadObj;
 
 var drawToScreenShader;
 
@@ -43,6 +47,7 @@ var burgersUpdateStateShader;
 
 var encodeTempTex;
 var encodeShader = [];	//per channel
+var checkCoordAccuracyShader;
 
 //coordinate names
 var coordNames = ['x', 'y'];
@@ -238,7 +243,7 @@ var advectMethods = {
 			this.fbo.draw({
 				callback : function() {
 					//get velocity at interfaces from state
-					GL.unitQuad.draw({
+					quadObj.draw({
 						shader : burgersComputeInterfaceVelocityShader,
 						texs : [thiz.qTex]
 					});
@@ -249,7 +254,7 @@ var advectMethods = {
 				this.fbo.setColorAttachmentTex2D(0, this.rTex[side]);
 				this.fbo.draw({
 					callback : function() {
-						GL.unitQuad.draw({
+						quadObj.draw({
 							shader : burgersComputeFluxSlopeShader[side],
 							texs : [
 								thiz.qTex, 
@@ -265,7 +270,7 @@ var advectMethods = {
 				this.fbo.setColorAttachmentTex2D(0, this.fluxTex[side]);
 				this.fbo.draw({
 					callback : function() {
-						GL.unitQuad.draw({
+						quadObj.draw({
 							shader : burgersComputeFluxShader[side],
 							uniforms : {
 								dt_dx : dt / dxi[side]
@@ -284,7 +289,7 @@ var advectMethods = {
 			this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
 			this.fbo.draw({
 				callback : function() {
-					GL.unitQuad.draw({
+					quadObj.draw({
 						shader : burgersUpdateStateShader,
 						uniforms : {
 							side : side,
@@ -608,10 +613,11 @@ var HydroState = makeClass({
 		kernelVertexShader = new GL.VertexShader({
 			code : GL.vertexPrecision + mlstr(function(){/*
 attribute vec2 vertex;
+attribute vec2 texCoord;
 varying vec2 pos;
 void main() {
-	pos = vertex;
-	gl_Position = vec4(vertex * 2. - 1., 0., 1.);
+	pos = texCoord; 
+	gl_Position = vec4(vertex, 0., 1.);
 }
 */})
 		});
@@ -1038,50 +1044,13 @@ void main() {
 		//q_i,j,1: momentum: rho * u
 		//q_i,j,2: momentum: rho * v
 		//q_i,j,3: work: rho * e
-		this.qTex = new GL.Texture2D({
-			internalFormat : gl.RGBA,	//rho, rho * u, rho * v, rho * e
-			format : gl.RGBA,
-			type : gl.FLOAT,
-			width : this.nx,
-			height : this.nx,
-			minFilter : gl.NEAREST,
-			magFilter : gl.NEAREST,
-			wrap : {
-				s : gl.REPEAT,
-				t : gl.REPEAT
-			}
-		});
-
-		this.nextQTex = new GL.Texture2D({
-			internalFormat : gl.RGBA,	//rho, rho * u, rho * v, rho * e
-			format : gl.RGBA,
-			type : gl.FLOAT,
-			width : this.nx,
-			height : this.nx,
-			minFilter : gl.NEAREST,
-			magFilter : gl.NEAREST,
-			wrap : {
-				s : gl.REPEAT,
-				t : gl.REPEAT
-			}
-		});
+		this.qTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
+		this.nextQTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
 
 		this.resetSod();
 		
 		//p_i,j: pressure
-		this.pressureTex = new GL.Texture2D({
-			internalFormat : gl.RGBA,	//rho, rho * u, rho * v, rho * e
-			format : gl.RGBA,
-			type : gl.FLOAT,
-			width : this.nx,
-			height : this.nx,
-			minFilter : gl.NEAREST,
-			magFilter : gl.NEAREST,
-			wrap : {
-				s : gl.REPEAT,
-				t : gl.REPEAT
-			}
-		});
+		this.pressureTex = new FloatTexture2D(this.nx, this.nx);
 
 		//TODO it is tempting to merge r, f, and ui into an edge structure
 		//and associate them with the nodes on either side of them,
@@ -1090,19 +1059,7 @@ void main() {
 		//f_{i-1/2},{j-1/2},side,state: cell flux
 		this.fluxTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.fluxTex[side] = new GL.Texture2D({
-				internalFormat : gl.RGBA,
-				format : gl.RGBA,
-				type : gl.FLOAT,
-				width : this.nx,
-				height : this.nx,
-				minFilter : gl.NEAREST,
-				magFilter : gl.NEAREST,
-				wrap : {
-					s : gl.REPEAT,
-					t : gl.REPEAT
-				}
-			});
+			this.fluxTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 
 
@@ -1112,36 +1069,12 @@ void main() {
 		//r_{i-1/2},{j-1/2},side,state	
 		this.rTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.rTex[side] = new GL.Texture2D({
-				internalFormat : gl.RGBA,
-				format : gl.RGBA,
-				type : gl.FLOAT,
-				width : this.nx,
-				height : this.nx,
-				minFilter : gl.NEAREST,
-				magFilter : gl.NEAREST,
-				wrap : {
-					s : gl.REPEAT,
-					t : gl.REPEAT
-				}
-			});
+			this.rTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 		
 		//only used with Burger's eqn advection code
 		//u_{i-1/2},{j-1/2},dim: interface velocity
-		this.uiTex = new GL.Texture2D({
-			internalFormat : gl.RGBA,
-			format : gl.RGBA,
-			type : gl.FLOAT,
-			width : this.nx,
-			height : this.nx,
-			minFilter : gl.NEAREST,
-			magFilter : gl.NEAREST,
-			wrap : {
-				s : gl.REPEAT,
-				t : gl.REPEAT
-			}
-		});
+		this.uiTex = new FloatTexture2D(this.nx, this.nx);
 
 
 		//used for Riemann
@@ -1206,7 +1139,7 @@ void main() {
 		this.fbo.draw({
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				GL.unitQuad.draw({
+				quadObj.draw({
 					shader : resetSodShader,
 					uniforms : {
 						noiseAmplitude : useNoise ? noiseAmplitude : 0
@@ -1222,7 +1155,7 @@ void main() {
 		this.fbo.draw({
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				GL.unitQuad.draw({
+				quadObj.draw({
 					shader : resetWaveShader,
 					uniforms : {
 						noiseAmplitude : useNoise ? noiseAmplitude : 0
@@ -1239,7 +1172,7 @@ void main() {
 		this.fbo.draw({
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				GL.unitQuad.draw({
+				quadObj.draw({
 					shader : resetKelvinHemholtzShader,
 					uniforms : {
 						noiseAmplitude : useNoise ? noiseAmplitude : 0
@@ -1271,7 +1204,7 @@ void main() {
 			callback : function() {
 				//compute pressure
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				GL.unitQuad.draw({
+				quadObj.draw({
 					shader : computePressureShader,
 					texs : [thiz.qTex]
 				});
@@ -1283,7 +1216,7 @@ void main() {
 			callback : function() {
 				//apply momentum diffusion
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				GL.unitQuad.draw({
+				quadObj.draw({
 					shader : applyPressureToMomentumShader,
 					uniforms : {
 						dt_dx : [dt / dx, dt / dy]
@@ -1299,7 +1232,7 @@ void main() {
 			callback : function() {
 				//apply work diffusion
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				GL.unitQuad.draw({
+				quadObj.draw({
 					shader : applyPressureToWorkShader,
 					uniforms : {
 						dt_dx : [dt / dx, dt / dy]
@@ -1475,7 +1408,7 @@ function getFloatTexData(fbo, tex, channel) {
 	fbo.draw({
 		callback : function() {
 			gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
-			GL.unitQuad.draw({
+			quadObj.draw({
 				shader : encodeShader[channel],
 				texs : [tex]
 			});
@@ -1512,6 +1445,41 @@ $(document).ready(function(){
 		$('#webglfail').show();
 		throw e;
 	}
+
+	FloatTexture2D = makeClass({
+		super : GL.Texture2D,
+		init : function(width, height) {
+			var args = {};
+			args.width = width;
+			args.height = height;
+			args.internalFormat = gl.RGBA;
+			args.format = gl.RGBA;
+			args.type = gl.FLOAT;
+			args.minFilter = gl.NEAREST;
+			args.magFilter = gl.NEAREST;
+			args.wrap = {
+				s : gl.REPEAT,
+				t : gl.REPEAT
+			};
+			FloatTexture2D.super.call(this, args);
+		}
+	});
+
+	quadObj = new GL.SceneObject({
+		mode : gl.TRIANGLE_STRIP,
+		attrs : {
+			vertex : new GL.ArrayBuffer({
+				dim : 2,
+				data : [-1,-1, 1,-1, -1,1, 1,1]
+			}),
+			texCoord : new GL.ArrayBuffer({
+				dim : 2,
+				data : [0,0, 1,0, 0,1, 1,1]
+			})
+		},
+		parent : null,
+		static : true
+	});
 
 	//init hydro after gl
 
@@ -1614,7 +1582,25 @@ $(document).ready(function(){
 		var k = $(this).val();
 		currentColorScheme = colorSchemes[k];
 	});
-	
+
+	checkCoordAccuracyShader = new GL.ShaderProgram({
+		vertexShader : kernelVertexShader,
+		fragmentPrecision : 'best',
+		fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+void main() {
+	gl_FragColor = vec4(pos, step);
+}
+*/}),
+		uniforms : {
+			step : [
+				1/hydro.state.nx,
+				1/hydro.state.nx
+			]
+		}
+	});
+
 	//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
 	for (var channel = 0; channel < 4; ++channel) {
 		encodeShader[channel] = new GL.ShaderProgram({
@@ -1699,7 +1685,7 @@ void main() {
 			qTex : 1
 		}
 	});
-	
+
 	//make grid
 	hydro.update();
 	
@@ -1729,6 +1715,39 @@ void main() {
 	$(window).resize(onresize);
 	onresize();
 	update();
-	
-	getFloatTexData(hydro.state.fbo, hydro.state.noiseTex, 0);
+
+	//check ...
+	var nx = hydro.state.nx;
+	var fbo = hydro.state.fbo;
+	var tmpTex = new FloatTexture2D(nx, nx); 
+	fbo.setColorAttachmentTex2D(0, tmpTex);
+	fbo.draw({
+		callback : function() {
+			gl.viewport(0, 0, tmpTex.width, tmpTex.height);
+			quadObj.draw({
+				shader : checkCoordAccuracyShader
+			});
+		}
+	});
+	var coords = [];
+	var maxErr = [];
+	for (var channel = 0; channel < 4; ++channel) {
+		coords[channel] = getFloatTexData(fbo, tmpTex, channel);
+		maxErr[channel] = 0;
+	}
+	for (var j = 0; j < nx; ++j) {
+		for (var i = 0; i < nx; ++i) {
+			var target = [
+				(i + .5) / nx,
+				(j + .5) / nx,
+				1/nx,
+				1/nx
+			];
+			for (var channel = 0; channel < 4; ++channel) {
+				var err = Math.abs(coords[channel][i+nx*j] - target[channel]);
+				maxErr[channel] = Math.max(err, maxErr[channel]);
+			}
+		}
+	}
+	console.log('max coord errors:', maxErr);
 });

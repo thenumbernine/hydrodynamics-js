@@ -1014,7 +1014,7 @@ var HydroState = makeClass({
 	update : function() {
 		//get timestep
 		var dt = this.advectMethod.initStep.call(this);
-
+window.lastDT = dt;
 		//do the update
 		this.step(dt);
 	}
