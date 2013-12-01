@@ -42,7 +42,7 @@ var burgersComputeFluxShader = [];
 var burgersUpdateStateShader;
 
 var encodeTempTex;
-var encodeShader;
+var encodeShader = [];	//per channel
 
 //coordinate names
 var coordNames = ['x', 'y'];
@@ -604,7 +604,6 @@ var HydroState = makeClass({
 				];
 			}
 		});
-		//window.noiseTexData = getFloatTexData(this.fbo, this.noiseTex);
 
 		kernelVertexShader = new GL.VertexShader({
 			code : GL.vertexPrecision + mlstr(function(){/*
@@ -1469,20 +1468,24 @@ function decodeFloatArray(input, output) {
 		output[i] = m * exp2Table[e + 62];
 	}
 }
-function getFloatTexData(fbo, tex) {
+function getFloatTexData(fbo, tex, channel) {
 	var destUint8Array = new Uint8Array(encodeTempTex.width * encodeTempTex.height * 4);
-	var destFloat32Array = new Float32Array(encodeTempTex.width * encodeTempTex.height);
-	gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
 	fbo.setColorAttachmentTex2D(0, encodeTempTex);
+	console.log(encodeTempTex);
 	fbo.draw({
 		callback : function() {
+			gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
 			GL.unitQuad.draw({
-				shader : encodeShader
+				shader : encodeShader[channel],
+				texs : [tex]
 			});
 			gl.readPixels(0, 0, encodeTempTex.width, encodeTempTex.height, encodeTempTex.format, encodeTempTex.type, destUint8Array);
 		}
 	});
-	decodeFloatArray(destUint8Array, destFloat32Array);
+	var destFloat32Array = new Float32Array(destUint8Array.buffer);
+window.destUint8Array = destUint8Array;
+window.destFloat32Array = destFloat32Array;
+	return destFloat32Array;
 }
 
 
@@ -1613,10 +1616,11 @@ $(document).ready(function(){
 	});
 	
 	//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
-	encodeShader = new GL.ShaderProgram({
-		vertexShader : kernelVertexShader,
-		fragmentPrecision : 'best',
-		fragmentCode : mlstr(function(){/*
+	for (var channel = 0; channel < 4; ++channel) {
+		encodeShader[channel] = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentPrecision : 'best',
+			fragmentCode : mlstr(function(){/*
 float shift_right(float v, float amt) {
 	v = floor(v) + 0.5;
 	return floor(v / exp2(amt));
@@ -1660,10 +1664,11 @@ uniform sampler2D tex;
 varying vec2 pos;
 void main() {
 	vec4 data = texture2D(tex, pos);
-	gl_FragColor = encode_float(data.r);
+	gl_FragColor = encode_float(data[$channel]);
 }
-*/})
-	});
+*/}).replace(/\$channel/g, channel)
+		});
+	}
 
 	drawToScreenShader = new GL.ShaderProgram({
 		vertexCode : mlstr(function(){/*
@@ -1724,4 +1729,6 @@ void main() {
 	$(window).resize(onresize);
 	onresize();
 	update();
+	
+	getFloatTexData(hydro.state.fbo, hydro.state.noiseTex, 0);
 });
