@@ -914,7 +914,7 @@ void main() {
 		$.each(coordNames, function(i, coordName) {
 			thiz.burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
-				fragmentCode : mlstr(function(){/*
+				fragmentCode : (mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 step;
 uniform sampler2D qTex;
@@ -930,48 +930,20 @@ void main() {
 	vec4 dq = q - qPrev; 
 	float ui = texture2D(uiTex, pos)[$side];
 	float halfSignUi = .5 * sign(ui);
-	
-	if (abs(dq[0]) > 0.) {
+*/}) + [0,1,2,3].map(function(i) {
+	return mlstr(function(){/*
+	if (abs(dq[$i]) > 0.) {
 		if (ui >= 0.) {
-			gl_FragColor[0] = (qPrev[0] - qPrev2[0]) / dq[0];
+			gl_FragColor[$i] = (qPrev[$i] - qPrev2[$i]) / dq[$i];
 		} else {
-			gl_FragColor[0] = (qNext[0] - q[0]) / dq[0];
+			gl_FragColor[$i] = (qNext[$i] - q[$i]) / dq[$i];
 		}
 	} else {
-		gl_FragColor[0] = 0.;
+		gl_FragColor[$i] = 0.;
 	}
-
-	if (abs(dq[1]) > 0.) {
-		if (ui >= 0.) {
-			gl_FragColor[1] = (qPrev[1] - qPrev2[1]) / dq[1];
-		} else {
-			gl_FragColor[1] = (qNext[1] - q[1]) / dq[1];
-		}
-	} else {
-		gl_FragColor[1] = 0.;
-	}
-
-	if (abs(dq[2]) > 0.) {
-		if (ui >= 0.) {
-			gl_FragColor[2] = (qPrev[2] - qPrev2[2]) / dq[2];
-		} else {
-			gl_FragColor[2] = (qNext[2] - q[2]) / dq[2];
-		}
-	} else {
-		gl_FragColor[2] = 0.;
-	}
-
-	if (abs(dq[3]) > 0.) {
-		if (ui >= 0.) {
-			gl_FragColor[3] = (qPrev[3] - qPrev2[3]) / dq[3];
-		} else {
-			gl_FragColor[3] = (qNext[3] - q[3]) / dq[3];
-		}
-	} else {
-		gl_FragColor[3] = 0.;
-	}
-}				
-*/}).replace(/\$side/g, i),
+*/}).replace(/\$i/g, i);
+	}).join('')
++ '}').replace(/\$side/g, i),
 				fragmentPrecision : 'best',
 				uniforms : {
 					qTex : 0,
