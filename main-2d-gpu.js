@@ -389,13 +389,13 @@ var advectMethods = {
 		initStep : function() {
 			//TODO reduce to determien CFL
 			//until then, fixed!
-			return .0012;
+			return .001;
 		},
 		advect : function(dt) {
 			
 			var thiz = this;
-			var dx = (xmax - xmin) / (this.nx - 1);
-			var dy = (ymax - ymin) / (this.nx - 1);
+			var dx = (xmax - xmin) / this.nx;
+			var dy = (ymax - ymin) / this.nx;
 			var dxi = [dx, dy];
 			
 			gl.viewport(0, 0, thiz.nx, thiz.nx);
@@ -745,6 +745,8 @@ var HydroState = makeClass({
 		this.cfl =.5;
 		this.gamma = args.gamma;
 
+		var step = [1/this.nx, 1/this.nx];
+
 		this.noiseTex = new GL.Texture2D({
 			internalFormat : gl.RGBA,
 			format : gl.RGBA,
@@ -754,8 +756,8 @@ var HydroState = makeClass({
 			minFilter : gl.NEAREST,
 			magFilter : gl.NEAREST,
 			wrap : {
-				s : gl.CLAMP_TO_EDGE,
-				t : gl.CLAMP_TO_EDGE
+				s : gl.REPEAT,
+				t : gl.REPEAT
 			},
 			data : function(i,j) {
 				return [
@@ -894,18 +896,18 @@ uniform vec2 step;
 uniform sampler2D qTex;
 void main() {
 	vec4 q = texture2D(qTex, pos);
-	vec4 qxn = texture2D(qTex, pos - step);
-	vec4 qyn = texture2D(qTex, pos - step);
+	vec4 qxPrev = texture2D(qTex, pos - vec2(step.x, 0.));
+	vec4 qyPrev = texture2D(qTex, pos - vec2(0., step.y));
 	gl_FragColor = vec4(
-		.5 * (q.y / q.x + qxn.y / qxn.x),
-		.5 * (q.z / q.x + qyn.z / qyn.x),
+		.5 * (q.y / q.x + qxPrev.y / qxPrev.x),
+		.5 * (q.z / q.x + qyPrev.z / qyPrev.x),
 		0., 1.);
 }		
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
 				qTex : 0,
-				step : [1/this.nx, 1/this.nx]
+				step : step
 			}
 		});
 
@@ -948,7 +950,7 @@ void main() {
 				uniforms : {
 					qTex : 0,
 					uiTex : 1,
-					step : [1/thiz.nx, 1/thiz.nx]
+					step : step
 				}
 			});
 		});
@@ -995,7 +997,7 @@ void main() {
 	sidestep[$side] = step[$side];
 	
 	float ui = texture2D(uiTex, pos)[$side];
-	
+
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 	vec4 q = texture2D(qTex, pos);
 
@@ -1009,7 +1011,6 @@ void main() {
 	vec4 phi = fluxLimiter(r);
 	vec4 delta = phi * (q - qPrev);
 	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
-
 }			
 */}).replace(/\$side/g, i),
 				fragmentPrecision : 'best',
@@ -1017,7 +1018,7 @@ void main() {
 					qTex : 0,
 					uiTex : 1,
 					rTex : 2,
-					step : [1/thiz.nx, 1/thiz.nx]
+					step : step 
 				}
 			});
 		});
@@ -1037,7 +1038,6 @@ void main() {
 	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(step.x, 0.));
 	vec4 fluxYL = texture2D(fluxYTex, pos);
 	vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., step.y));
-
 	gl_FragColor = q 
 		- dt_dx.x * (fluxXR - fluxXL)
 		- dt_dx.y * (fluxYR - fluxYL);
@@ -1045,7 +1045,7 @@ void main() {
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				step : [1/this.nx, 1/this.nx],
+				step : step,
 				qTex : 0,
 				fluxXTex : 1,
 				fluxYTex : 2
@@ -1072,7 +1072,7 @@ void main() {
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				step : [1/this.nx, 1/this.nx],
+				step : step,
 				gamma : this.gamma,
 				qTex : 0
 			}
@@ -1107,7 +1107,7 @@ void main() {
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				step : [1/this.nx, 1/this.nx],
+				step : step,
 				qTex : 0,
 				pressureTex : 1
 			}
@@ -1153,7 +1153,7 @@ void main() {
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				step : [1/this.nx, 1/this.nx],
+				step : step,
 				qTex : 0,
 				pressureTex : 1
 			}
@@ -1425,8 +1425,8 @@ void main() {
 	},
 	step : function(dt) {
 		var thiz = this;
-		var dx = (xmax - xmin) / (this.nx - 1);
-		var dy = (ymax - ymin) / (this.nx - 1);
+		var dx = (xmax - xmin) / this.nx;
+		var dy = (ymax - ymin) / this.nx;
 		
 		//apply boundary conditions
 		this.boundary();
@@ -1555,6 +1555,8 @@ void main() {
 		this.quad.draw(args);
 	},
 	drawLine : function(args) {
+		return;
+
 		if (this.lineVtxBuf === undefined) {
 			this.lineVtxBuf = new GL.ArrayBuffer({
 				dim : 2,
@@ -1624,7 +1626,7 @@ void main() {
 var Hydro = makeClass({
 	init : function() {
 		this.state = new HydroState({
-			size : 256,	//actually 255, so this.nx is equal to this.nx+1 of my other versions
+			size : 512,
 			gamma : 7/5
 		});
 	},
@@ -1818,7 +1820,7 @@ void main() {
 	pos = vertex;
 	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
 }	
-		*/}),
+*/}),
 		vertexPrecision : 'best',
 		fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -1827,10 +1829,10 @@ uniform sampler2D gradientTex;
 uniform float lastMin, lastMax;
 void main() {
 	vec4 q = texture2D(qTex, pos);
-	float v = q.x;//(q.x - lastMin) / (lastMax - lastMin);
+	float v = (q.x - lastMin) / (lastMax - lastMin);
 	gl_FragColor = texture2D(gradientTex, vec2(v, .5)); 
 }	
-		*/}),
+*/}),
 		fragmentPrecision : 'best',
 		uniforms : {
 			gradientTex : 0,
