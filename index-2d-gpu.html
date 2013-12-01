@@ -53,9 +53,10 @@ void main() {
 	gl_Position = vec4(vertex * 2. - 1., 0., 1.);
 }
 		</script>
-		<script id='zero-fsh' type='x-shader/x-fragment'>
+		<script id='solid-fsh' type='x-shader/x-fragment'>
+uniform vec4 color;
 void main() {
-	gl_FragColor = vec4(0.);
+	gl_FragColor = color;
 }
 		</script>
 		<script id='copy-fsh' type='x-shader/x-fragment'>

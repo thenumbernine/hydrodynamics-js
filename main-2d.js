@@ -173,6 +173,7 @@ var fluxMethods = {
 };
 
 var boundaryMethods = {
+	none : function() {},
 	periodic : function(nx,q) {
 		for (var i = 0; i < nx; ++i) {
 			for (var state = 0; state < 4; ++state) {
