@@ -41,12 +41,12 @@ var computePressureShader;
 var applyPressureToMomentumShader;
 
 var burgersComputeInterfaceVelocityShader;
-var burgersComputeFluxSlopeShader = [];	//per dim
-var burgersComputeFluxShader = [];
+var burgersComputeFluxSlopeShader = [];	//[side]
+var burgersComputeFluxShader = {};	//[fluxMethod][side]
 var burgersUpdateStateShader;
 
 var encodeTempTex;
-var encodeShader = [];	//per channel
+var encodeShader = [];	//[channel]
 var checkCoordAccuracyShader;
 
 //coordinate names
@@ -181,6 +181,31 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	/**/
 }
 
+var fluxMethods = {
+	donorCell : 'return vec4(0.);',
+	laxWendroff : 'return vec4(1.);',
+	beamWarming : 'return r;',
+	fromm : 'return .5 * (1. + r);',
+/*
+	//Wikipedia
+	//CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
+	//HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
+	//HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
+	//Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
+	//minmod : function(r) { return Math.max(0, Math.min(r,1) ); },
+	//Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2	
+	//ospre : function(r) { return .5 * (r*r + r) / (r*r + r + 1); },
+	//smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
+	//Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
+	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
+	//vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
+	//vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
+*/	
+	vanLeer : 'return (r + abs(r)) / (1. + abs(r));', 
+	MC : 'return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
+	superbee : 'return max(vec4(0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));'
+};
+
 var boundaryMethods = {
 	periodic : function() {
 		//set all lookup texture wraps to REPEAT
@@ -271,7 +296,7 @@ var advectMethods = {
 				this.fbo.draw({
 					callback : function() {
 						quadObj.draw({
-							shader : burgersComputeFluxShader[side],
+							shader : burgersComputeFluxShader[thiz.fluxMethod][side],
 							uniforms : {
 								dt_dx : dt / dxi[side]
 							},
@@ -772,7 +797,6 @@ void main() {
 	//dq = q_i,j - q_{{i,j}-dirs[side]}
 	vec4 dq = q - qPrev; 
 	float ui = texture2D(uiTex, pos)[$side];
-	float halfSignUi = .5 * sign(ui);
 */}) + [0,1,2,3].map(function(i) {
 	return mlstr(function(){/*
 	if (abs(dq[$i]) > 0.) {
@@ -796,37 +820,19 @@ void main() {
 			});
 		});
 
-		$.each(coordNames, function(i, coordName) {
-			burgersComputeFluxShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : mlstr(function(){/*
+		$.each(fluxMethods, function(methodName,fluxMethodCode) {
+			burgersComputeFluxShader[methodName] = [];
+			$.each(coordNames, function(i, coordName) {
+				burgersComputeFluxShader[methodName][i] = new GL.ShaderProgram({
+					vertexShader : kernelVertexShader,
+					fragmentCode : mlstr(function(){/*
 //for now only donor cell works
 //I'm suspicious the others' errors is related to the fact that texture neighbors are erroneous for sizes <=64 and >=1024
-vec4 fluxLimiter(vec4 r) {
-	return vec4(0.);		//donorCell 
-	//return vec4(1.);		//laxWendroff
-	//return r;				//beamWarming
-	//return .5 * (1. + r);	//fromm
-#if 0
-	//Wikipedia
-	//CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
-	//HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
-	//HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
-	//Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
-	//minmod : function(r) { return Math.max(0, Math.min(r,1) ); },
-	//Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2	
-	//ospre : function(r) { return .5 * (r*r + r) / (r*r + r + 1); },
-	//smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
-	//Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
-	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
-	//vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
-	//vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
-#endif
-	//return (r + abs(r)) / (1. + abs(r));	//vanLeer
-	//return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));	//MC
-	//return max(vec4(0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));	//superbee
+vec4 fluxMethod(vec4 r) {
+	$fluxMethodCode
 }			
-*/}) + mlstr(function(){/*
+*/}).replace(/\$fluxMethodCode/g, fluxMethodCode)
++ mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 step;
 uniform float dt_dx;
@@ -850,18 +856,19 @@ void main() {
 	}
 	
 	vec4 r = texture2D(rTex, pos);
-	vec4 phi = fluxLimiter(r);
+	vec4 phi = fluxMethod(r);
 	vec4 delta = phi * (q - qPrev);
 	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
 }			
 */}).replace(/\$side/g, i),
-				fragmentPrecision : 'best',
-				uniforms : {
-					qTex : 0,
-					uiTex : 1,
-					rTex : 2,
-					step : step 
-				}
+					fragmentPrecision : 'best',
+					uniforms : {
+						qTex : 0,
+						uiTex : 1,
+						rTex : 2,
+						step : step 
+					}
+				});
 			});
 		});
 
@@ -1129,9 +1136,9 @@ void main() {
 		this.nghost = 2;
 
 		//solver configuration
-		this.boundaryMethod = boundaryMethods.periodic;
-		//this.fluxMethod = fluxMethods.superbee;
-		this.advectMethod = advectMethods.Burgers;
+		this.boundaryMethod = 'periodic';
+		this.fluxMethod = 'superbee';
+		this.advectMethod = 'Burgers';
 	},
 	resetSod : function() {
 		var thiz = this;
@@ -1183,7 +1190,7 @@ void main() {
 		});
 	},
 	boundary : function() {
-		this.boundaryMethod();
+		boundaryMethods[this.boundaryMethod].call(this);
 	},
 	step : function(dt) {
 		var thiz = this;
@@ -1194,7 +1201,7 @@ void main() {
 		this.boundary();
 
 		//solve
-		this.advectMethod.advect.call(this, dt);
+		advectMethods[this.advectMethod].advect.call(this, dt);
 
 		//boundary again
 		this.boundary();
@@ -1251,7 +1258,7 @@ void main() {
 		//TODO GPU driven CFL computation
 		var dt;
 		if (useCFL) {
-			dt = this.advectMethod.initStep.call(this);
+			dt = advectMethods[this.advectMethod].initStep.call(this);
 		} else {
 			dt = fixedDT;
 		}
@@ -1330,12 +1337,12 @@ function buildSelect(id, key, map) {
 	for (var k in map) {
 		var option = $('<option>', {text : k});
 		option.appendTo(select);
-		if (hydro.state[key] == map[k]) {
+		if (hydro.state[key] == k) {
 			option.attr('selected', 'true');
 		}
 	}
 	select.change(function() {
-		hydro.state[key] = map[select.val()];
+		hydro.state[key] = select.val();
 	});
 }
 
@@ -1498,7 +1505,7 @@ $(document).ready(function(){
 	});
 
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
-	//buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
+	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	//buildSelect('advect-method', 'advectMethod', advectMethods);
 
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
@@ -1716,6 +1723,7 @@ void main() {
 	onresize();
 	update();
 
+/*
 	//check ...
 	var nx = hydro.state.nx;
 	var fbo = hydro.state.fbo;
@@ -1750,4 +1758,5 @@ void main() {
 		}
 	}
 	console.log('max coord errors:', maxErr);
+*/
 });
