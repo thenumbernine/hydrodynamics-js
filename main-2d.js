@@ -1041,9 +1041,13 @@ var HydroState = makeClass({
 
 var Hydro = makeClass({
 	init : function() {
+		var size = Number($.url().param('size'));
+		if (size === undefined || size !== size) size = 200;
+		var gamma = Number($.url().param('gamma'));
+		if (gamma === undefined || gamma !== gamma) gamma = 7/5;
 		this.state = new HydroState({
-			size : 200, 
-			gamma : 7/5
+			size : size,
+			gamma : gamma
 		});
 	
 		//geometry
@@ -1167,6 +1171,27 @@ $(document).ready(function(){
 	$('#use-noise').change(function() {
 		useNoise = $(this).is(':checked');
 	});
+
+	(function(){
+		var select = $('#gridsize');
+		$.each([20, 50, 100, 200, 500, 1000], function(i,gridsize){
+			var option = $('<option>', {text : gridsize});
+			if (hydro.state.nx == gridsize) option.attr('selected', 'true');
+			option.appendTo(select);
+		});
+		select.change(function(){
+			var params = $.url().param();
+			params.size = select.val();
+			var url = location.href.match('[^?]*');
+			var sep = '?';
+			for (k in params) {
+				url += sep;
+				url += k + '=' + params[k];
+				sep = '&';
+			}
+			location.href = url;
+		});
+	})();
 
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
