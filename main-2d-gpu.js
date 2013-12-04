@@ -18,7 +18,7 @@ var useNoise = true;
 var noiseAmplitude = .01;
 
 var useCFL = false;
-var fixedDT = .00015;
+var fixedDT = .00025;
 
 var mouse;
 
@@ -47,7 +47,6 @@ var burgersUpdateStateShader;
 
 var encodeTempTex;
 var encodeShader = [];	//[channel]
-var checkCoordAccuracyShader;
 
 //coordinate names
 var coordNames = ['x', 'y'];
@@ -65,7 +64,9 @@ speedOfSound
 */
 function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocityX, velocityY, hTotal, gamma, normalX, normalY) {
 
-	if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) throw 'sqrt error';
+	if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) {
+		console.log('sqrt error');
+	}
 
 	//calculate matrix & eigenvalues & vectors at interface from state at interface
 	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)));
@@ -219,6 +220,7 @@ var boundaryMethods = {
 	/*
 	mirror : function(nx,q) {
 		//TODO set all lookup texture wraps to REPEAT_MIRROR 
+		//or better yet, construct a boundary texture, and instead of "mirror boundary" just change that tex to have solid left and bottom values
 	},
 	dirichlet : function() {
 		//TODO set all lookup texture wraps to ... zero?
@@ -591,6 +593,29 @@ var HydroState = makeClass({
 			height : this.nx
 		});
 
+		//provide default step values to shaders
+		var shaders = [];
+
+		shaders.push(burgersComputeInterfaceVelocityShader);
+		shaders = shaders.concat(burgersComputeFluxSlopeShader);	
+		$.each(burgersComputeFluxShader, function(k, fluxShaders) {
+			shaders = shaders.concat(fluxShaders);
+		});
+		shaders.push(burgersUpdateStateShader);
+		shaders.push(computePressureShader);
+		shaders.push(applyPressureToMomentumShader);
+		shaders.push(applyPressureToWorkShader);
+	
+		$.each(shaders, function(i,shader) {
+			shader
+				.use()
+				.setUniforms({
+					step : step,
+					gamma : thiz.gamma
+				})
+				.useNone();
+		});
+
 		//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
 		encodeTempTex = new GL.Texture2D({
 			internalFormat : gl.RGBA,
@@ -625,410 +650,6 @@ var HydroState = makeClass({
 					Math.random(),
 					Math.random()
 				];
-			}
-		});
-
-		kernelVertexShader = new GL.VertexShader({
-			code : GL.vertexPrecision + mlstr(function(){/*
-attribute vec2 vertex;
-attribute vec2 texCoord;
-varying vec2 pos;
-void main() {
-	pos = texCoord; 
-	gl_Position = vec4(vertex, 0., 1.);
-}
-*/})
-		});
-
-		resetSodShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
-uniform float noiseAmplitude;
-void main() {
-	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	//I would use step functions, but it's only for initialization...
-	float rho;
-	if (gridPos.x < (.7 * rangeMin.x + .3 * rangeMax.x) 
-		&& gridPos.y < (.7 * rangeMin.y + .3 * rangeMax.y))
-	{
-		rho = 1.;
-	} else {
-		rho = .1;
-	}
-	vec2 vel = vec2(0., 0.);
-	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
-	float energyKinetic = .5 * dot(vel, vel);
-	float energyThermal = 1.;
-	float energyTotal = energyKinetic + energyThermal;
-	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				randomTex : 0,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
-		});
-
-		resetWaveShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
-uniform float noiseAmplitude;
-void main() {
-	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	float dg = .2 * (rangeMax.x - rangeMin.x);
-	vec2 rangeMid = .5 * (rangeMax + rangeMin);
-	vec2 gridPosFromCenter = gridPos - .5 * rangeMid;
-	//Note I turned this down from 3. to 2. because GPU is currently using fixed step sizes
-	float rho = 2. * exp(-dot(gridPosFromCenter, gridPosFromCenter) / (dg * dg)) + .1;
-	vec2 vel = vec2(0., 0.);
-	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
-	float energyKinetic = .5 * dot(vel, vel);
-	float energyThermal = 1.;
-	float energyTotal = energyKinetic + energyThermal;
-	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				randomTex : 0,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
-		});
-
-		resetKelvinHemholtzShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
-uniform float noiseAmplitude;
-uniform float gamma;
-void main() {
-	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	float rho = 1.;
-	vec2 vel = vec2(0., 0.);
-	if (gridPos.y > (.75 * rangeMin.y + .25 * rangeMax.y) && 
-		gridPos.y < (.25 * rangeMin.y + .75 * rangeMax.y))
-	{
-		rho = 2.;
-		vel.x = .5;
-	}
-	else
-	{
-		rho = 1.;
-		vel.x = -.5;
-	}
-	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
-	//P = (gamma - 1) rho (eTotal - eKinetic)
-	//eTotal = P / ((gamma - 1) rho) + eKinetic
-	float pressure = 2.5;
-	float energyKinetic = .5 * dot(vel, vel);
-	float energyTotal = pressure / ((gamma - 1.) * rho) + energyKinetic; 
-	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				randomTex : 0,
-				gamma : this.gamma,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
-			//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
-		});
-
-		burgersComputeInterfaceVelocityShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform sampler2D qTex;
-void main() {
-	vec4 q = texture2D(qTex, pos);
-	vec4 qxPrev = texture2D(qTex, pos - vec2(step.x, 0.));
-	vec4 qyPrev = texture2D(qTex, pos - vec2(0., step.y));
-	gl_FragColor = vec4(
-		.5 * (q.y / q.x + qxPrev.y / qxPrev.x),
-		.5 * (q.z / q.x + qyPrev.z / qyPrev.x),
-		0., 1.);
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				qTex : 0,
-				step : step
-			}
-		});
-
-		$.each(coordNames, function(i, coordName) {
-			burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : (mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform sampler2D qTex;
-uniform sampler2D uiTex;
-void main() {
-	vec2 sidestep = vec2(0.);
-	sidestep[$side] = step[$side];
-	vec4 qNext = texture2D(qTex, pos + sidestep);
-	vec4 q = texture2D(qTex, pos);
-	vec4 qPrev = texture2D(qTex, pos - sidestep);
-	vec4 qPrev2 = texture2D(qTex, pos - 2.*sidestep);
-	//dq = q_i,j - q_{{i,j}-dirs[side]}
-	vec4 dq = q - qPrev; 
-	float ui = texture2D(uiTex, pos)[$side];
-*/}) + [0,1,2,3].map(function(i) {
-	return mlstr(function(){/*
-	if (abs(dq[$i]) > 0.) {
-		if (ui >= 0.) {
-			gl_FragColor[$i] = (qPrev[$i] - qPrev2[$i]) / dq[$i];
-		} else {
-			gl_FragColor[$i] = (qNext[$i] - q[$i]) / dq[$i];
-		}
-	} else {
-		gl_FragColor[$i] = 0.;
-	}
-*/}).replace(/\$i/g, i);
-	}).join('')
-+ '}').replace(/\$side/g, i),
-				fragmentPrecision : 'best',
-				uniforms : {
-					qTex : 0,
-					uiTex : 1,
-					step : step
-				}
-			});
-		});
-
-		$.each(fluxMethods, function(methodName,fluxMethodCode) {
-			burgersComputeFluxShader[methodName] = [];
-			$.each(coordNames, function(i, coordName) {
-				burgersComputeFluxShader[methodName][i] = new GL.ShaderProgram({
-					vertexShader : kernelVertexShader,
-					fragmentCode : mlstr(function(){/*
-//for now only donor cell works
-//I'm suspicious the others' errors is related to the fact that texture neighbors are erroneous for sizes <=64 and >=1024
-vec4 fluxMethod(vec4 r) {
-	$fluxMethodCode
-}			
-*/}).replace(/\$fluxMethodCode/g, fluxMethodCode)
-+ mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform float dt_dx;
-uniform sampler2D qTex;
-uniform sampler2D uiTex;
-uniform sampler2D rTex;
-
-void main() {
-	vec2 sidestep = vec2(0., 0.);
-	sidestep[$side] = step[$side];
-	
-	float ui = texture2D(uiTex, pos)[$side];
-
-	vec4 qPrev = texture2D(qTex, pos - sidestep);
-	vec4 q = texture2D(qTex, pos);
-
-	if (ui >= 0.) {
-		gl_FragColor = ui * qPrev;
-	} else {
-		gl_FragColor = ui * q;
-	}
-	
-	vec4 r = texture2D(rTex, pos);
-	vec4 phi = fluxMethod(r);
-	vec4 delta = phi * (q - qPrev);
-	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
-}			
-*/}).replace(/\$side/g, i),
-					fragmentPrecision : 'best',
-					uniforms : {
-						qTex : 0,
-						uiTex : 1,
-						rTex : 2,
-						step : step 
-					}
-				});
-			});
-		});
-
-		burgersUpdateStateShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform vec2 dt_dx;
-uniform sampler2D qTex;
-uniform sampler2D fluxXTex;
-uniform sampler2D fluxYTex;
-void main() {
-	vec4 q = texture2D(qTex, pos);
-	vec4 fluxXL = texture2D(fluxXTex, pos);
-	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(step.x, 0.));
-	vec4 fluxYL = texture2D(fluxYTex, pos);
-	vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., step.y));
-	gl_FragColor = q 
-		- dt_dx.x * (fluxXR - fluxXL)
-		- dt_dx.y * (fluxYR - fluxYL);
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				step : step,
-				qTex : 0,
-				fluxXTex : 1,
-				fluxYTex : 2
-			}
-		});
-
-		computePressureShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform float gamma;
-uniform sampler2D qTex;
-void main() {
-	vec4 q = texture2D(qTex, pos);
-	float rho = q.x;
-	vec2 vel = q.yz / rho;
-	float energyTotal = q.w / rho;
-	float energyKinetic = .5 * dot(vel, vel);
-	float energyThermal = energyTotal - energyKinetic;
-	gl_FragColor = vec4(0.);
-	gl_FragColor.x = (gamma - 1.) * rho * energyThermal;
-}
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				step : step,
-				gamma : this.gamma,
-				qTex : 0
-			}
-		});
-
-		applyPressureToMomentumShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform vec2 dt_dx;
-uniform sampler2D qTex;
-uniform sampler2D pressureTex;
-void main() {
-	vec2 dx = vec2(step.x, 0.);
-	vec2 dy = vec2(0., step.y);
-	
-	vec2 posxp = pos + dx;
-	vec2 posxn = pos - dx;
-	vec2 posyp = pos + dy;
-	vec2 posyn = pos - dy;
-
-	float pressureXP = texture2D(pressureTex, posxp).x;
-	float pressureXN = texture2D(pressureTex, posxn).x;
-	float pressureYP = texture2D(pressureTex, posyp).x;
-	float pressureYN = texture2D(pressureTex, posyn).x;
-
-	gl_FragColor = texture2D(qTex, pos);
-	gl_FragColor.y -= .5 * dt_dx.x * (pressureXP - pressureXN);
-	gl_FragColor.z -= .5 * dt_dx.y * (pressureYP - pressureYN);
-}
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				step : step,
-				qTex : 0,
-				pressureTex : 1
-			}
-		});
-		
-		applyPressureToWorkShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-uniform vec2 dt_dx;
-uniform sampler2D qTex;
-uniform sampler2D pressureTex;
-void main() {
-	vec2 dx = vec2(step.x, 0.);
-	vec2 dy = vec2(0., step.y);
-	
-	vec2 posxp = pos + dx;
-	vec2 posxn = pos - dx;
-	vec2 posyp = pos + dy;
-	vec2 posyn = pos - dy;
-
-	float pressureXP = texture2D(pressureTex, posxp).x;
-	float pressureXN = texture2D(pressureTex, posxn).x;
-	float pressureYP = texture2D(pressureTex, posyp).x;
-	float pressureYN = texture2D(pressureTex, posyn).x;
-
-	vec2 rho_u_XP = texture2D(qTex, posxp).xy;
-	vec2 rho_u_XN = texture2D(qTex, posxn).xy;
-	vec2 rho_v_YP = texture2D(qTex, posyp).xz;
-	vec2 rho_v_YN = texture2D(qTex, posyn).xz;
-
-	float uXP = rho_u_XP.y / rho_u_XP.x;
-	float uXN = rho_u_XN.y / rho_u_XN.x;
-	float vYP = rho_v_YP.y / rho_v_YP.x;
-	float vYN = rho_v_YN.y / rho_v_YN.x;
-
-	gl_FragColor = texture2D(qTex, pos);
-	gl_FragColor.w -= .5 * (
-		dt_dx.x * (pressureXP * uXP - pressureXN * uXN)
-		+ dt_dx.y * (pressureYP * vYP - pressureYN * vYN));
-}
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				step : step,
-				qTex : 0,
-				pressureTex : 1
-			}
-		});
-
-		solidShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-uniform vec4 color;
-void main() {
-	gl_FragColor = color;
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				color : [0,0,0,0]
-			}
-		});
-
-		copyShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 offset;
-uniform sampler2D srcTex;
-void main() {
-	gl_FragColor = texture2D(srcTex, pos + offset);
-}		
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				srcTex : 0,
-				offset : [0,0]
 			}
 		});
 
@@ -1272,7 +893,7 @@ void main() {
 var Hydro = makeClass({
 	init : function() {
 		this.state = new HydroState({
-			size : 1024,
+			size : 512,
 			gamma : 7/5
 		});
 	},
@@ -1481,6 +1102,407 @@ $(document).ready(function(){
 		static : true
 	});
 
+	//init shaders before init hydro (so it can call the resetSod or whatever)
+	
+		kernelVertexShader = new GL.VertexShader({
+			code : GL.vertexPrecision + mlstr(function(){/*
+attribute vec2 vertex;
+attribute vec2 texCoord;
+varying vec2 pos;
+void main() {
+	pos = texCoord; 
+	gl_Position = vec4(vertex, 0., 1.);
+}
+*/})
+		});
+
+		resetSodShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform sampler2D randomTex;
+uniform vec2 rangeMin; 
+uniform vec2 rangeMax; 
+uniform float noiseAmplitude;
+void main() {
+	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
+	//I would use step functions, but it's only for initialization...
+	float rho;
+	if (gridPos.x < (.7 * rangeMin.x + .3 * rangeMax.x) 
+		&& gridPos.y < (.7 * rangeMin.y + .3 * rangeMax.y))
+	{
+		rho = 1.;
+	} else {
+		rho = .1;
+	}
+	vec2 vel = vec2(0., 0.);
+	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
+	float energyKinetic = .5 * dot(vel, vel);
+	float energyThermal = 1.;
+	float energyTotal = energyKinetic + energyThermal;
+	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				randomTex : 0,
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax]
+			}
+		});
+
+		resetWaveShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform sampler2D randomTex;
+uniform vec2 rangeMin; 
+uniform vec2 rangeMax; 
+uniform float noiseAmplitude;
+void main() {
+	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
+	float dg = .2 * (rangeMax.x - rangeMin.x);
+	vec2 rangeMid = .5 * (rangeMax + rangeMin);
+	vec2 gridPosFromCenter = gridPos - .5 * rangeMid;
+	//Note I turned this down from 3. to 2. because GPU is currently using fixed step sizes
+	float rho = 2. * exp(-dot(gridPosFromCenter, gridPosFromCenter) / (dg * dg)) + .1;
+	vec2 vel = vec2(0., 0.);
+	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
+	float energyKinetic = .5 * dot(vel, vel);
+	float energyThermal = 1.;
+	float energyTotal = energyKinetic + energyThermal;
+	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				randomTex : 0,
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax]
+			}
+		});
+
+		resetKelvinHemholtzShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform sampler2D randomTex;
+uniform vec2 rangeMin; 
+uniform vec2 rangeMax; 
+uniform float noiseAmplitude;
+uniform float gamma;
+void main() {
+	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
+	float rho = 1.;
+	vec2 vel = vec2(0., 0.);
+	if (gridPos.y > (.75 * rangeMin.y + .25 * rangeMax.y) && 
+		gridPos.y < (.25 * rangeMin.y + .75 * rangeMax.y))
+	{
+		rho = 2.;
+		vel.x = .5;
+	}
+	else
+	{
+		rho = 1.;
+		vel.x = -.5;
+	}
+	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
+	//P = (gamma - 1) rho (eTotal - eKinetic)
+	//eTotal = P / ((gamma - 1) rho) + eKinetic
+	float pressure = 2.5;
+	float energyKinetic = .5 * dot(vel, vel);
+	float energyTotal = pressure / ((gamma - 1.) * rho) + energyKinetic; 
+	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				randomTex : 0,
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax]
+			}
+			//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
+		});
+
+		burgersComputeInterfaceVelocityShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform sampler2D qTex;
+void main() {
+	vec4 q = texture2D(qTex, pos);
+	vec4 qxPrev = texture2D(qTex, pos - vec2(step.x, 0.));
+	vec4 qyPrev = texture2D(qTex, pos - vec2(0., step.y));
+	gl_FragColor = vec4(
+		.5 * (q.y / q.x + qxPrev.y / qxPrev.x),
+		.5 * (q.z / q.x + qyPrev.z / qyPrev.x),
+		0., 1.);
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0
+			}
+		});
+
+		$.each(coordNames, function(i, coordName) {
+			burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
+				vertexShader : kernelVertexShader,
+				fragmentCode : (mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform sampler2D qTex;
+uniform sampler2D uiTex;
+void main() {
+	vec2 sidestep = vec2(0.);
+	sidestep[$side] = step[$side];
+	vec4 qNext = texture2D(qTex, pos + sidestep);
+	vec4 q = texture2D(qTex, pos);
+	vec4 qPrev = texture2D(qTex, pos - sidestep);
+	vec4 qPrev2 = texture2D(qTex, pos - 2.*sidestep);
+	//dq = q_i,j - q_{{i,j}-dirs[side]}
+	vec4 dq = q - qPrev; 
+	float ui = texture2D(uiTex, pos)[$side];
+*/}) + [0,1,2,3].map(function(i) {
+	return mlstr(function(){/*
+	if (abs(dq[$i]) > 0.) {
+		if (ui >= 0.) {
+			gl_FragColor[$i] = (qPrev[$i] - qPrev2[$i]) / dq[$i];
+		} else {
+			gl_FragColor[$i] = (qNext[$i] - q[$i]) / dq[$i];
+		}
+	} else {
+		gl_FragColor[$i] = 0.;
+	}
+*/}).replace(/\$i/g, i);
+	}).join('')
++ '}').replace(/\$side/g, i),
+				fragmentPrecision : 'best',
+				uniforms : {
+					qTex : 0,
+					uiTex : 1
+				}
+			});
+		});
+
+		$.each(fluxMethods, function(methodName,fluxMethodCode) {
+			burgersComputeFluxShader[methodName] = [];
+			$.each(coordNames, function(i, coordName) {
+				burgersComputeFluxShader[methodName][i] = new GL.ShaderProgram({
+					vertexShader : kernelVertexShader,
+					fragmentCode : mlstr(function(){/*
+//for now only donor cell works
+//I'm suspicious the others' errors is related to the fact that texture neighbors are erroneous for sizes <=64 and >=1024
+vec4 fluxMethod(vec4 r) {
+	$fluxMethodCode
+}			
+*/}).replace(/\$fluxMethodCode/g, fluxMethodCode)
++ mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform float dt_dx;
+uniform sampler2D qTex;
+uniform sampler2D uiTex;
+uniform sampler2D rTex;
+
+void main() {
+	vec2 sidestep = vec2(0., 0.);
+	sidestep[$side] = step[$side];
+	
+	float ui = texture2D(uiTex, pos)[$side];
+
+	vec4 qPrev = texture2D(qTex, pos - sidestep);
+	vec4 q = texture2D(qTex, pos);
+
+	if (ui >= 0.) {
+		gl_FragColor = ui * qPrev;
+	} else {
+		gl_FragColor = ui * q;
+	}
+	
+	vec4 r = texture2D(rTex, pos);
+	vec4 phi = fluxMethod(r);
+	vec4 delta = phi * (q - qPrev);
+	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
+}			
+*/}).replace(/\$side/g, i),
+					fragmentPrecision : 'best',
+					uniforms : {
+						qTex : 0,
+						uiTex : 1,
+						rTex : 2
+					}
+				});
+			});
+		});
+
+		burgersUpdateStateShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform vec2 dt_dx;
+uniform sampler2D qTex;
+uniform sampler2D fluxXTex;
+uniform sampler2D fluxYTex;
+void main() {
+	vec4 q = texture2D(qTex, pos);
+	vec4 fluxXL = texture2D(fluxXTex, pos);
+	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(step.x, 0.));
+	vec4 fluxYL = texture2D(fluxYTex, pos);
+	vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., step.y));
+	gl_FragColor = q 
+		- dt_dx.x * (fluxXR - fluxXL)
+		- dt_dx.y * (fluxYR - fluxYL);
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0,
+				fluxXTex : 1,
+				fluxYTex : 2
+			}
+		});
+
+		//used for Riemann
+		
+
+		computePressureShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform float gamma;
+uniform sampler2D qTex;
+void main() {
+	vec4 q = texture2D(qTex, pos);
+	float rho = q.x;
+	vec2 vel = q.yz / rho;
+	float energyTotal = q.w / rho;
+	float energyKinetic = .5 * dot(vel, vel);
+	float energyThermal = energyTotal - energyKinetic;
+	gl_FragColor = vec4(0.);
+	gl_FragColor.x = (gamma - 1.) * rho * energyThermal;
+}
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0
+			}
+		});
+
+		applyPressureToMomentumShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform vec2 dt_dx;
+uniform sampler2D qTex;
+uniform sampler2D pressureTex;
+void main() {
+	vec2 dx = vec2(step.x, 0.);
+	vec2 dy = vec2(0., step.y);
+	
+	vec2 posxp = pos + dx;
+	vec2 posxn = pos - dx;
+	vec2 posyp = pos + dy;
+	vec2 posyn = pos - dy;
+
+	float pressureXP = texture2D(pressureTex, posxp).x;
+	float pressureXN = texture2D(pressureTex, posxn).x;
+	float pressureYP = texture2D(pressureTex, posyp).x;
+	float pressureYN = texture2D(pressureTex, posyn).x;
+
+	gl_FragColor = texture2D(qTex, pos);
+	gl_FragColor.y -= .5 * dt_dx.x * (pressureXP - pressureXN);
+	gl_FragColor.z -= .5 * dt_dx.y * (pressureYP - pressureYN);
+}
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0,
+				pressureTex : 1
+			}
+		});
+		
+		applyPressureToWorkShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform vec2 dt_dx;
+uniform sampler2D qTex;
+uniform sampler2D pressureTex;
+void main() {
+	vec2 dx = vec2(step.x, 0.);
+	vec2 dy = vec2(0., step.y);
+	
+	vec2 posxp = pos + dx;
+	vec2 posxn = pos - dx;
+	vec2 posyp = pos + dy;
+	vec2 posyn = pos - dy;
+
+	float pressureXP = texture2D(pressureTex, posxp).x;
+	float pressureXN = texture2D(pressureTex, posxn).x;
+	float pressureYP = texture2D(pressureTex, posyp).x;
+	float pressureYN = texture2D(pressureTex, posyn).x;
+
+	vec2 rho_u_XP = texture2D(qTex, posxp).xy;
+	vec2 rho_u_XN = texture2D(qTex, posxn).xy;
+	vec2 rho_v_YP = texture2D(qTex, posyp).xz;
+	vec2 rho_v_YN = texture2D(qTex, posyn).xz;
+
+	float uXP = rho_u_XP.y / rho_u_XP.x;
+	float uXN = rho_u_XN.y / rho_u_XN.x;
+	float vYP = rho_v_YP.y / rho_v_YP.x;
+	float vYN = rho_v_YN.y / rho_v_YN.x;
+
+	gl_FragColor = texture2D(qTex, pos);
+	gl_FragColor.w -= .5 * (
+		dt_dx.x * (pressureXP * uXP - pressureXN * uXN)
+		+ dt_dx.y * (pressureYP * vYP - pressureYN * vYN));
+}
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0,
+				pressureTex : 1
+			}
+		});
+
+		solidShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+uniform vec4 color;
+void main() {
+	gl_FragColor = color;
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				color : [0,0,0,0]
+			}
+		});
+
+		copyShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 offset;
+uniform sampler2D srcTex;
+void main() {
+	gl_FragColor = texture2D(srcTex, pos + offset);
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				srcTex : 0,
+				offset : [0,0]
+			}
+		});
+
+
 	//init hydro after gl
 
 	hydro = new Hydro();
@@ -1580,24 +1602,6 @@ $(document).ready(function(){
 	$('#color-scheme').change(function() {
 		var k = $(this).val();
 		currentColorScheme = colorSchemes[k];
-	});
-
-	checkCoordAccuracyShader = new GL.ShaderProgram({
-		vertexShader : kernelVertexShader,
-		fragmentPrecision : 'best',
-		fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 step;
-void main() {
-	gl_FragColor = vec4(pos, step);
-}
-*/}),
-		uniforms : {
-			step : [
-				1/hydro.state.nx,
-				1/hydro.state.nx
-			]
-		}
 	});
 
 	//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
@@ -1715,8 +1719,26 @@ void main() {
 	onresize();
 	update();
 
-/*
-	//check ...
+return;
+	//check ...	
+	var checkCoordAccuracyShader = new GL.ShaderProgram({
+		vertexShader : kernelVertexShader,
+		fragmentPrecision : 'best',
+		fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+void main() {
+	gl_FragColor = vec4(gl_FragCoord.xy*step, step);
+}
+*/}),
+		uniforms : {
+			step : [
+				1/hydro.state.nx,
+				1/hydro.state.nx
+			]
+		}
+	});
+
 	var nx = hydro.state.nx;
 	var fbo = hydro.state.fbo;
 	var tmpTex = new FloatTexture2D(nx, nx); 
@@ -1750,5 +1772,5 @@ void main() {
 		}
 	}
 	console.log('max coord errors:', maxErr);
-*/
+
 });
