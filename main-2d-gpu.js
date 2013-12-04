@@ -1567,6 +1567,14 @@ void main() {
 	//init controls after hydro
 	
 	panel = $('#panel');	
+	var panelContent = $('#content');
+	$('#menu').click(function() {
+		if (panelContent.css('display') == 'none') {
+			panelContent.show();
+		} else {
+			panelContent.hide();
+		}
+	});
 
 	$('#reset-sod').click(function(){ hydro.state.resetSod(); });
 	$('#reset-wave').click(function(){ hydro.state.resetWave(); });

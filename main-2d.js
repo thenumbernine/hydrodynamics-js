@@ -1151,6 +1151,15 @@ var colorSchemes = {};
 $(document).ready(function(){
 	panel = $('#panel');	
 
+	var panelContent = $('#content');
+	$('#menu').click(function() {
+		if (panelContent.css('display') == 'none') {
+			panelContent.show();
+		} else {
+			panelContent.hide();
+		}
+	});
+
 	$('#reset-sod').click(function(){ hydro.state.resetSod(); });
 	$('#reset-wave').click(function(){ hydro.state.resetWave(); });
 	$('#reset-kelvin-hemholtz').click(function(){ hydro.state.resetKelvinHemholtz(); });

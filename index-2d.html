@@ -53,39 +53,42 @@ a:active {
 	</head>
 	<body style='margin:0px; overflow:hidden'>
 		<div id='panel' style='overflow-x:hidden; width:400px; z-index:1, width:300px; position:absolute; background-color:rgba(0,0,0,.75)'>
-			<button id='reset-sod'>Reset Sod</button><br>
-			<button id='reset-wave'>Reset Wave</button><br>
-			<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button><br>
-			<!-- <button id='reset-rayleigh-taylor'>Reset Rayleigh-Taylor</button><br> -->
-			<input id='use-noise' type='checkbox' name='useNoise' checked='true'/>Perturb Initial Velocity</input><br>
-			<br>
-			Boundary:
-			<select id='boundary'></select><br>
-			Flux Limiter:
-			<select id='flux-limiter'></select><br>
-			Advect:
-			<select id='advect-method'></select><br>
-			Color Scheme:
-			<select id='color-scheme'></select><br>
+			<img id='menu' src='menu.png' style='padding:5px'/><br>
+			<div id='content' style='display:none'>
+				<button id='reset-sod'>Reset Sod</button><br>
+				<button id='reset-wave'>Reset Wave</button><br>
+				<button id='reset-kelvin-hemholtz'>Reset Kelvin-Hemholtz</button><br>
+				<!-- <button id='reset-rayleigh-taylor'>Reset Rayleigh-Taylor</button><br> -->
+				<input id='use-noise' type='checkbox' name='useNoise' checked='true'/>Perturb Initial Velocity</input><br>
+				<br>
+				Boundary:
+				<select id='boundary'></select><br>
+				Flux Limiter:
+				<select id='flux-limiter'></select><br>
+				Advect:
+				<select id='advect-method'></select><br>
+				Color Scheme:
+				<select id='color-scheme'></select><br>
 
-			<br>
-			Range:<br>
-			<input id='dataRangeScaleNormalized' type='radio' group='dataRangeScale' name='dataRangeScale' checked='checked'/>Normalized Range<br>
-			<input id='dataRangeScaleFixed' type='radio' group='dataRangeScale' name='dataRangeScale'/>Fixed Range<br>
-			Min <input id='dataRangeFixedMin' value='0'/><br>
-			Max <input id='dataRangeFixedMax' value='.1'/><br>
-	
-			<br>
-			Timestep:<br>
-			<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based
-				<input id='timeStepCFL' value='.5'/><br>
-			<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
-				<input id='timeStepValue' value='1'/><br>
-			<br>
+				<br>
+				Range:<br>
+				<input id='dataRangeScaleNormalized' type='radio' group='dataRangeScale' name='dataRangeScale' checked='checked'/>Normalized Range<br>
+				<input id='dataRangeScaleFixed' type='radio' group='dataRangeScale' name='dataRangeScale'/>Fixed Range<br>
+				Min <input id='dataRangeFixedMin' value='0'/><br>
+				Max <input id='dataRangeFixedMax' value='.1'/><br>
+		
+				<br>
+				Timestep:<br>
+				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based
+					<input id='timeStepCFL' value='.5'/><br>
+				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
+					<input id='timeStepValue' value='1'/><br>
+				<br>
 
-			<input type='radio' group='dimension' onclick='location.href="index-1d.html"'>1D</input><br>
-			<input type='radio' group='dimension' checked>2D</input><br>
-			<input type='radio' group='dimension' onclick='location.href="index-2d-gpu.html"'>2D GPU</input><br>
+				<input type='radio' group='dimension' onclick='location.href="index-1d.html"'>1D</input><br>
+				<input type='radio' group='dimension' checked>2D</input><br>
+				<input type='radio' group='dimension' onclick='location.href="index-2d-gpu.html"'>2D GPU</input><br>
+			</div>
 		</div>
 		<div id='webglfail' style='display:none'>
 			Sorry, your browser does not support WebGL<br>
