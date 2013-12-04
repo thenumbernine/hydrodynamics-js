@@ -94,12 +94,12 @@ function buildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse,
 }
 
 var fluxMethods = {
-	donorCell : function(r) { return 0; },
-	laxWendroff : function(r) { return 1; },
+	'donor cell' : function(r) { return 0; },
+	'Lax-Wendroff' : function(r) { return 1; },
 	
 	//these two are no good with the Godunov (Riemann) solver
-	beamWarming : function(r) { return r; },
-	fromm : function(r) { return .5 * (1 + r); },
+	'Beam-Warming' : function(r) { return r; },
+	'Fromm' : function(r) { return .5 * (1 + r); },
 
 	//Wikipedia
 	CHARM : function(r) { if (r < 0) return 0; return r*(3*r+1)/((r+1)*(r+1)); },
@@ -112,11 +112,11 @@ var fluxMethods = {
 	smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
 	Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
 	UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
-	vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
-	vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
+	'van Albada 1' : function(r) { return (r * r + r) / (r * r + 1); },
+	'van Albada 2' : function(r) { return 2 * r / (r * r + 1); },
 	
-	vanLeer : function(r) { return (r + Math.abs(r)) / (1 + Math.abs(r)); },
-	MC : function(r) { return Math.max(0, Math.min(2, .5 * (1 + r), 2 * r)); },
+	'van Leer' : function(r) { return (r + Math.abs(r)) / (1 + Math.abs(r)); },
+	'monotonized central' : function(r) { return Math.max(0, Math.min(2, .5 * (1 + r), 2 * r)); },
 	superbee : function(r) { return Math.max(0,Math.min(1,2*r),Math.min(2,r)); }
 };
 
@@ -582,10 +582,10 @@ var advectMethods = {
 };
 
 var HydroState = makeClass({ 
-	init : function() {
-		this.nx = 200;
+	init : function(args) {
+		this.nx = args.size;
+		this.gamma = args.gamma;
 		this.cfl =.5;
-		this.gamma = 7/5;
 		var x0 = 0;
 		var x1 = 100;
 		
@@ -746,7 +746,10 @@ var HydroState = makeClass({
 
 var Hydro = makeClass({
 	init : function() {
-		this.state = new HydroState();
+		this.state = new HydroState({
+			size : 200,
+			gamma : 7/5
+		});
 	
 		//geometry
 		this.vertexPositions = new Float32Array(4*this.state.nx);
@@ -825,15 +828,21 @@ $(document).ready(function(){
 	buildSelect('advect-method', 'advectMethod', advectMethods);
 	buildSelect('integration-method', 'integrationMethod', integrationMethods);
 
-	$('#timeStepValue').val(fixedDT);
 	$('#timeStepCFLBased').change(function() {
 		if (!$(this).is(':checked')) return;
 		useCFL = true;
+	});
+	$('#timeStepCFL').val(hydro.state.cfl);
+	$('#timeStepCFL').change(function() {
+		var v = Number($(this).val());
+		if (v != v) return;
+		hydro.state.cfl = v;
 	});
 	$('#timeStepFixed').change(function() {
 		if (!$(this).is(':checked')) return;
 		useCFL = false;
 	});
+	$('#timeStepValue').val(fixedDT);
 	$('#timeStepValue').change(function() {
 		var v = Number($(this).val());
 		if (v != v) return;	//stupid javascript ... convert anything it doesn't understand to NaNs...

@@ -18,7 +18,7 @@ var useNoise = true;
 var noiseAmplitude = .01;
 
 var useCFL = false;
-var fixedDT = .0005;
+var fixedDT = .00015;
 
 var mouse;
 
@@ -175,10 +175,10 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 }
 
 var fluxMethods = {
-	donorCell : 'return vec4(0.);',
-	laxWendroff : 'return vec4(1.);',
-	beamWarming : 'return r;',
-	fromm : 'return .5 * (1. + r);',
+	'donor cell' : 'return vec4(0.);',
+	'Lax-Wendroff' : 'return vec4(1.);',
+	'Beam-Warming' : 'return r;',
+	'Fromm' : 'return .5 * (1. + r);',
 /*
 	//Wikipedia
 	//CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
@@ -191,11 +191,11 @@ var fluxMethods = {
 	//smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
 	//Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
 	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
-	//vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
-	//vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
+	//'van Albada 1' : function(r) { return (r * r + r) / (r * r + 1); },
+	//'van Albada 2' : function(r) { return 2 * r / (r * r + 1); },
 */	
-	vanLeer : 'return (r + abs(r)) / (1. + abs(r));', 
-	MC : 'return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
+	'van Leer' : 'return (r + abs(r)) / (1. + abs(r));', 
+	'monotonized central' : 'return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
 	superbee : 'return max(vec4(0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));'
 };
 
@@ -1272,7 +1272,7 @@ void main() {
 var Hydro = makeClass({
 	init : function() {
 		this.state = new HydroState({
-			size : 512,
+			size : 1024,
 			gamma : 7/5
 		});
 	},

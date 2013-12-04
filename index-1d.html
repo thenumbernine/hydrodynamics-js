@@ -19,13 +19,6 @@ _gaq.push(['_trackPageview']);
 	var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
 })();
 </script>
-		<script id='water-vsh' type='x-shader/x-vertex'>
-
-		</script>
-		<script id='water-fsh' type='x-shader/x-fragment'>
-
-		</script>
-
 		<style type='text/css'>
 
 body {
@@ -71,9 +64,10 @@ a:active {
 	
 			<br>
 			Timestep:<br>
-			<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based<br>
+			<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based
+				<input id='timeStepCFL' value='.5'/><br>
 			<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
-			<input id='timeStepValue' value='1'/><br>
+				<input id='timeStepValue' value='1'/><br>
 			<br>
 
 			<input type='radio' group='dimension' checked>1D</input><br>

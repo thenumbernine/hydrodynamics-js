@@ -19,6 +19,8 @@ var xmax = .5;
 var ymin = -.5;
 var ymax = .5;
 var useNoise = true;
+var useCFL = true;
+var fixedDT = .2;
 var mouse;
 
 //interface directions
@@ -37,7 +39,9 @@ speedOfSound
 */
 function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocityX, velocityY, hTotal, gamma, normalX, normalY) {
 
-	if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) throw 'sqrt error';
+	if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) {
+		console.log('sqrt error');
+	}
 
 	//calculate matrix & eigenvalues & vectors at interface from state at interface
 	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)));
@@ -147,14 +151,15 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 }
 
 var fluxMethods = {
-	donorCell : function(r) { return 0; },
-	laxWendroff : function(r) { return 1; },
+	'donor cell' : function(r) { return 0; },
+	'Lax-Wendroff' : function(r) { return 1; },
 	
-	beamWarming : function(r) { return r; },
-	fromm : function(r) { return .5 * (1 + r); },
+	//these two are no good with the Godunov (Riemann) solver
+	'Beam-Warming' : function(r) { return r; },
+	'Fromm' : function(r) { return .5 * (1 + r); },
 
 	//Wikipedia
-	CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
+	CHARM : function(r) { if (r < 0) return 0; return r*(3*r+1)/((r+1)*(r+1)); },
 	HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
 	HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
 	Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
@@ -164,11 +169,11 @@ var fluxMethods = {
 	smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
 	Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
 	UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
-	vanAlbada1 : function(r) { return (r * r + r) / (r * r + 1); },
-	vanAlbada2 : function(r) { return 2 * r / (r * r + 1); },
+	'van Albada 1' : function(r) { return (r * r + r) / (r * r + 1); },
+	'van Albada 2' : function(r) { return 2 * r / (r * r + 1); },
 	
-	vanLeer : function(r) { return (r + Math.abs(r)) / (1 + Math.abs(r)); },
-	MC : function(r) { return Math.max(0, Math.min(2, .5 * (1 + r), 2 * r)); },
+	'van Leer' : function(r) { return (r + Math.abs(r)) / (1 + Math.abs(r)); },
+	'monotonized central' : function(r) { return Math.max(0, Math.min(2, .5 * (1 + r), 2 * r)); },
 	superbee : function(r) { return Math.max(0,Math.min(1,2*r),Math.min(2,r)); }
 };
 
@@ -1022,7 +1027,12 @@ var HydroState = makeClass({
 		this.advectMethod.initStep.call(this);
 		
 		//get timestep
-		var dt = this.advectMethod.calcCFLTimestep.call(this);
+		var dt;
+		if (useCFL) {
+			dt = this.advectMethod.calcCFLTimestep.call(this);
+		} else {
+			dt = fixedDT;
+		}
 
 		//do the update
 		this.step(dt);
@@ -1174,6 +1184,27 @@ $(document).ready(function(){
 	$('#dataRangeFixedMax').change(function() {
 		if (hydro.updateLastDataRange) return;
 		hydro.lastDataMax = Number($('#dataRangeFixedMax').val()); 
+	});
+
+	$('#timeStepCFLBased').change(function() {
+		if (!$(this).is(':checked')) return;
+		useCFL = true;
+	});
+	$('#timeStepCFL').val(hydro.state.cfl);
+	$('#timeStepCFL').change(function() {
+		var v = Number($(this).val());
+		if (v != v) return;
+		hydro.state.cfl = v;
+	});
+	$('#timeStepFixed').change(function() {
+		if (!$(this).is(':checked')) return;
+		useCFL = false;
+	});
+	$('#timeStepValue').val(fixedDT);
+	$('#timeStepValue').change(function() {
+		var v = Number($(this).val());
+		if (v != v) return;	//stupid javascript ... convert anything it doesn't understand to NaNs...
+		fixedDT = v;
 	});
 
 	canvas = $('<canvas>', {
