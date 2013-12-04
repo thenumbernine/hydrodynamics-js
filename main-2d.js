@@ -1185,6 +1185,7 @@ $(document).ready(function(){
 			var url = location.href.match('[^?]*');
 			var sep = '?';
 			for (k in params) {
+				if (k == '' && params[k] == '') continue;
 				url += sep;
 				url += k + '=' + params[k];
 				sep = '&';
@@ -1353,7 +1354,7 @@ void main() {
 		}
 		sceneObjects.push(new GL.SceneObject({
 			mode : gl.TRIANGLE_STRIP,
-			indexes : new GL.ElementArrayBuffer({data:indexes}),
+			indexes : new GL.ElementArrayBuffer({data : new Uint32Array(indexes)}),
 			attrs : {
 				vertex : waveVtxBuf,
 				state : waveStateBuf

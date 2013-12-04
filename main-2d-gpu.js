@@ -22,6 +22,7 @@ var fixedDT = .00025;
 
 var mouse;
 
+var fbo;
 var FloatTexture2D;
 
 var quadVtxBuf, quadObj;
@@ -137,79 +138,64 @@ var advectMethods = {
 		},	
 		advect : function(dt) {
 			
-			var thiz = this;
 			var dx = (xmax - xmin) / this.nx;
 			var dy = (ymax - ymin) / this.nx;
 			var dxi = [dx, dy];
 			
-			gl.viewport(0, 0, thiz.nx, thiz.nx);
-
-			this.fbo.setColorAttachmentTex2D(0, this.uiTex);
-			this.fbo.draw({
-				callback : function() {
-					//get velocity at interfaces from state
-					quadObj.draw({
-						shader : burgersComputeInterfaceVelocityShader,
-						texs : [thiz.qTex]
-					});
-				}
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.uiTex.obj, 0);
+			fbo.check();
+			//get velocity at interfaces from state
+			quadObj.draw({
+				shader : burgersComputeInterfaceVelocityShader,
+				texs : [this.qTex]
 			});
-		
+
 			for (var side = 0; side < 2; ++side) {
-				this.fbo.setColorAttachmentTex2D(0, this.rTex[side]);
-				this.fbo.draw({
-					callback : function() {
-						quadObj.draw({
-							shader : burgersComputeFluxSlopeShader[side],
-							texs : [
-								thiz.qTex, 
-								thiz.uiTex
-							]
-						});
-					}
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.rTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : burgersComputeFluxSlopeShader[side],
+					texs : [
+						this.qTex, 
+						this.uiTex
+					]
 				});
 			}
 
 			//construct flux:
 			for (var side = 0; side < 2; ++side) {
-				this.fbo.setColorAttachmentTex2D(0, this.fluxTex[side]);
-				this.fbo.draw({
-					callback : function() {
-						quadObj.draw({
-							shader : burgersComputeFluxShader[thiz.fluxMethod][side],
-							uniforms : {
-								dt_dx : dt / dxi[side]
-							},
-							texs : [
-								thiz.qTex,
-								thiz.uiTex,
-								thiz.rTex[side]
-							]
-						});
-					}
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fluxTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : burgersComputeFluxShader[this.fluxMethod][side],
+					uniforms : {
+						dt_dx : dt / dxi[side]
+					},
+					texs : [
+						this.qTex,
+						this.uiTex,
+						this.rTex[side]
+					]
 				});
 			}
 
 			//update state
-			this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
-			this.fbo.draw({
-				callback : function() {
-					quadObj.draw({
-						shader : burgersUpdateStateShader,
-						uniforms : {
-							side : side,
-							dt_dx : [
-								dt / dx,
-								dt / dy
-							]
-						},
-						texs : [
-							thiz.qTex, 
-							thiz.fluxTex[0], 
-							thiz.fluxTex[1]
-						]
-					});
-				}
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+			fbo.check();
+			quadObj.draw({
+				shader : burgersUpdateStateShader,
+				uniforms : {
+					side : side,
+					dt_dx : [
+						dt / dx,
+						dt / dy
+					]
+				},
+				texs : [
+					this.qTex, 
+					this.fluxTex[0], 
+					this.fluxTex[1]
+				]
 			});
 			this.swapQTexs();
 		}
@@ -412,11 +398,6 @@ var HydroState = makeClass({
 
 		var step = [1/this.nx, 1/this.nx];
 		
-		this.fbo = new GL.Framebuffer({
-			width : this.nx,
-			height : this.nx
-		});
-
 		//provide default step values to shaders
 		var shaders = [];
 
@@ -580,8 +561,8 @@ var HydroState = makeClass({
 	},
 	resetSod : function() {
 		var thiz = this;
-		this.fbo.setColorAttachmentTex2D(0, this.qTex);
-		this.fbo.draw({
+		fbo.setColorAttachmentTex2D(0, this.qTex);
+		fbo.draw({
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				quadObj.draw({
@@ -596,8 +577,8 @@ var HydroState = makeClass({
 	},
 	resetWave : function() {
 		var thiz = this;
-		this.fbo.setColorAttachmentTex2D(0, this.qTex);
-		this.fbo.draw({
+		fbo.setColorAttachmentTex2D(0, this.qTex);
+		fbo.draw({
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				quadObj.draw({
@@ -613,8 +594,8 @@ var HydroState = makeClass({
 	//http://www.astro.princeton.edu/~jstone/Athena/tests/kh/kh.html
 	resetKelvinHemholtz : function() {
 		var thiz = this;
-		this.fbo.setColorAttachmentTex2D(0, this.qTex);
-		this.fbo.draw({
+		fbo.setColorAttachmentTex2D(0, this.qTex);
+		fbo.draw({
 			callback : function() {
 				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				quadObj.draw({
@@ -631,7 +612,6 @@ var HydroState = makeClass({
 		boundaryMethods[this.boundaryMethod].call(this);
 	},
 	step : function(dt) {
-		var thiz = this;
 		var dx = (xmax - xmin) / this.nx;
 		var dy = (ymax - ymin) / this.nx;
 		
@@ -644,47 +624,35 @@ var HydroState = makeClass({
 		//boundary again
 		this.boundary();
 
-		this.fbo.setColorAttachmentTex2D(0, this.pressureTex);
-		this.fbo.draw({
-			callback : function() {
-				//compute pressure
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				quadObj.draw({
-					shader : computePressureShader,
-					texs : [thiz.qTex]
-				});
-			}
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pressureTex.obj, 0);
+		fbo.check();
+		//compute pressure
+		quadObj.draw({
+			shader : computePressureShader,
+			texs : [this.qTex]
 		});
 		
-		this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
-		this.fbo.draw({
-			callback : function() {
-				//apply momentum diffusion
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				quadObj.draw({
-					shader : applyPressureToMomentumShader,
-					uniforms : {
-						dt_dx : [dt / dx, dt / dy]
-					},
-					texs : [thiz.qTex, thiz.pressureTex]
-				});
-			}
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+		fbo.check();
+		//apply momentum diffusion
+		quadObj.draw({
+			shader : applyPressureToMomentumShader,
+			uniforms : {
+				dt_dx : [dt / dx, dt / dy]
+			},
+			texs : [this.qTex, this.pressureTex]
 		});
 		this.swapQTexs();
 
-		this.fbo.setColorAttachmentTex2D(0, this.nextQTex);
-		this.fbo.draw({
-			callback : function() {
-				//apply work diffusion
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
-				quadObj.draw({
-					shader : applyPressureToWorkShader,
-					uniforms : {
-						dt_dx : [dt / dx, dt / dy]
-					},
-					texs : [thiz.qTex, thiz.pressureTex]
-				});
-			}
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+		fbo.check();
+		//apply work diffusion
+		quadObj.draw({
+			shader : applyPressureToWorkShader,
+			uniforms : {
+				dt_dx : [dt / dx, dt / dy]
+			},
+			texs : [this.qTex, this.pressureTex]
 		});
 		this.swapQTexs();
 
@@ -692,6 +660,9 @@ var HydroState = makeClass({
 		this.boundary();
 	},
 	update : function() {
+		gl.viewport(0, 0, this.nx, this.nx);
+		fbo.bind();
+			
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
 		advectMethods[this.advectMethod].initStep.call(this);
 
@@ -705,6 +676,8 @@ var HydroState = makeClass({
 
 		//do the update
 		this.step(dt);
+			
+		fbo.unbind();
 	},
 
 	swapQTexs : function() {
@@ -729,6 +702,7 @@ var Hydro = makeClass({
 		});
 	},
 	update : function() {
+		
 		//todo adm or something
 		//update a copy of the grid and its once-refined
 		//...and a once-unrefined ... over mergeable cells only?
@@ -1564,6 +1538,11 @@ void main() {
 			}
 		});
 
+		fbo = new GL.Framebuffer({
+			width : this.nx,
+			height : this.nx
+		});
+
 
 	//init hydro after gl
 
@@ -1602,6 +1581,7 @@ void main() {
 			var url = location.href.match('[^?]*');
 			var sep = '?';
 			for (k in params) {
+				if (k == '' && params[k] == '') continue;
 				url += sep;
 				url += k + '=' + params[k];
 				sep = '&';
@@ -1831,7 +1811,6 @@ void main() {
 	});
 
 	var nx = hydro.state.nx;
-	var fbo = hydro.state.fbo;
 	var tmpTex = new FloatTexture2D(nx, nx); 
 	fbo.setColorAttachmentTex2D(0, tmpTex);
 	fbo.draw({

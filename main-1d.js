@@ -850,6 +850,7 @@ $(document).ready(function(){
 			var url = location.href.match('[^?]*');
 			var sep = '?';
 			for (k in params) {
+				if (k == '' && params[k] == '') continue;
 				url += sep;
 				url += k + '=' + params[k];
 				sep = '&';
