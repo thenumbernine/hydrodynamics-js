@@ -52,13 +52,6 @@ var checkCoordAccuracyShader;
 //coordinate names
 var coordNames = ['x', 'y'];
 
-//provide a function with a mult-line comment
-//this returns the comment as a string
-//http://tomasz.janczuk.org/2013/05/multi-line-strings-in-javascript-and.html
-function mlstr(f) {
-	return f.toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
-}
-
 /*
 output:
 matrix
@@ -334,7 +327,7 @@ var advectMethods = {
 			this.swapQTexs();
 		}
 	},
-	Riemann : {
+	'Riemann / Roe' : {
 		initStep : function() {
 			var mindum = undefined;
 			for (var j = 1; j < this.nx; ++j) {
@@ -1553,8 +1546,7 @@ $(document).ready(function(){
 			[0,0,1],
 			[1,1,0],
 			[1,0,0],
-		],
-		dontRepeat : true
+		]
 	});
 
 	var isobarSize = 16;

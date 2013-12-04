@@ -175,7 +175,7 @@ var boundaryMethods = {
 
 //'this' is HydroState
 var integrationMethods = {
-	explicit : {
+	'Forward Euler' : {
 		initPressure : function() {
 			for (var i = 0; i < this.nx; ++i) {
 				var u = this.q[i][1] / this.q[i][0];
@@ -265,7 +265,7 @@ var integrationMethods = {
 			h_total = e_total + P / rho
 			Cs = sqrt(gamma P / rho)
 			*/
-			Riemann : function(dt) {
+			'Riemann / Roe' : function(dt) {
 				for (var ix = 1; ix < this.nx; ++ix) {
 					for (var j = 0; j < 3; ++j) {
 						this.interfaceDeltaQTilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
@@ -494,9 +494,9 @@ var integrationMethods = {
 					}
 				}	
 			},
-			Riemann : function(dt) {
+			'Riemann / Roe' : function(dt) {
 				//TODO
-				integrationMethods.explicit.advect.Riemann.call(this, dt);
+				integrationMethods['Forward Euler'].advect['Riemann / Roe'].call(this, dt);
 			}
 		}
 	}
@@ -518,11 +518,11 @@ var advectMethods = {
 				var dum = dx / (speedOfSound + Math.abs(u));
 				if (mindum === undefined || dum < mindum) mindum = dum;
 			}
-			if (mindum != mindum) throw 'nan';
+			//if (mindum != mindum) throw 'nan';
 			return this.cfl * mindum;
 		}
 	},
-	Riemann : {
+	'Riemann / Roe' : {
 		initStep : function() {
 			//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 			//(i.e. qi[ix] is between q[ix-1] and q[ix])
@@ -575,7 +575,7 @@ var advectMethods = {
 				var dum = (this.xi[i+1] - this.xi[i]) / (maxLambda - minLambda);
 				if (mindum === undefined || dum < mindum) mindum = dum;
 			}
-			if (mindum != mindum) throw 'nan';
+			//if (mindum != mindum) throw 'nan';
 			return this.cfl * mindum;
 		}
 	}
@@ -671,8 +671,8 @@ var HydroState = makeClass({
 		//solver configuration
 		this.boundaryMethod = 'mirror';
 		this.fluxMethod = 'superbee';
-		this.advectMethod = 'Burgers';
-		this.integrationMethod = 'explicit';
+		this.advectMethod = 'Riemann / Roe';
+		this.integrationMethod = 'Forward Euler';
 	},
 	resetSod : function() {
 		for (var i = 0; i < this.nx; ++i) {
@@ -865,8 +865,23 @@ $(document).ready(function(){
 	GL.view.pos[1] = (ymax + ymin) / 2;
 	
 	var plainShader = new GL.ShaderProgram({
-		vertexCodeID : 'plain-vsh',
-		fragmentCodeID : 'plain-fsh',
+		vertexCode : mlstr(function(){/*
+attribute vec2 vertex;
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+	gl_PointSize = 3.;
+}
+*/}),
+		vertexPrecision : 'best',
+		fragmentCode : mlstr(function(){/*
+uniform vec4 color;
+void main() {
+	gl_FragColor = color;
+}
+*/}),
+		fragmentPrecision : 'best',
 		uniforms : {
 			color : [1,1,1,1]
 		}
@@ -915,8 +930,26 @@ $(document).ready(function(){
 			state : waveStateBuf
 		},
 		shader : new GL.ShaderProgram({
-			vertexCodeID : 'water-vsh',
-			fragmentCodeID : 'water-fsh'
+			vertexCode : mlstr(function(){/*
+attribute vec2 vertex;
+attribute vec3 state;
+varying vec3 statev;
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	statev = state;
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+	gl_PointSize = 3.;
+}
+*/}),
+			vertexPrecision : 'best',
+			fragmentCode : mlstr(function(){/*
+varying vec3 statev;
+void main() {
+	gl_FragColor = vec4(statev, 1.);;
+}
+*/}),
+			fragmentPrecision : 'best'
 		})
 	});
 

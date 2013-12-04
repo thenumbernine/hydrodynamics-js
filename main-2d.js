@@ -258,6 +258,8 @@ var boundaryMethods = {
 var advectMethods = {
 	Burgers : {
 		initStep : function() {
+		},
+		calcCFLTimestep : function() {
 			var mindum = undefined;
 			var qIndex = 0;
 			for (var j = 0; j < this.nx; ++j) {
@@ -271,8 +273,6 @@ var advectMethods = {
 					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
 					var dx = this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)];
 					var dy = this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)];
-					//http://en.wikipedia.org/wiki/Courant%E2%80%93Friedrichs%E2%80%93Lewy_condition
-					//var dum = 1 / (speedOfSound + Math.abs(u) / dx + Math.abs(v) / dy); 
 					var dum = dx / (speedOfSound + Math.abs(u));
 					if (mindum === undefined || dum < mindum) mindum = dum;
 					var dum = dy / (speedOfSound + Math.abs(v));
@@ -431,9 +431,8 @@ var advectMethods = {
 			}
 		}
 	},
-	Riemann : {
+	'Riemann / Roe' : {
 		initStep : function() {
-			var mindum = undefined;
 			for (var j = 1; j < this.nx; ++j) {
 				for (var i = 1; i < this.nx; ++i) {
 					for (var side = 0; side < 2; ++side) {
@@ -478,7 +477,15 @@ var advectMethods = {
 							 this.interfaceEigenvectorsInverse,	//dim^2 = 16
 							 velocityX, velocityY, hTotal, this.gamma,
 							 dirs[side][0], dirs[side][1]);
-
+					}
+				}
+			}
+		},
+		calcCFLTimestep : function() {
+			var mindum = undefined;
+			for (var j = 1; j < this.nx; ++j) {
+				for (var i = 1; i < this.nx; ++i) {
+					for (var side = 0; side < 2; ++side) {
 						var maxLambda = Math.max(0, 
 							this.interfaceEigenvalues[0+4*(side+2*(i+(this.nx+1)*j))],
 							this.interfaceEigenvalues[1+4*(side+2*(i+(this.nx+1)*j))],
@@ -497,7 +504,6 @@ var advectMethods = {
 				}
 			}
 			return this.cfl * mindum;
-	
 		},
 		advect : function(dt) {
 			for (var j = 1; j < this.nx; ++j) {
@@ -854,7 +860,7 @@ var HydroState = makeClass({
 		//solver configuration
 		this.boundaryMethod = boundaryMethods.mirror;
 		this.fluxMethod = fluxMethods.superbee;
-		this.advectMethod = advectMethods.Riemann;
+		this.advectMethod = advectMethods['Riemann / Roe'];
 	},
 	resetSod : function() {
 		var xIndex = 0;
@@ -1012,9 +1018,12 @@ var HydroState = makeClass({
 		this.boundary();
 	},
 	update : function() {
+		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
+		this.advectMethod.initStep.call(this);
+		
 		//get timestep
-		var dt = this.advectMethod.initStep.call(this);
-window.lastDT = dt;
+		var dt = this.advectMethod.calcCFLTimestep.call(this);
+
 		//do the update
 		this.step(dt);
 	}
@@ -1198,8 +1207,7 @@ $(document).ready(function(){
 			[0,0,1],
 			[1,1,0],
 			[1,0,0],
-		],
-		dontRepeat : true
+		]
 	});
 
 	var isobarSize = 16;
@@ -1239,9 +1247,25 @@ $(document).ready(function(){
 	});
 
 	var shader = new GL.ShaderProgram({
-		vertexCodeID : 'water-vsh',
+		vertexCode : mlstr(function(){/*
+attribute vec2 vertex;
+attribute float state;
+varying float statev;
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	statev = state;
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+}
+*/}),
 		vertexPrecision : 'best',
-		fragmentCodeID : 'water-fsh',
+		fragmentCode : mlstr(function(){/*
+varying float statev;
+uniform sampler2D tex;
+void main() {
+	gl_FragColor = texture2D(tex, vec2(statev, .5)); 
+}
+*/}),
 		fragmentPrecision : 'best'
 	});
 	

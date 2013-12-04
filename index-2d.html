@@ -21,24 +21,6 @@ _gaq.push(['_trackPageview']);
 	var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
 })();
 </script>
-		<script id='water-vsh' type='x-shader/x-vertex'>
-attribute vec2 vertex;
-attribute float state;
-varying float statev;
-uniform mat4 mvMat;
-uniform mat4 projMat;
-void main() {
-	statev = state;
-	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
-}
-		</script>
-		<script id='water-fsh' type='x-shader/x-fragment'>
-varying float statev;
-uniform sampler2D tex;
-void main() {
-	gl_FragColor = texture2D(tex, vec2(statev, .5)); 
-}
-		</script>
 
 		<style type='text/css'>
 
