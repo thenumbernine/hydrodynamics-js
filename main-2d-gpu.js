@@ -53,6 +53,7 @@ var roeComputeEigenvectorsInverse = [];	//[side][row state]
 var roeComputeMatrix = [];			//[side][column state]
 var roeComputeInterfaceDeltaQTildeShader = [];	//[side]
 var roeComputeFluxSlopeShader = [];	//[side]
+var roeComputeFluxShader = {};	//[fluxMethod][side]
 
 var encodeTempTex;
 var encodeShader = [];	//[channel]
@@ -1068,8 +1069,6 @@ void main() {
 				burgersComputeFluxShader[methodName][i] = new GL.ShaderProgram({
 					vertexShader : kernelVertexShader,
 					fragmentCode : mlstr(function(){/*
-//for now only donor cell works
-//I'm suspicious the others' errors is related to the fact that texture neighbors are erroneous for sizes <=64 and >=1024
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
 }			
@@ -1379,18 +1378,18 @@ void main() {
 varying vec2 pos;
 uniform vec2 dpos;
 uniform sampler2D qTex;
-uniform sampler2D eigenvectorInverseTex0;
-uniform sampler2D eigenvectorInverseTex1;
-uniform sampler2D eigenvectorInverseTex2;
-uniform sampler2D eigenvectorInverseTex3;
+uniform sampler2D eigenvectorInverseRow0Tex;
+uniform sampler2D eigenvectorInverseRow1Tex;
+uniform sampler2D eigenvectorInverseRow2Tex;
+uniform sampler2D eigenvectorInverseRow3Tex;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
 
-	vec4 eigenvectorInverseRow0 = texture2D(eigenvectorInverseTex0, pos);
-	vec4 eigenvectorInverseRow1 = texture2D(eigenvectorInverseTex1, pos);
-	vec4 eigenvectorInverseRow2 = texture2D(eigenvectorInverseTex2, pos);
-	vec4 eigenvectorInverseRow3 = texture2D(eigenvectorInverseTex3, pos);
+	vec4 eigenvectorInverseRow0 = texture2D(eigenvectorInverseRow0Tex, pos);
+	vec4 eigenvectorInverseRow1 = texture2D(eigenvectorInverseRow1Tex, pos);
+	vec4 eigenvectorInverseRow2 = texture2D(eigenvectorInverseRow2Tex, pos);
+	vec4 eigenvectorInverseRow3 = texture2D(eigenvectorInverseRow3Tex, pos);
 
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 	vec4 q = texture2D(qTex, pos);
@@ -1407,10 +1406,10 @@ void main() {
 				fragmentPrecision : 'best',
 				uniforms : {
 					qTex : 0,
-					eigenvectorInverseTex0 : 1,
-					eigenvectorInverseTex1 : 2,
-					eigenvectorInverseTex2 : 3,
-					eigenvectorInverseTex3 : 4
+					eigenvectorInverseRow0Tex : 1,
+					eigenvectorInverseRow1Tex : 2,
+					eigenvectorInverseRow2Tex : 3,
+					eigenvectorInverseRow3Tex : 4
 				}
 			});
 		});	
@@ -1453,6 +1452,105 @@ void main() {
 			});
 		});
 
+		$.each(fluxMethods, function(methodName,fluxMethodCode) {
+			roeComputeFluxShader[methodName] = [];
+			$.each(coordNames, function(i,coordName) {
+				roeComputeFluxShader[methodName][i] = new GL.ShaderProgram({
+					vertexShader : kernelVertexShader,
+					fragmentCode : mlstr(function(){/*
+vec4 fluxMethod(vec4 r) {
+	$fluxMethodCode
+}			
+*/}).replace(/\$fluxMethodCode/g, fluxMethodCode)
++ mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 dpos;
+uniform float dt_dx;
+
+uniform sampler2D qTex;
+uniform sampler2D dqTildeTex;
+uniform sampler2D rTildeTex;
+uniform sampler2D eigenvalueTex;
+uniform sampler2D eigenvectorInverseRow0Tex;
+uniform sampler2D eigenvectorInverseRow1Tex;
+uniform sampler2D eigenvectorInverseRow2Tex;
+uniform sampler2D eigenvectorInverseRow3Tex;
+uniform sampler2D eigenvectorCol0Tex;
+uniform sampler2D eigenvectorCol1Tex;
+uniform sampler2D eigenvectorCol2Tex;
+uniform sampler2D eigenvectorCol3Tex;
+
+mat4 transpose(mat4 m) {
+	return mat4(
+		m[0][0], m[1][0], m[2][0], m[3][0],
+		m[0][1], m[1][1], m[2][1], m[3][1],
+		m[0][2], m[1][2], m[2][2], m[3][2],
+		m[0][3], m[1][3], m[2][3], m[3][3]);
+}
+
+mat4 scale(vec4 s) {
+	return mat4(
+		s[0], 0., 0., 0.,
+		0., s[1], 0., 0.,
+		0., 0., s[2], 0.,
+		0., 0., 0., s[3]);
+}
+
+void main() {
+	vec2 sidestep = vec2(0., 0.);
+	sidestep[$side] = dpos[$side];
+
+	vec4 q = texture2D(qTex, pos);
+	vec4 qPrev = texture2D(qTex, pos - sidestep);
+
+	vec4 eigenvalues = texture2D(eigenvalueTex, pos);
+
+	vec4 eigenvectorCol0 = texture2D(eigenvectorCol0Tex, pos);
+	vec4 eigenvectorCol1 = texture2D(eigenvectorCol1Tex, pos);
+	vec4 eigenvectorCol2 = texture2D(eigenvectorCol2Tex, pos);
+	vec4 eigenvectorCol3 = texture2D(eigenvectorCol3Tex, pos);
+	mat4 eigenvectorMat = mat4(eigenvectorCol0, eigenvectorCol1, eigenvectorCol2, eigenvectorCol3);
+
+	vec4 eigenvectorInverseRow0 = texture2D(eigenvectorInverseRow0Tex, pos);
+	vec4 eigenvectorInverseRow1 = texture2D(eigenvectorInverseRow1Tex, pos);
+	vec4 eigenvectorInverseRow2 = texture2D(eigenvectorInverseRow2Tex, pos);
+	vec4 eigenvectorInverseRow3 = texture2D(eigenvectorInverseRow3Tex, pos);
+	mat4 eigenvectorInverseMatTr = mat4(eigenvectorInverseRow0, eigenvectorInverseRow1, eigenvectorInverseRow2, eigenvectorInverseRow3);
+	mat4 eigenvectorInverseMat = transpose(eigenvectorInverseMatTr );
+
+	mat4 interfaceMat = eigenvectorMat * scale(eigenvalues);
+	interfaceMat = interfaceMat * eigenvectorInverseMat;
+
+	vec4 fluxAvg = interfaceMat * (q + qPrev) * .5;
+
+	vec4 dqTilde = texture2D(dqTildeTex, pos);
+
+	vec4 theta = step(eigenvalues, vec4(0.));
+	vec4 phi = fluxMethod(theta);
+	vec4 epsilon = eigenvalues * dt_dx;
+	vec4 deltaFluxTilde = eigenvalues * dqTilde;
+	vec4 fluxTilde = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+	gl_FragColor = fluxAvg + eigenvectorMat * fluxTilde;
+}
+*/}).replace(/\$side/g, i),
+					fragmentPrecision : 'best',
+					uniforms : {
+						qTex : 0,
+						rTildeTex : 1,
+						dqTildeTex : 2,
+						eigenvalueTex : 3,
+						eigenvectorInverseRow0Tex : 4,
+						eigenvectorInverseRow1Tex : 5,
+						eigenvectorInverseRow2Tex : 6,
+						eigenvectorInverseRow3Tex : 7,
+						eigenvectorCol0Tex : 8,
+						eigenvectorCol1Tex : 9,
+						eigenvectorCol2Tex : 10,
+						eigenvectorCol3Tex : 11
+					}
+				});
+			});
+		});
 
 		//pressure shaders
 		
