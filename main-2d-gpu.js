@@ -51,6 +51,8 @@ var roeComputeEigenvalues = [];		//[side]
 var roeComputeEigenvectors = [];	//[side][column state]
 var roeComputeEigenvectorsInverse = [];	//[side][row state]
 var roeComputeMatrix = [];			//[side][column state]
+var roeComputeInterfaceDeltaQTildeShader = [];	//[side]
+var roeComputeFluxSlopeShader = [];	//[side]
 
 var encodeTempTex;
 var encodeShader = [];	//[channel]
@@ -227,22 +229,6 @@ var advectMethods = {
 				}
 			}
 			
-			//boundary zero
-			for (var j = 0; j < this.nghost-1; ++j) {
-				for (var i = 0; i <= this.nx; ++i) {
-					for (var state = 0; state < 4; ++state) {
-						//left boundary, left and top sides, zero vector
-						this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
-						//right boundary, left and top sides, zero vector
-						this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-						//top boundary, left and top sides, zero vector
-						this.interfaceDeltaQTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
-						//bottom boundary, left and top sides, zero vector
-						this.interfaceDeltaQTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-					}
-				}
-			}
-
 			for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
 				for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
 					for (var side = 0; side < 2; ++side) {
@@ -266,22 +252,6 @@ var advectMethods = {
 				}
 			}
 	
-			//..and keep the boundary rTilde's zero	
-			for (var j = 0; j < this.nghost; ++j) {
-				for (var i = 0; i <= this.nx; ++i) {
-					for (var state = 0; state < 4; ++state) {
-						//left
-						this.rTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
-						//right
-						this.rTilde[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-						//bottom
-						this.rTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
-						//top
-						this.rTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-					}
-				}
-			}
-		
 			var fluxAvg = [];	//4
 			var fluxTilde = [];	//4
 			var dxi = [];
@@ -396,17 +366,22 @@ var HydroState = makeClass({
 		this.cfl =.5;
 		this.gamma = args.gamma;
 
-		var step = [1/this.nx, 1/this.nx];
+		var dpos = [1/this.nx, 1/this.nx];
 		
-		//provide default step values to shaders
+		//provide default dpos values to shaders
 		var shaders = [];
 
+		//burgers
 		shaders.push(burgersComputeInterfaceVelocityShader);
 		shaders = shaders.concat(burgersComputeFluxSlopeShader);	
 		$.each(burgersComputeFluxShader, function(k, fluxShaders) {
 			shaders = shaders.concat(fluxShaders);
 		});
 		shaders.push(burgersUpdateStateShader);
+	
+		//riemann /roe
+
+		//common	
 		shaders.push(computePressureShader);
 		shaders.push(applyPressureToMomentumShader);
 		shaders.push(applyPressureToWorkShader);
@@ -415,7 +390,7 @@ var HydroState = makeClass({
 			shader
 				.use()
 				.setUniforms({
-					step : step,
+					dpos : dpos,
 					gamma : thiz.gamma
 				})
 				.useNone();
@@ -931,7 +906,7 @@ uniform vec2 rangeMax;
 uniform float noiseAmplitude;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	//I would use step functions, but it's only for initialization...
+	//I would use dpos functions, but it's only for initialization...
 	float rho;
 	if (gridPos.x < (.7 * rangeMin.x + .3 * rangeMax.x) 
 		&& gridPos.y < (.7 * rangeMin.y + .3 * rangeMax.y))
@@ -969,7 +944,7 @@ void main() {
 	float dg = .2 * (rangeMax.x - rangeMin.x);
 	vec2 rangeMid = .5 * (rangeMax + rangeMin);
 	vec2 gridPosFromCenter = gridPos - .5 * rangeMid;
-	//Note I turned this down from 3. to 2. because GPU is currently using fixed step sizes
+	//Note I turned this down from 3. to 2. because GPU is currently using fixed dpos sizes
 	float rho = 2. * exp(-dot(gridPosFromCenter, gridPosFromCenter) / (dg * dg)) + .1;
 	vec2 vel = vec2(0., 0.);
 	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
@@ -1033,12 +1008,12 @@ void main() {
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform sampler2D qTex;
 void main() {
 	vec4 q = texture2D(qTex, pos);
-	vec4 qxPrev = texture2D(qTex, pos - vec2(step.x, 0.));
-	vec4 qyPrev = texture2D(qTex, pos - vec2(0., step.y));
+	vec4 qxPrev = texture2D(qTex, pos - vec2(dpos.x, 0.));
+	vec4 qyPrev = texture2D(qTex, pos - vec2(0., dpos.y));
 	gl_FragColor = vec4(
 		.5 * (q.y / q.x + qxPrev.y / qxPrev.x),
 		.5 * (q.z / q.x + qyPrev.z / qyPrev.x),
@@ -1054,35 +1029,31 @@ void main() {
 		$.each(coordNames, function(i, coordName) {
 			burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
-				fragmentCode : (mlstr(function(){/*
+				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform sampler2D qTex;
 uniform sampler2D uiTex;
 void main() {
 	vec2 sidestep = vec2(0.);
-	sidestep[$side] = step[$side];
+	sidestep[$side] = dpos[$side];
+	
 	vec4 qNext = texture2D(qTex, pos + sidestep);
 	vec4 q = texture2D(qTex, pos);
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 	vec4 qPrev2 = texture2D(qTex, pos - 2.*sidestep);
+	
 	//dq = q_i,j - q_{{i,j}-dirs[side]}
 	vec4 dq = q - qPrev; 
+	
+	vec4 s = sign(dq);
+	s *= s;
+	
 	float ui = texture2D(uiTex, pos)[$side];
-*/}) + [0,1,2,3].map(function(i) {
-	return mlstr(function(){/*
-	if (abs(dq[$i]) > 0.) {
-		if (ui >= 0.) {
-			gl_FragColor[$i] = (qPrev[$i] - qPrev2[$i]) / dq[$i];
-		} else {
-			gl_FragColor[$i] = (qNext[$i] - q[$i]) / dq[$i];
-		}
-	} else {
-		gl_FragColor[$i] = 0.;
-	}
-*/}).replace(/\$i/g, i);
-	}).join('')
-+ '}').replace(/\$side/g, i),
+	float uigz = step(0., ui); 
+	gl_FragColor = s * mix(qNext - q, qPrev - qPrev2, uigz) / dq;
+}
+*/}).replace(/\$side/g, i),
 				fragmentPrecision : 'best',
 				uniforms : {
 					qTex : 0,
@@ -1105,7 +1076,7 @@ vec4 fluxMethod(vec4 r) {
 */}).replace(/\$fluxMethodCode/g, fluxMethodCode)
 + mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform float dt_dx;
 uniform sampler2D qTex;
 uniform sampler2D uiTex;
@@ -1113,18 +1084,15 @@ uniform sampler2D rTex;
 
 void main() {
 	vec2 sidestep = vec2(0., 0.);
-	sidestep[$side] = step[$side];
+	sidestep[$side] = dpos[$side];
 	
 	float ui = texture2D(uiTex, pos)[$side];
+	float uigz = step(0., ui);
 
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 	vec4 q = texture2D(qTex, pos);
 
-	if (ui >= 0.) {
-		gl_FragColor = ui * qPrev;
-	} else {
-		gl_FragColor = ui * q;
-	}
+	gl_FragColor = ui * mix(q, qPrev, uigz);
 	
 	vec4 r = texture2D(rTex, pos);
 	vec4 phi = fluxMethod(r);
@@ -1146,7 +1114,7 @@ void main() {
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform vec2 dt_dx;
 uniform sampler2D qTex;
 uniform sampler2D fluxXTex;
@@ -1154,9 +1122,9 @@ uniform sampler2D fluxYTex;
 void main() {
 	vec4 q = texture2D(qTex, pos);
 	vec4 fluxXL = texture2D(fluxXTex, pos);
-	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(step.x, 0.));
+	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(dpos.x, 0.));
 	vec4 fluxYL = texture2D(fluxYTex, pos);
-	vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., step.y));
+	vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., dpos.y));
 	gl_FragColor = q 
 		- dt_dx.x * (fluxXR - fluxXL)
 		- dt_dx.y * (fluxYR - fluxYL);
@@ -1178,12 +1146,12 @@ void main() {
 				vertexShader : kernelVertexShader,
 				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform float gamma;
 uniform sampler2D qTex;
 void main() {
 	vec2 sidestep = vec2(0.);
-	sidestep[$side] = step[$side];
+	sidestep[$side] = dpos[$side];
 	vec4 q = texture2D(qTex, pos);
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 
@@ -1404,11 +1372,96 @@ void main() {
 			});
 		});
 
+		$.each(coordNames, function(i, coordName) {
+			roeComputeInterfaceDeltaQTildeShader[i] = new GL.ShaderProgram({
+				vertexShader : kernelVertexShader,
+				fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 dpos;
+uniform sampler2D qTex;
+uniform sampler2D eigenvectorInverseTex0;
+uniform sampler2D eigenvectorInverseTex1;
+uniform sampler2D eigenvectorInverseTex2;
+uniform sampler2D eigenvectorInverseTex3;
+void main() {
+	vec2 sidestep = vec2(0., 0.);
+	sidestep[$side] = dpos[$side];
+
+	vec4 eigenvectorInverseRow0 = texture2D(eigenvectorInverseTex0, pos);
+	vec4 eigenvectorInverseRow1 = texture2D(eigenvectorInverseTex1, pos);
+	vec4 eigenvectorInverseRow2 = texture2D(eigenvectorInverseTex2, pos);
+	vec4 eigenvectorInverseRow3 = texture2D(eigenvectorInverseTex3, pos);
+
+	vec4 qPrev = texture2D(qTex, pos - sidestep);
+	vec4 q = texture2D(qTex, pos);
+	vec4 dq = q - qPrev;
+
+	gl_FragColor = vec4(
+		dot(eigenvectorInverseRow0, dq),
+		dot(eigenvectorInverseRow1, dq),
+		dot(eigenvectorInverseRow2, dq),
+		dot(eigenvectorInverseRow3, dq)
+	);
+}
+*/}).replace(/\$side/g, i),
+				fragmentPrecision : 'best',
+				uniforms : {
+					qTex : 0,
+					eigenvectorInverseTex0 : 1,
+					eigenvectorInverseTex1 : 2,
+					eigenvectorInverseTex2 : 3,
+					eigenvectorInverseTex3 : 4
+				}
+			});
+		});	
+
+		$.each(coordNames, function(i,coordName) {
+			roeComputeFluxSlopeShader[i] = new GL.ShaderProgram({
+				vertexShader : kernelVertexShader,
+				fragmentCode : (mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 dpos;
+uniform sampler2D dqTildeTex;
+uniform sampler2D eigenvalueTex;
+void main() {
+	vec2 sidestep = vec2(0.);
+	sidestep[$side] = dpos[$side];
+	vec4 dqTildePrev = texture2D(dqTildeTex, pos - sidestep); 
+	vec4 dqTilde = texture2D(dqTildeTex, pos); 
+	vec4 dqTildeNext = texture2D(dqTildeTex, pos + sidestep); 
+	vec4 eigenvalues = texture2D(eigenvalueTex, pos);
+*/}) + [0,1,2,3].map(function(j) {
+	return mlstr(function(){/*
+	if (abs(dqTilde[$j]) > 0.) {
+		if (eigenvalues[$j] >= 0.) {
+			gl_FragColor[$j] = dqTildePrev[$j] / dqTilde[$j];
+		} else {
+			gl_FragColor[$j] = dqTildeNext[$j] / dqTilde[$j];
+		}
+	} else {
+		gl_FragColor[$j] = 0.;
+	}
+*/}).replace(/\$j/g, j);
+	}).join('')
++ '}').replace(/\$side/g, i),			
+				
+				fragmentPrecision : 'best',
+				uniforms : {
+					dqTildeTex : 0,
+					eigenvalueTex : 1
+				}
+			});
+		});
+
+
+		//pressure shaders
+		
+
 		computePressureShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform float gamma;
 uniform sampler2D qTex;
 void main() {
@@ -1432,13 +1485,13 @@ void main() {
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform vec2 dt_dx;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 void main() {
-	vec2 dx = vec2(step.x, 0.);
-	vec2 dy = vec2(0., step.y);
+	vec2 dx = vec2(dpos.x, 0.);
+	vec2 dy = vec2(0., dpos.y);
 	
 	vec2 posxp = pos + dx;
 	vec2 posxn = pos - dx;
@@ -1466,13 +1519,13 @@ void main() {
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 uniform vec2 dt_dx;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 void main() {
-	vec2 dx = vec2(step.x, 0.);
-	vec2 dy = vec2(0., step.y);
+	vec2 dx = vec2(dpos.x, 0.);
+	vec2 dy = vec2(0., dpos.y);
 	
 	vec2 posxp = pos + dx;
 	vec2 posxn = pos - dx;
@@ -1797,13 +1850,13 @@ return;
 		fragmentPrecision : 'best',
 		fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 step;
+uniform vec2 dpos;
 void main() {
-	gl_FragColor = vec4(gl_FragCoord.xy*step, step);
+	gl_FragColor = vec4(gl_FragCoord.xy*dpos, dpos);
 }
 */}),
 		uniforms : {
-			step : [
+			dpos : [
 				1/hydro.state.nx,
 				1/hydro.state.nx
 			]
