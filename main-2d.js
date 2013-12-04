@@ -262,8 +262,7 @@ var boundaryMethods = {
 //called with 'this' the HydroState
 var advectMethods = {
 	Burgers : {
-		initStep : function() {
-		},
+		initStep : function() {},
 		calcCFLTimestep : function() {
 			var mindum = undefined;
 			var qIndex = 0;

@@ -42,138 +42,20 @@ var applyPressureToMomentumShader;
 
 var burgersComputeInterfaceVelocityShader;
 var burgersComputeFluxSlopeShader = [];	//[side]
-var burgersComputeFluxShader = {};	//[fluxMethod][side]
+var burgersComputeFluxShader = {};		//[fluxMethod][side]
 var burgersUpdateStateShader;
+
+var roeComputeInterfaceValues = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
+var roeComputeEigenvalues = [];		//[side]
+var roeComputeEigenvectors = [];	//[side][column state]
+var roeComputeEigenvectorsInverse = [];	//[side][row state]
+var roeComputeMatrix = [];			//[side][column state]
 
 var encodeTempTex;
 var encodeShader = [];	//[channel]
 
 //coordinate names
 var coordNames = ['x', 'y'];
-
-/*
-output:
-matrix
-eigenvalues
-eigenvectors
-
-input:
-velocity
-hTotal
-speedOfSound
-*/
-function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocityX, velocityY, hTotal, gamma, normalX, normalY) {
-
-	if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) {
-		console.log('sqrt error');
-	}
-
-	//calculate matrix & eigenvalues & vectors at interface from state at interface
-	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)));
-	var tangentX = -normalY;
-	var tangentY = normalX;
-	var velocityN = velocityX * normalX + velocityY * normalY;
-	var velocityT = velocityX * tangentX + velocityY * tangentY;
-	var velocitySq = velocityX * velocityX + velocityY * velocityY;	
-	
-	//eigenvalues: min, mid, max
-	eigenvalues[0 + 4 * offset] = velocityN - speedOfSound;
-	eigenvalues[1 + 4 * offset] = velocityN;
-	eigenvalues[2 + 4 * offset] = velocityN;
-	eigenvalues[3 + 4 * offset] = velocityN + speedOfSound;
-
-	//I'm going with http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
-
-	//min eigenvector
-	eigenvectors[0 + 4 * (0 + 4 * offset)] = 1;
-	eigenvectors[1 + 4 * (0 + 4 * offset)] = velocityX - speedOfSound * normalX;
-	eigenvectors[2 + 4 * (0 + 4 * offset)] = velocityY - speedOfSound * normalY;
-	eigenvectors[3 + 4 * (0 + 4 * offset)] = hTotal - speedOfSound * velocityN;
-	//mid eigenvector (normal)
-	eigenvectors[0 + 4 * (1 + 4 * offset)] = 1;
-	eigenvectors[1 + 4 * (1 + 4 * offset)] = velocityX;
-	eigenvectors[2 + 4 * (1 + 4 * offset)] = velocityY;
-	eigenvectors[3 + 4 * (1 + 4 * offset)] = .5 * velocitySq;
-	//mid eigenvector (tangent)
-	eigenvectors[0 + 4 * (2 + 4 * offset)] = 0;
-	eigenvectors[1 + 4 * (2 + 4 * offset)] = tangentX;
-	eigenvectors[2 + 4 * (2 + 4 * offset)] = tangentY;
-	eigenvectors[3 + 4 * (2 + 4 * offset)] = velocityT;
-	//max eigenvector
-	eigenvectors[0 + 4 * (3 + 4 * offset)] = 1;
-	eigenvectors[1 + 4 * (3 + 4 * offset)] = velocityX + speedOfSound * normalX;
-	eigenvectors[2 + 4 * (3 + 4 * offset)] = velocityY + speedOfSound * normalY;
-	eigenvectors[3 + 4 * (3 + 4 * offset)] = hTotal + speedOfSound * velocityN;
-	
-	//calculate eigenvector inverses ... 
-	//min row
-	eigenvectorsInverse[0 + 4 * (0 + 4 * offset)] = (.5 * (gamma - 1) * velocitySq + speedOfSound * velocityN) / (2 * speedOfSound * speedOfSound);
-	eigenvectorsInverse[0 + 4 * (1 + 4 * offset)] = -(normalX * speedOfSound + (gamma - 1) * velocityX) / (2 * speedOfSound * speedOfSound);
-	eigenvectorsInverse[0 + 4 * (2 + 4 * offset)] = -(normalY * speedOfSound + (gamma - 1) * velocityY) / (2 * speedOfSound * speedOfSound);
-	eigenvectorsInverse[0 + 4 * (3 + 4 * offset)] = (gamma - 1) / (2 * speedOfSound * speedOfSound);
-	//mid normal row
-	eigenvectorsInverse[1 + 4 * (0 + 4 * offset)] = 1 - .5 * (gamma - 1) * velocitySq / (speedOfSound * speedOfSound);
-	eigenvectorsInverse[1 + 4 * (1 + 4 * offset)] = (gamma - 1) * velocityX / (speedOfSound * speedOfSound);
-	eigenvectorsInverse[1 + 4 * (2 + 4 * offset)] = (gamma - 1) * velocityY / (speedOfSound * speedOfSound);
-	eigenvectorsInverse[1 + 4 * (3 + 4 * offset)] = -(gamma - 1) / (speedOfSound * speedOfSound);
-	//mid tangent row
-	eigenvectorsInverse[2 + 4 * (0 + 4 * offset)] = -velocityT; 
-	eigenvectorsInverse[2 + 4 * (1 + 4 * offset)] = tangentX;
-	eigenvectorsInverse[2 + 4 * (2 + 4 * offset)] = tangentY;
-	eigenvectorsInverse[2 + 4 * (3 + 4 * offset)] = 0;
-	//max row
-	eigenvectorsInverse[3 + 4 * (0 + 4 * offset)] = (.5 * (gamma - 1) * velocitySq - speedOfSound * velocityN) / (2 * speedOfSound * speedOfSound);
-	eigenvectorsInverse[3 + 4 * (1 + 4 * offset)] = (normalX * speedOfSound - (gamma - 1) * velocityX) / (2 * speedOfSound * speedOfSound);
-	eigenvectorsInverse[3 + 4 * (2 + 4 * offset)] = (normalY * speedOfSound - (gamma - 1) * velocityY) / (2 * speedOfSound * speedOfSound);
-	eigenvectorsInverse[3 + 4 * (3 + 4 * offset)] = (gamma - 1) / (2 * speedOfSound * speedOfSound);
-
-	//calculate matrix
-	var identCheck = [];
-	var identBad = false;
-	for (var i = 0; i < 4; ++i) {
-		for (var j = 0; j < 4; ++j) {
-			var s = 0;
-			var d = 0;
-			for (var k = 0; k < 4; ++k) {
-				/** /
-				s += eigenvectorsInverse[i + 4 * (k + 4 * offset)] * eigenvectors[k + 4 * (j + 4 * offset)] * eigenvalues[k + 4 * offset];
-				identCheck += eigenvectorsInverse[i + 4 * (k + 4 * offset)] * eigenvectors[k + 4 * (j + 4 * offset)];
-				/**/
-				s += eigenvectors[i + 4 * (k + 4 * offset)] * eigenvalues[k + 4 * offset] * eigenvectorsInverse[k + 4 * (j + 4 * offset)];
-				d += eigenvectors[i + 4 * (k + 4 * offset)] * eigenvectorsInverse[k + 4 * (j + 4 * offset)];
-				/**/
-			}
-			matrix[i + 4 * (j + 4 * offset)] = s;
-			identCheck[i + 4 * j] = d;
-			var epsilon = 1e-5;
-			if (Math.abs(d - (i == j ? 1 : 0)) > epsilon) identBad = true;
-		}
-	}
-	if (identBad) {
-		console.log('bad eigen basis', identCheck);
-	}
-	/** /	
-	function f32subset(a, o, s) {
-		var d = new Float32Array(s);
-		for (var i = 0; i < s; ++i) {
-			d[i] = a[i+o];
-		}
-		return d;
-	}
-	console.log('offset',offset);
-	console.log('velocity',velocityX,velocityY);
-	console.log('hTotal',hTotal);
-	console.log('gamma',gamma);
-	console.log('normal',normalX,normalY);
-
-	console.log('eigenvalues:',f32subset(eigenvalues, 4*offset, 4));
-	console.log('eigenvectors:',f32subset(eigenvectors, 16*offset, 16));
-	console.log('eigenvectors^-1:',f32subset(eigenvectorsInverse, 16*offset, 16));
-	console.log('matrix:',f32subset(matrix, 16*offset, 16));
-	console.log('e^-1 * e:',identCheck);
-	throw 'here';
-	/**/
-}
 
 var fluxMethods = {
 	'donor cell' : 'return vec4(0.);',
@@ -250,6 +132,9 @@ var advectMethods = {
 		initStep : function() {
 			//TODO reduce to determien CFL
 		},
+		calcCFLTimestep : function() {
+			//TODO
+		},	
 		advect : function(dt) {
 			
 			var thiz = this;
@@ -331,71 +216,10 @@ var advectMethods = {
 	},
 	'Riemann / Roe' : {
 		initStep : function() {
-			var mindum = undefined;
-			for (var j = 1; j < this.nx; ++j) {
-				for (var i = 1; i < this.nx; ++i) {
-					for (var side = 0; side < 2; ++side) {
-						var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
-						var densityL = this.q[0 + qIndexL];
-						var velocityXL = this.q[1 + qIndexL] / densityL;
-						var velocityYL = this.q[2 + qIndexL] / densityL;
-						var energyTotalL = this.q[3 + qIndexL] / densityL;
-						var energyKineticL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
-						var energyThermalL = energyTotalL - energyKineticL;
-						var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-						var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
-						var hTotalL = energyTotalL + pressureL / densityL;
-						var roeWeightL = Math.sqrt(densityL);
-						
-						var qIndexR = 4 * (i + this.nx * j);
-						var densityR = this.q[0 + qIndexR];
-						var velocityXR = this.q[1 + qIndexR] / densityR;
-						var velocityYR = this.q[2 + qIndexR] / densityR;
-						var energyTotalR = this.q[3 + qIndexR] / densityR;
-						var energyKineticR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
-						var energyThermalR = energyTotalR - energyKineticR;
-						var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-						var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
-						var hTotalR = energyTotalR + pressureR / densityR;
-						var roeWeightR = Math.sqrt(densityR);
-
-						var denom = roeWeightL + roeWeightR;
-						var velocityX = (roeWeightL * velocityXL + roeWeightR * velocityXR) / denom;
-						var velocityY = (roeWeightL * velocityYL + roeWeightR * velocityYR) / denom;
-						var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
-						
-						buildEigenstate(
-							 //index into interface element.  
-							 //from there you'll have to scale by cell size.  
-							 //Thus manually recreating the automatic storage of C structures. 
-							 //JavaScript, why can't you be more like LuaJIT? 
-							 side + 2 * (i + (this.nx+1) * j),	
-							 this.interfaceMatrix,	//dim^2 = 16
-							 this.interfaceEigenvalues,	//dim = 4
-							 this.interfaceEigenvectors,	//dim^2 = 16
-							 this.interfaceEigenvectorsInverse,	//dim^2 = 16
-							 velocityX, velocityY, hTotal, this.gamma,
-							 dirs[side][0], dirs[side][1]);
-
-						var maxLambda = Math.max(0, 
-							this.interfaceEigenvalues[0+4*(side+2*(i+(this.nx+1)*j))],
-							this.interfaceEigenvalues[1+4*(side+2*(i+(this.nx+1)*j))],
-							this.interfaceEigenvalues[2+4*(side+2*(i+(this.nx+1)*j))],
-							this.interfaceEigenvalues[3+4*(side+2*(i+(this.nx+1)*j))]);
-						var minLambda = Math.min(0, 
-							this.interfaceEigenvalues[0+4*(side+2*(i+(this.nx+1)*j))],
-							this.interfaceEigenvalues[1+4*(side+2*(i+(this.nx+1)*j))],
-							this.interfaceEigenvalues[2+4*(side+2*(i+(this.nx+1)*j))],
-							this.interfaceEigenvalues[3+4*(side+2*(i+(this.nx+1)*j))]);
-						var dx = this.xi[side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][1]))] 
-							- this.xi[side + 2 * (i + (this.nx+1) * j)];
-						var dum = dx / (maxLambda - minLambda);
-						if (mindum === undefined || dum < mindum) mindum = dum;
-					}
-				}
-			}
-			return this.cfl * mindum;
-	
+			//TODO reduce to determien CFL
+		},
+		calcCFLTimestep : function() {
+			//TODO
 		},
 		advect : function(dt) {
 			for (var j = 1; j < this.nx; ++j) {
@@ -868,11 +692,13 @@ var HydroState = makeClass({
 		this.boundary();
 	},
 	update : function() {
+		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
+		advectMethods[this.advectMethod].initStep.call(this);
+
 		//get timestep
-		//TODO GPU driven CFL computation
 		var dt;
 		if (useCFL) {
-			dt = advectMethods[this.advectMethod].initStep.call(this);
+			dt = advectMethods[this.advectMethod].calCFLTimestep.call(this);
 		} else {
 			dt = fixedDT;
 		}
@@ -1365,8 +1191,239 @@ void main() {
 			}
 		});
 
+
 		//used for Riemann
-		
+
+		$.each(coordNames, function(i,coordName) {
+			roeComputeInterfaceValues[i] = new GL.ShaderProgram({
+				vertexShader : kernelVertexShader,
+				fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 step;
+uniform float gamma;
+uniform sampler2D qTex;
+void main() {
+	vec2 sidestep = vec2(0.);
+	sidestep[$side] = step[$side];
+	vec4 q = texture2D(qTex, pos);
+	vec4 qPrev = texture2D(qTex, pos - sidestep);
+
+	float densityL = qPrev.x;
+	vec2 velocityL = qPrev.yz / densityL; 
+	float energyTotalL = qPrev.w / densityL;
+	float energyKineticL = .5 * dot(velocityL, velocityL);
+	float energyThermalL = energyTotalL - energyKineticL;
+	float pressureL = (gamma - 1.) * densityL * energyThermalL;
+	float speedOfSoundL = sqrt(gamma * pressureL / densityL);
+	float hTotalL = energyTotalL + pressureL / densityL;
+	float roeWeightL = sqrt(densityL);
+	
+	float densityR = q.x; 
+	vec2 velocityR = q.yz / densityR;
+	float energyTotalR = q.w / densityR; 
+	float energyKineticR = .5 * dot(velocityR, velocityR);
+	float energyThermalR = energyTotalR - energyKineticR;
+	float pressureR = (gamma - 1.) * densityR * energyThermalR;
+	float speedOfSoundR = sqrt(gamma * pressureR / densityR);
+	float hTotalR = energyTotalR + pressureR / densityR;
+	float roeWeightR = sqrt(densityR);
+
+	float denom = roeWeightL + roeWeightR;
+	vec2 velocity = (roeWeightL * velocityL + roeWeightR * velocityR) / denom;
+	float hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
+	
+	float velocitySq = dot(velocity, velocity);
+	float speedOfSound = sqrt((gamma - 1.) * (hTotal - .5 * velocitySq));
+	
+	gl_FragColor = vec4(
+		velocity,
+		hTotal,
+		speedOfSound);
+}
+*/}).replace(/\$side/g, i),
+				fragmentPrecision : 'best',
+				uniforms : {
+					qTex : 0
+				}
+			});
+		});
+
+		$.each(coordNames, function(i,coordName) {	
+			roeComputeEigenvalues[i] = new GL.ShaderProgram({
+				vertexShader : kernelVertexShader,
+				fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform float gamma;
+uniform sampler2D qTex;
+uniform sampler2D roeTex;
+void main() {
+	vec4 roeValues = texture2D(roeTex, pos);
+	vec2 velocity = roeValues.xy;
+	float hTotal = roeValues.z; 
+	float speedOfSound = roeValues.w;
+
+	vec2 normal = vec2(0., 0.);
+	normal[$side] = 1.;
+	vec2 tangent = vec2(-normal.y, normal.x);
+	
+	float velocityN = dot(velocity, normal);
+	float velocityT = dot(velocity, tangent);
+	float velocitySq = dot(velocity, velocity);
+	
+	//eigenvalues: min, mid, max
+	gl_FragColor = vec4(
+		velocityN - speedOfSound,
+		velocityN,
+		velocityN,
+		velocityN + speedOfSound);
+}
+*/}).replace(/\$side/g, i),
+				fragmentPrecision : 'best',
+				uniforms : {
+					qTex : 0,
+					roeTex : 1
+				}
+			});
+		});
+
+		var roeComputeEigenvectorsColumnCode = [
+			mlstr(function(){/*
+	//min eigenvector
+	gl_FragColor = vec4(
+		1.,
+		velocity.x - speedOfSound * normal.x,
+		velocity.y - speedOfSound * normal.y,
+		hTotal - speedOfSound * velocityN);
+*/}),
+			mlstr(function(){/*
+	//mid eigenvector (normal)
+	gl_FragColor = vec4(
+		1.,
+		velocity.x,
+		velocity.y,
+		.5 * velocitySq);
+*/}),
+			mlstr(function(){/*
+	//mid eigenvector (tangent)
+	gl_FragColor = vec4(
+		0.,
+		tangent.x,
+		tangent.y,
+		velocityT);
+*/}),
+			mlstr(function(){/*
+	//max eigenvector
+	gl_FragColor = vec4(
+		1.,
+		velocity.x + speedOfSound * normal.x,
+		velocity.y + speedOfSound * normal.y,
+		hTotal + speedOfSound * velocityN);
+*/})
+		];
+
+		$.each(coordNames, function(i,coordName) {	
+			roeComputeEigenvectors[i] = [];
+			$.each(roeComputeEigenvectorsColumnCode, function(j,code) {
+				roeComputeEigenvalues[i][j] = new GL.ShaderProgram({
+					vertexShader : kernelVertexShader,
+					fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform float gamma;
+uniform sampler2D qTex;
+uniform sampler2D roeTex;
+void main() {
+	vec4 roeValues = texture2D(roeTex, pos);
+	vec2 velocity = roeValues.xy;
+	float hTotal = roeValues.z; 
+	float speedOfSound = roeValues.w;
+
+	vec2 normal = vec2(0., 0.);
+	normal[$side] = 1.;
+	vec2 tangent = vec2(-normal.y, normal.x);
+	
+	float velocityN = dot(velocity, normal);
+	float velocityT = dot(velocity, tangent);
+	float velocitySq = dot(velocity, velocity);
+	
+	
+*/}).replace(/\$side/g, i) + code + '\n}',
+					fragmentPrecision : 'best',
+					uniforms : {
+						qTex : 0,
+						roeTex : 1
+					}
+				});
+			});
+		});
+
+		var roeComputeEigenvectorsInverseRowCode = [
+			mlstr(function(){/*
+	//min row
+	gl_FragColor = vec4(
+		(.5 * (gamma - 1.) * velocitySq + speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound),
+		-(normal.x * speedOfSound + (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound),
+		-(normal.y * speedOfSound + (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound),
+		(gamma - 1.) / (2. * speedOfSound * speedOfSound));
+*/}),
+			mlstr(function(){/*
+	//mid normal row
+	gl_FragColor = vec4(
+		1. - .5 * (gamma - 1.) * velocitySq / (speedOfSound * speedOfSound),
+		(gamma - 1.) * velocity.x / (speedOfSound * speedOfSound),
+		(gamma - 1.) * velocity.y / (speedOfSound * speedOfSound),
+		-(gamma - 1.) / (speedOfSound * speedOfSound));
+*/}),
+			mlstr(function(){/*
+	//mid tangent row
+	gl_FragColor = vec4(
+		-velocityT, 
+		tangent.x,
+		tangent.y,
+		0.);
+*/}),
+			mlstr(function(){/*
+	//max row
+	gl_FragColor = vec4(
+		(.5 * (gamma - 1.) * velocitySq - speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound),
+		(normal.x * speedOfSound - (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound),
+		(normal.y * speedOfSound - (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound),
+		(gamma - 1.) / (2. * speedOfSound * speedOfSound));
+*/})
+		];
+
+		$.each(coordNames, function(i,coordName) {	
+			roeComputeEigenvectors[i] = [];
+			$.each(roeComputeEigenvectorsInverseRowCode, function(j,code) {
+				roeComputeEigenvalues[i][j] = new GL.ShaderProgram({
+					vertexShader : kernelVertexShader,
+					fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform float gamma;
+uniform sampler2D qTex;
+uniform sampler2D roeTex;
+void main() {
+	vec4 roeValues = texture2D(roeTex, pos);
+	vec2 velocity = roeValues.xy;
+	float hTotal = roeValues.z; 
+	float speedOfSound = roeValues.w;
+
+	vec2 normal = vec2(0., 0.);
+	normal[$side] = 1.;
+	vec2 tangent = vec2(-normal.y, normal.x);
+	
+	float velocityN = dot(velocity, normal);
+	float velocityT = dot(velocity, tangent);
+	float velocitySq = dot(velocity, velocity);
+	
+*/}).replace(/\$side/g, i) + code + '\n}',
+					fragmentPrecision : 'best',
+					uniforms : {
+						qTex : 0,
+						roeTex : 1
+					}
+				});
+			});
+		});
 
 		computePressureShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
