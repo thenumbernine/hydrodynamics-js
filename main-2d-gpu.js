@@ -717,9 +717,10 @@ function update() {
 	GL.draw();
 	
 	hydro.state.qTex.bind(0);
-	hydro.state.pressureTex.bind(1);
-	currentColorScheme.bind(2);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	hydro.state.pressureTex.bind(1);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	currentColorScheme.bind(2);
 
 	GL.unitQuad.draw({
 		shader : drawToScreenShader[hydro.state.drawToScreenMethod],
@@ -729,10 +730,15 @@ function update() {
 		}
 	});
 
+	gl.bindTexture(gl.TEXTURE_2D, null);
+
+	gl.activeTexture(gl.TEXTURE1);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	currentColorScheme.unbind(2);
-	hydro.state.pressureTex.unbind(1);
-	hydro.state.qTex.unbind(0);
+	gl.bindTexture(gl.TEXTURE_2D, null);
+
+	gl.activeTexture(gl.TEXTURE0);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.bindTexture(gl.TEXTURE_2D, null);
 
 	requestAnimFrame(update);
 }
