@@ -150,6 +150,84 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	/**/
 }
 
+var drawToScreenMethods = {
+	Density : function() {
+		var nx = this.state.nx;
+		var q = this.state.q;
+		var dataMin = q[0];
+		var dataMax = dataMin + 1e-9;
+		var lastDataRange = this.lastDataMax - this.lastDataMin;
+		var e = 0;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				var s = q[0 + 4 * e];
+				if (s < dataMin) dataMin = s;
+				if (s > dataMax) dataMax = s;
+				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
+				++e;
+			}
+		}
+		return [dataMin, dataMax];
+	},
+	Velocity : function() {
+		var nx = this.state.nx;
+		var q = this.state.q;
+		var dataMin = Math.sqrt(q[1] * q[1] + q[2] * q[2]) / q[0];
+		var dataMax = dataMin + 1e-9; 
+		var lastDataRange = this.lastDataMax - this.lastDataMin;
+		var e = 0;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				var rho = q[0 + 4 * e];
+				var mx = q[1 + 4 * e];
+				var my = q[2 + 4 * e];
+				var s = Math.sqrt(mx * mx + my * my) / rho;
+				if (s < dataMin) dataMin = s;
+				if (s > dataMax) dataMax = s;
+				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
+				++e;
+			}
+		}
+		return [dataMin, dataMax];
+	},
+	Energy : function() {
+		var nx = this.state.nx;
+		var q = this.state.q;
+		var dataMin = q[3] / q[0]; 
+		var dataMax = dataMin + 1e-9; 
+		var lastDataRange = this.lastDataMax - this.lastDataMin;
+		var e = 0;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				var s = q[3 + 4 * e] / q[0 + 4 * e]; 
+				if (s < dataMin) dataMin = s;
+				if (s > dataMax) dataMax = s;
+				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
+				++e;
+			}
+		}
+		return [dataMin, dataMax];
+	},
+	Pressure : function() {
+		var nx = this.state.nx;
+		var pressure = this.state.pressure;
+		var dataMin = pressure[0];
+		var dataMax = dataMin + 1e-9;
+		var lastDataRange = this.lastDataMax - this.lastDataMin;
+		var e = 0;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				var s = pressure[e];
+				if (s < dataMin) dataMin = s;
+				if (s > dataMax) dataMax = s;
+				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
+				++e;
+			}
+		}
+		return [dataMin, dataMax];
+	}
+};
+
 var fluxMethods = {
 	'donor cell' : function(r) { return 0; },
 	'Lax-Wendroff' : function(r) { return 1; },
@@ -865,6 +943,7 @@ var HydroState = makeClass({
 		this.boundaryMethod = boundaryMethods.mirror;
 		this.fluxMethod = fluxMethods.superbee;
 		this.advectMethod = advectMethods['Riemann / Roe'];
+		this.drawToScreenMethod = drawToScreenMethods.Density;
 	},
 	resetSod : function() {
 		var xIndex = 0;
@@ -1067,7 +1146,6 @@ var Hydro = makeClass({
 				this.vertexPositions[vIndex] = x[xIndex] - centerY; ++vIndex; ++xIndex;
 			}
 		}
-
 	},
 	update : function() {
 		//todo adm or something
@@ -1077,33 +1155,10 @@ var Hydro = makeClass({
 		this.state.update();
 
 		//update geometry z coordinate
-		var q = this.state.q;
-		var pressure = this.state.pressure;
-		var nx = this.state.nx;
-		var e = 0;
-	
-		//density
-		var dataMin = q[0];
-		var dataMax = q[0];
-		//pressure
-		//var dataMin = pressure[0];
-		//var dataMax = pressure[0] + 1e-9;
+		var result = this.state.drawToScreenMethod.call(this);
+		var dataMin = result[0];
+		var dataMax = result[1];
 		
-		var lastDataRange = this.lastDataMax - this.lastDataMin;	
-		for (var j = 0; j < nx; ++j) {
-			for (var i = 0; i < nx; ++i) {
-				//density
-				var s = q[0 + 4 * e];
-				//pressure
-				//var s = pressure[e];
-				
-				if (s < dataMin) dataMin = s;
-				if (s > dataMax) dataMax = s;
-				
-				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
-				++e;
-			}
-		}
 		if (this.updateLastDataRange) {
 			this.lastDataMin = dataMin;
 			this.lastDataMax = dataMax;
@@ -1197,6 +1252,7 @@ $(document).ready(function(){
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	buildSelect('advect-method', 'advectMethod', advectMethods);
+	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
 
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
 	hydro.lastDataMax = Number($('#dataRangeFixedMax').val());

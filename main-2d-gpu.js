@@ -66,7 +66,7 @@ var drawToScreenMethods = {
 	Velocity : 'return length(q.yz) / q.x;',
 	Energy : 'return q.w;',
 	//P = (gamma - 1) rho (eTotal - eKinetic)
-	Pressure : 'return (gamma - 1.) * (q.w - .5 * dot(q.yz, q.yz) / q.x);'
+	Pressure : 'return pressure.x;'
 };
 
 var fluxMethods = {
@@ -716,8 +716,9 @@ function update() {
 	//draw
 	GL.draw();
 	
-	currentColorScheme.bind(0);
-	hydro.state.qTex.bind(1);
+	hydro.state.qTex.bind(0);
+	hydro.state.pressureTex.bind(1);
+	currentColorScheme.bind(2);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
 	GL.unitQuad.draw({
@@ -729,8 +730,9 @@ function update() {
 	});
 
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	hydro.state.qTex.unbind(1);
-	currentColorScheme.unbind(0);
+	currentColorScheme.unbind(2);
+	hydro.state.pressureTex.unbind(1);
+	hydro.state.qTex.unbind(0);
 
 	requestAnimFrame(update);
 }
@@ -1916,25 +1918,28 @@ void main() {
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform sampler2D qTex;
+uniform sampler2D pressureTex;
 uniform sampler2D gradientTex;
 uniform float lastMin, lastMax;
 uniform float gamma;
 */}) + mlstr(function(){/*
-float drawToScreenMethod(vec4 q) {
+float drawToScreenMethod(vec4 q, vec4 pressure) {
 	$drawToScreenMethodCode
 }			
 */}).replace(/\$drawToScreenMethodCode/g, drawToScreenMethodCode)
 + mlstr(function(){/*
 void main() {
 	vec4 q = texture2D(qTex, pos);
-	float v = (drawToScreenMethod(q) - lastMin) / (lastMax - lastMin);
+	vec4 pressure = texture2D(pressureTex, pos);
+	float v = (drawToScreenMethod(q, pressure) - lastMin) / (lastMax - lastMin);
 	gl_FragColor = texture2D(gradientTex, vec2(v, .5)); 
 }	
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				gradientTex : 0,
-				qTex : 1
+				qTex : 0,
+				pressureTex : 1,
+				gradientTex : 2
 			}
 		});
 	});
