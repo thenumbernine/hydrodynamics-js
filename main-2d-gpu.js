@@ -27,7 +27,7 @@ var FloatTexture2D;
 
 var quadVtxBuf, quadObj;
 
-var drawToScreenShader;
+var drawToScreenShader = {};
 
 var kernelVertexShader;
 
@@ -60,6 +60,14 @@ var encodeShader = [];	//[channel]
 
 //coordinate names
 var coordNames = ['x', 'y'];
+
+var drawToScreenMethods = {
+	Density : 'return q.x;',
+	Velocity : 'return length(q.yz) / q.x;',
+	Energy : 'return q.w;',
+	//P = (gamma - 1) rho (eTotal - eKinetic)
+	Pressure : 'return (gamma - 1.) * (q.w - .5 * dot(q.yz, q.yz) / q.x);'
+};
 
 var fluxMethods = {
 	'donor cell' : 'return vec4(0.);',
@@ -382,11 +390,16 @@ var HydroState = makeClass({
 	
 		//riemann /roe
 
-		//common	
+		//common to both
 		shaders.push(computePressureShader);
 		shaders.push(applyPressureToMomentumShader);
 		shaders.push(applyPressureToWorkShader);
-	
+
+		//display
+		$.each(drawToScreenShader, function(k, drawShader) {
+			shaders.push(drawShader);
+		});
+
 		$.each(shaders, function(i,shader) {
 			shader
 				.use()
@@ -534,6 +547,7 @@ var HydroState = makeClass({
 		this.boundaryMethod = 'periodic';
 		this.fluxMethod = 'superbee';
 		this.advectMethod = 'Burgers';
+		this.drawToScreenMethod = 'Density';
 	},
 	resetSod : function() {
 		var thiz = this;
@@ -707,7 +721,7 @@ function update() {
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
 	GL.unitQuad.draw({
-		shader : drawToScreenShader,
+		shader : drawToScreenShader[hydro.state.drawToScreenMethod],
 		uniforms : {
 			lastMin : hydro.lastDataMin,
 			lastMax : hydro.lastDataMax
@@ -1744,6 +1758,7 @@ void main() {
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	//buildSelect('advect-method', 'advectMethod', advectMethods);
+	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
 
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
 	hydro.lastDataMax = Number($('#dataRangeFixedMax').val());
@@ -1790,7 +1805,8 @@ void main() {
 			[0,0,1],
 			[1,1,0],
 			[1,0,0],
-		]
+		],
+		dontRepeat : true
 	});
 
 	var isobarSize = 16;
@@ -1881,8 +1897,8 @@ void main() {
 		});
 	}
 
-	drawToScreenShader = new GL.ShaderProgram({
-		vertexCode : mlstr(function(){/*
+	var drawToScreenVertexShader = new GL.VertexShader({
+		code : GL.vertexPrecision + mlstr(function(){/*
 attribute vec2 vertex;
 varying vec2 pos; 
 uniform mat4 mvMat;
@@ -1890,25 +1906,37 @@ uniform mat4 projMat;
 void main() {
 	pos = vertex;
 	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
-}	
-*/}),
-		vertexPrecision : 'best',
-		fragmentCode : mlstr(function(){/*
+}
+*/})
+	});
+
+	$.each(drawToScreenMethods, function(drawToScreenMethodName, drawToScreenMethodCode) {
+		drawToScreenShader[drawToScreenMethodName] = new GL.ShaderProgram({
+			vertexShader : drawToScreenVertexShader,
+			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform sampler2D qTex;
 uniform sampler2D gradientTex;
 uniform float lastMin, lastMax;
+uniform float gamma;
+*/}) + mlstr(function(){/*
+float drawToScreenMethod(vec4 q) {
+	$drawToScreenMethodCode
+}			
+*/}).replace(/\$drawToScreenMethodCode/g, drawToScreenMethodCode)
++ mlstr(function(){/*
 void main() {
 	vec4 q = texture2D(qTex, pos);
-	float v = (q.x - lastMin) / (lastMax - lastMin);
+	float v = (drawToScreenMethod(q) - lastMin) / (lastMax - lastMin);
 	gl_FragColor = texture2D(gradientTex, vec2(v, .5)); 
 }	
 */}),
-		fragmentPrecision : 'best',
-		uniforms : {
-			gradientTex : 0,
-			qTex : 1
-		}
+			fragmentPrecision : 'best',
+			uniforms : {
+				gradientTex : 0,
+				qTex : 1
+			}
+		});
 	});
 
 	//make grid
