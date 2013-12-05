@@ -46,14 +46,14 @@ var burgersComputeFluxSlopeShader = [];	//[side]
 var burgersComputeFluxShader = {};		//[fluxMethod][side]
 var burgersUpdateStateShader;
 
-var roeComputeInterfaceValues = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
-var roeComputeEigenvalues = [];		//[side]
-var roeComputeEigenvectors = [];	//[side][column state]
-var roeComputeEigenvectorsInverse = [];	//[side][row state]
-var roeComputeMatrix = [];			//[side][column state]
+var roeComputeInterfaceValuesShader = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
+var roeComputeEigenvalueShader = [];		//[side]
+var roeComputeEigenvectorColumnShader = [];	//[side][column state]
+var roeComputeEigenvectorInverseRowShader = [];	//[side][row state]
 var roeComputeInterfaceDeltaQTildeShader = [];	//[side]
 var roeComputeFluxSlopeShader = [];	//[side]
 var roeComputeFluxShader = {};	//[fluxMethod][side]
+var roeUpdateStateShader;
 
 var encodeTempTex;
 var encodeShader = [];	//[channel]
@@ -66,7 +66,8 @@ var drawToScreenMethods = {
 	Velocity : 'return length(q.yz) / q.x;',
 	Energy : 'return q.w;',
 	//P = (gamma - 1) rho (eTotal - eKinetic)
-	Pressure : 'return pressure.x;'
+	Pressure : 'return pressure.x;',
+	Curl : 'return (dFdy(q.y) - dFdx(q.z)) / q.w;'
 };
 
 var fluxMethods = {
@@ -147,8 +148,7 @@ var advectMethods = {
 		calcCFLTimestep : function() {
 			//TODO
 		},	
-		advect : function(dt) {
-			
+		advect : function(dt) {			
 			var dx = (xmax - xmin) / this.nx;
 			var dy = (ymax - ymin) / this.nx;
 			var dxi = [dx, dy];
@@ -196,7 +196,6 @@ var advectMethods = {
 			quadObj.draw({
 				shader : burgersUpdateStateShader,
 				uniforms : {
-					side : side,
 					dt_dx : [
 						dt / dx,
 						dt / dy
@@ -213,156 +212,118 @@ var advectMethods = {
 	},
 	'Riemann / Roe' : {
 		initStep : function() {
-			//TODO reduce to determien CFL
+			for (var side = 0; side < 2; ++side) {
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceValuesTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : roeComputeInterfaceValuesShader[side],
+					texs : [this.qTex]
+				});
+			
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceEigenvalueTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : roeComputeEigenvalueShader[side],
+					texs : [this.qTex, this.interfaceValuesTex[side]]
+				});
+
+				for (var column = 0; column < 4; ++column) {
+					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceEigenvectorColumnTex[side][column].obj, 0);
+					fbo.check();
+					quadObj.draw({
+						shader : roeComputeEigenvectorColumnShader[side][column],
+						texs : [this.qTex, this.interfaceValuesTex[side]]
+					});
+				}
+
+				for (var row = 0; row < 4; ++row) {
+					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceEigenvectorInverseRowTex[side][row].obj, 0);
+					fbo.check();
+					quadObj.draw({
+						shader : roeComputeEigenvectorInverseRowShader[side][row],
+						texs : [this.qTex, this.interfaceValuesTex[side]]
+					});
+				}
+			}
 		},
 		calcCFLTimestep : function() {
-			//TODO
+			//TODO reduce to determine CFL
 		},
 		advect : function(dt) {
-			for (var j = 1; j < this.nx; ++j) {
-				for (var i = 1; i < this.nx; ++i) {
-					for (var side = 0; side < 2; ++side) {
-						for (var state = 0; state < 4; ++state) {
-							//find state change across interface in the basis of the eigenspace at the interface
-							var sum = 0;
-							for (var k = 0; k < 4; ++k) {
-									//reproject into interface eigenspace
-								sum += this.interfaceEigenvectorsInverse[state + 4 * (k + 4 * (side + 2 * (i + (this.nx+1) * j)))]
-									//flux difference
-									* (this.q[k + 4 * (i + this.nx * j)] 
-										- this.q[k + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))])
-							}
-							this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = sum;
-						}
-					}
-				}
-			}
+			var dx = (xmax - xmin) / this.nx;
+			var dy = (ymax - ymin) / this.nx;
+			var dxi = [dx, dy];
 			
-			for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
-				for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
-					for (var side = 0; side < 2; ++side) {
-						for (var state = 0; state < 4; ++state) {
-							var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))];
-							if (Math.abs(interfaceDeltaQTilde) > 0) {
-								if (this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] > 0) {
-									this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
-										this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1])))]
-										/ interfaceDeltaQTilde;
-								} else {
-									this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
-										this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])))]
-										/ interfaceDeltaQTilde;
-								}
-							} else {
-								this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-							}
-						}
-					}
-				}
+			for (var side = 0; side < 2; ++side) {
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceDeltaQTildeTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : roeComputeInterfaceDeltaQTildeShader[side],
+					texs : [
+						this.qTex, 
+						this.interfaceEigenvectorInverseRowTex[side][0],
+						this.interfaceEigenvectorInverseRowTex[side][1],
+						this.interfaceEigenvectorInverseRowTex[side][2],
+						this.interfaceEigenvectorInverseRowTex[side][3]
+					]
+				});
+			}
+
+			for (var side = 0; side < 2; ++side) {
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.rTildeTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : roeComputeFluxSlopeShader[side],
+					texs : [
+						this.interfaceDeltaQTildeTex[side],
+						this.interfaceEigenvalueTex[side]
+					]
+				});
 			}
 	
-			var fluxAvg = [];	//4
-			var fluxTilde = [];	//4
-			var dxi = [];
-			//transform cell q's into cell qTilde's (eigenspace)
-			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-					var dx = this.xi[0 + 2 * (i + (this.nx+1) * j)] 
-						- this.xi[0 + 2 * (i-dirs[0][0] + (this.nx+1) * (j-dirs[0][1]))];
-					var dy = this.xi[1 + 2 * (i + (this.nx+1) * j)] 
-						- this.xi[1 + 2 * (i-dirs[1][0] + (this.nx+1) * (j-dirs[1][1]))];
-					var volume = dx * dy;
-					dxi[0] = dx;
-					dxi[1] = dy;
-					for (var side = 0; side < 2; ++side) {
-						
-						//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
-						//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
-						for (var state = 0; state < 4; ++state) {
-							var sum = 0;
-							for (var k = 0; k < 4; ++k) {
-								sum += this.interfaceMatrix[state + 4 * (k + 4 * (side + 2 * (i + (this.nx+1) * j)))]
-									* (this.q[k + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))]
-										+ this.q[k + 4 * (i + this.nx * j)]);
-							}
-							fluxAvg[state] = .5 * sum;
-						}
-
-						//calculate flux
-						for (var state = 0; state < 4; ++state) {
-							var theta = 0;
-							if (this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] >= 0) {
-								theta = 1;
-							} else {
-								theta = -1;
-							}
-						
-							var phi = this.fluxMethod(this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))]);
-
-							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
-
-							var deltaFluxTilde = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))]
-								* this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))];
-
-							fluxTilde[state] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
-						}
-					
-						//reproject fluxTilde back into q
-						for (var state = 0; state < 4; ++state) {
-							var sum = 0;
-							for (var k = 0; k < 4; ++k) {
-								sum += fluxTilde[k]
-									* this.interfaceEigenvectors[state + 4 * (k + 4 * (side + 2 * (i + (this.nx+1) * j)))];
-							}
-							this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = fluxAvg[state] + sum;
-						}
-					}
-				}
-			}
-		
-			//zero boundary flux
-			//..and keep the boundary r's zero	
-			for (var j = 0; j < this.nghost-1; ++j) {
-				for (var i = 0; i <= this.nx; ++i) {
-					for (var state = 0; state < 4; ++state) {
-						//left
-						this.flux[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
-						//right
-						this.flux[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-						//bottom
-						this.flux[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
-						//top
-						this.flux[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-					}
-				}
+			for (var side = 0; side < 2; ++side) {
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fluxTex[side].obj, 0);
+				fbo.check();
+				quadObj.draw({
+					shader : roeComputeFluxShader[this.fluxMethod][side],
+					uniforms : {
+						dt_dx : dt / dxi[side]
+					},
+					texs : [
+						this.qTex,
+						this.interfaceDeltaQTildeTex[side],
+						this.rTildeTex[side],
+						this.interfaceEigenvalueTex[side],
+						this.interfaceEigenvectorInverseRowTex[side][0],
+						this.interfaceEigenvectorInverseRowTex[side][1],
+						this.interfaceEigenvectorInverseRowTex[side][2],
+						this.interfaceEigenvectorInverseRowTex[side][3],
+						this.interfaceEigenvectorColumnTex[side][0],
+						this.interfaceEigenvectorColumnTex[side][1],
+						this.interfaceEigenvectorColumnTex[side][2],
+						this.interfaceEigenvectorColumnTex[side][3]
+					]
+				});
 			}
 
-			//update cells
-			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
-				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-					var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
-					var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
-					var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
-					
-					var xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
-					var xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
-					var dy = this.xi[xiIndexR] - this.xi[xiIndexL];
-					
-					var volume = dx * dy;
-					dxi[0] = dx;
-					dxi[1] = dy;
-					
-					for (var side = 0; side < 2; ++side) {
-						for (var state = 0; state < 4; ++state) {
-							
-							var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
-							var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
-							var df = this.flux[ifluxR] - this.flux[ifluxL];
-							this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
-						}
-					}
-				}
-			}
+			//update state
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+			fbo.check();
+			quadObj.draw({
+				shader : burgersUpdateStateShader,
+				uniforms : {
+					dt_dx : [
+						dt / dx,
+						dt / dy
+					]
+				},
+				texs : [
+					this.qTex, 
+					this.fluxTex[0], 
+					this.fluxTex[1]
+				]
+			});
+			this.swapQTexs();
 		}
 	}
 };
@@ -389,6 +350,20 @@ var HydroState = makeClass({
 		shaders.push(burgersUpdateStateShader);
 	
 		//riemann /roe
+		shaders = shaders.concat(roeComputeInterfaceValuesShader);
+		shaders = shaders.concat(roeComputeEigenvalueShader);
+		$.each(roeComputeEigenvectorColumnShader, function(k, evShaders) {
+			shaders = shaders.concat(evShaders);
+		});
+		$.each(roeComputeEigenvectorInverseRowShader, function(k, evInvShaders) {
+			shaders = shaders.concat(evInvShaders);
+		});
+		shaders = shaders.concat(roeComputeInterfaceDeltaQTildeShader);
+		shaders = shaders.concat(roeComputeFluxSlopeShader);
+		$.each(roeComputeFluxShader, function(k, fluxShaders) {
+			shaders = shaders.concat(fluxShaders);
+		});
+		shaders.push(roeUpdateStateShader);
 
 		//common to both
 		shaders.push(computePressureShader);
@@ -495,49 +470,42 @@ var HydroState = makeClass({
 		//used for Riemann
 	
 
-		//a_{i-1/2},{j-1/2},side,state,state
-		this.interfaceMatrix = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4 * 4);
-		this.interfaceEigenvalues = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);
-		this.interfaceEigenvectors = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4 * 4);
-		this.interfaceEigenvectorsInverse = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4 * 4);
-		for (var j = 0; j <= this.nx; ++j) {
-			for (var i = 0; i <= this.nx; ++i) {
-				for (var side = 0; side < 2; ++side) {
-					for (var stateJ = 0; stateJ < 4; ++stateJ) {
-						for (var stateI = 0; stateI < 4; ++stateI) {
-							//initialize to identity matrix
-							this.interfaceMatrix[stateI + 4 * (stateJ + 4 * (side + 2 * (i + (this.nx+1) * j)))] = stateI == stateJ ? 1 : 0;
-							this.interfaceEigenvectors[stateI + 4 * (stateJ + 4 * (side + 2 * (i + (this.nx+1) * j)))] = stateI == stateJ ? 1 : 0;
-							this.interfaceEigenvectorsInverse[stateI + 4 * (stateJ + 4 * (side + 2 * (i + (this.nx+1) * j)))] = stateI == stateJ ? 1 : 0;
-						}
-						this.interfaceEigenvalues[stateJ + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-					}
-				}
-			}
+		//v_{i-1/2},{j-1/2},side = [velocity.x, velocity.y, hTotal, speedOfSound]
+		this.interfaceValuesTex = [];
+		for (var side = 0; side < 2; ++side) {
+			this.interfaceValuesTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 
-		//qiTilde_{i-1/2},{j-1/2},side,state	
-		this.interfaceDeltaQTilde = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);
-		for (var j = 0; j <= this.nx; ++j) {
-			for (var i = 0; i <= this.nx; ++i) {
-				for (var side = 0; side < 2; ++side) {
-					for (var state = 0; state < 4; ++state) {
-						this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-					}
-				}
+		//a_{i-1/2},{j-1/2},side,state,state
+		this.interfaceEigenvalueTex  = [];
+		for (var side = 0; side < 2; ++side) {
+			this.interfaceEigenvalueTex[side] = new FloatTexture2D(this.nx, this.nx); 
+		}
+		this.interfaceEigenvectorColumnTex = [];
+		for (var side = 0; side < 2; ++side) {
+			this.interfaceEigenvectorColumnTex[side] = [];
+			for (var state = 0; state < 4; ++state) {
+				this.interfaceEigenvectorColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
 			}
+		}
+		this.interfaceEigenvectorInverseRowTex = [];
+		for (var side = 0; side < 2; ++side) {
+			this.interfaceEigenvectorInverseRowTex[side] = [];
+			for (var state = 0; state < 4; ++state) {
+				this.interfaceEigenvectorInverseRowTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+			}
+		}
+		
+		//qiTilde_{i-1/2},{j-1/2},side,state	
+		this.interfaceDeltaQTildeTex = [];
+		for (var side = 0; side < 2; ++side) {
+			this.interfaceDeltaQTildeTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 
 		//rTilde_{i-1/2},{j-1/2},side,state
-		this.rTilde = new Float32Array((this.nx+1) * (this.nx+1) * 2 * 4);
-		for (var j = 0; j <= this.nx; ++j) {
-			for (var i = 0; i <= this.nx; ++i) {
-				for (var side = 0; side < 2; ++side) {
-					for (var state = 0; state < 4; ++state) {
-						this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-					}
-				}
-			}
+		this.rTildeTex = []; 
+		for (var side = 0; side < 2; ++side) {
+			this.rTildeTex[side] = new FloatTexture2D(this.nx, this.nx); 
 		}
 
 		//number of ghost cells
@@ -1163,7 +1131,7 @@ void main() {
 		//used for Riemann
 
 		$.each(coordNames, function(i,coordName) {
-			roeComputeInterfaceValues[i] = new GL.ShaderProgram({
+			roeComputeInterfaceValuesShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
 				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -1217,7 +1185,7 @@ void main() {
 		});
 
 		$.each(coordNames, function(i,coordName) {	
-			roeComputeEigenvalues[i] = new GL.ShaderProgram({
+			roeComputeEigenvalueShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
 				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -1254,7 +1222,7 @@ void main() {
 			});
 		});
 
-		var roeComputeEigenvectorsColumnCode = [
+		var roeComputeEigenvectorColumnCode = [
 			mlstr(function(){/*
 	//min eigenvector
 	gl_FragColor = vec4(
@@ -1290,9 +1258,9 @@ void main() {
 		];
 
 		$.each(coordNames, function(i,coordName) {	
-			roeComputeEigenvectors[i] = [];
-			$.each(roeComputeEigenvectorsColumnCode, function(j,code) {
-				roeComputeEigenvalues[i][j] = new GL.ShaderProgram({
+			roeComputeEigenvectorColumnShader[i] = [];
+			$.each(roeComputeEigenvectorColumnCode, function(j,code) {
+				roeComputeEigenvectorColumnShader[i][j] = new GL.ShaderProgram({
 					vertexShader : kernelVertexShader,
 					fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -1324,7 +1292,7 @@ void main() {
 			});
 		});
 
-		var roeComputeEigenvectorsInverseRowCode = [
+		var roeComputeEigenvectorInverseRowCode = [
 			mlstr(function(){/*
 	//min row
 	gl_FragColor = vec4(
@@ -1360,9 +1328,9 @@ void main() {
 		];
 
 		$.each(coordNames, function(i,coordName) {	
-			roeComputeEigenvectors[i] = [];
-			$.each(roeComputeEigenvectorsInverseRowCode, function(j,code) {
-				roeComputeEigenvalues[i][j] = new GL.ShaderProgram({
+			roeComputeEigenvectorInverseRowShader[i] = [];
+			$.each(roeComputeEigenvectorInverseRowCode, function(j,code) {
+				roeComputeEigenvectorInverseRowShader[i][j] = new GL.ShaderProgram({
 					vertexShader : kernelVertexShader,
 					fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -1574,6 +1542,10 @@ void main() {
 			});
 		});
 
+		//matches burgersUpdateStateShader
+		roeUpdateStateShader = burgersUpdateStateShader;
+
+
 		//pressure shaders
 		
 
@@ -1765,7 +1737,7 @@ void main() {
 
 	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
-	//buildSelect('advect-method', 'advectMethod', advectMethods);
+	buildSelect('advect-method', 'advectMethod', advectMethods);
 	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
 
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
@@ -1922,6 +1894,7 @@ void main() {
 		drawToScreenShader[drawToScreenMethodName] = new GL.ShaderProgram({
 			vertexShader : drawToScreenVertexShader,
 			fragmentCode : mlstr(function(){/*
+#extension GL_OES_standard_derivatives : enable
 varying vec2 pos;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
