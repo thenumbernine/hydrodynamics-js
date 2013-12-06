@@ -23,6 +23,9 @@ var useCFL = true;
 var fixedDT = .2;
 var mouse;
 
+var externalForceX = 0;
+var externalForceY = 0;
+
 //interface directions
 var dirs = [[1,0], [0,1]];
 
@@ -225,6 +228,33 @@ var drawToScreenMethods = {
 			}
 		}
 		return [dataMin, dataMax];
+	},
+	Curl : function() {
+		var nx = this.state.nx;
+		var q = this.state.q;
+		var dataMin = undefined; 
+		var dataMax = undefined; 
+		var lastDataRange = this.lastDataMax - this.lastDataMin;
+		var e = 0;
+		var dx = (xmax - xmin) / nx;
+		var dy = (ymax - ymin) / nx;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				var rho = q[0 + 4 * e];
+				var mx = q[1 + 4 * e];
+				var my = q[2 + 4 * e];
+				var mxPrev = this.state.q[1 + 4 * ( ((i+nx-1)%nx) + nx * j )];
+				var myPrev = this.state.q[1 + 4 * ( i + nx * ((j+nx-1)%nx) )];
+				var dmx = mx - mxPrev;
+				var dmy = my - myPrev;
+				var s = (dmx / dy - dmy / dx) / rho;
+				if (dataMin === undefined || s < dataMin) dataMin = s;
+				if (dataMax === undefined || s > dataMax) dataMax = s;
+				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
+				++e;
+			}
+		}
+		return [dataMin, dataMax];
 	}
 };
 
@@ -346,12 +376,15 @@ var advectMethods = {
 			var qIndex = 0;
 			for (var j = 0; j < this.nx; ++j) {
 				for (var i = 0; i < this.nx; ++i) {
+					var x = this.x[0 + 2 * (i + this.nx * j)];
+					var y = this.x[1 + 2 * (i + this.nx * j)];
 					var rho = this.q[0 + qIndex];
 					var u = this.q[1 + qIndex] / rho;
 					var v = this.q[2 + qIndex] / rho; 
 					var energyTotal = this.q[3 + qIndex] / rho; 
 					var energyKinetic = .5 * (u * u + v * v);
-					var energyThermal = energyTotal - energyKinetic;
+					var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+					var energyThermal = energyTotal - energyKinetic - energyPotential;
 					var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
 					var dx = this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] - this.xi[0 + 2 * (i + (this.nx+1) * j)];
 					var dy = this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] - this.xi[1 + 2 * (i + (this.nx+1) * j)];
@@ -519,13 +552,19 @@ var advectMethods = {
 			for (var j = 1; j < this.nx; ++j) {
 				for (var i = 1; i < this.nx; ++i) {
 					for (var side = 0; side < 2; ++side) {
+						var xL = side == 0 ? this.xi[0 + 2 * (i + (this.nx+1) * j)] : this.x[0 + 2 * (i + this.nx * j)];
+						var xR = side == 0 ? this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] : this.x[0 + 2 * (i + this.nx * j)];
+						var yL = side == 1 ? this.xi[1 + 2 * (i + (this.nx+1) * j)] : this.x[1 + 2 * (i + this.nx * j)];
+						var yR = side == 1 ? this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] : this.x[1 + 2 * (i + this.nx * j)];
+						
 						var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
 						var densityL = this.q[0 + qIndexL];
 						var velocityXL = this.q[1 + qIndexL] / densityL;
 						var velocityYL = this.q[2 + qIndexL] / densityL;
 						var energyTotalL = this.q[3 + qIndexL] / densityL;
 						var energyKineticL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
-						var energyThermalL = energyTotalL - energyKineticL;
+						var energyPotentialL = (xL - xmin) * externalForceX + (yL - ymin) * externalForceY;
+						var energyThermalL = energyTotalL - energyKineticL - energyPotentialL;
 						var pressureL = (this.gamma - 1) * densityL * energyThermalL;
 						var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
 						var hTotalL = energyTotalL + pressureL / densityL;
@@ -537,7 +576,8 @@ var advectMethods = {
 						var velocityYR = this.q[2 + qIndexR] / densityR;
 						var energyTotalR = this.q[3 + qIndexR] / densityR;
 						var energyKineticR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
-						var energyThermalR = energyTotalR - energyKineticR;
+						var energyPotentialR = (xR - xmin) * externalForceX + (yR - ymin) * externalForceY;
+						var energyThermalR = energyTotalR - energyKineticR - energyPotentialR;
 						var pressureR = (this.gamma - 1) * densityR * energyThermalR;
 						var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
 						var hTotalR = energyTotalR + pressureR / densityR;
@@ -961,7 +1001,8 @@ var HydroState = makeClass({
 					v += (Math.random() - .5) * 2 * .01;
 				}
 				var energyKinetic = .5 * (u * u + v * v);
-				var energyThermal = 1;
+				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+				var energyThermal = 1 - energyPotential;
 				var energyTotal = energyKinetic + energyThermal;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u; 
@@ -992,7 +1033,8 @@ var HydroState = makeClass({
 					v += (Math.random() - .5) * 2 * .01;
 				}
 				var energyKinetic = .5 * (u * u + v * v);
-				var energyThermal = 1;
+				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+				var energyThermal = 1 - energyPotential;
 				var energyTotal = energyKinetic + energyThermal;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u;
@@ -1024,7 +1066,8 @@ var HydroState = makeClass({
 				//eTotal = P / ((gamma - 1) rho) + eKinetic
 				var pressure = 2.5;
 				var energyKinetic = .5 * (u * u + v * v);
-				var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic; 
+				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+				var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic + energyPotential;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u; 
 				this.q[2 + qIndex] = rho * v;
@@ -1034,6 +1077,42 @@ var HydroState = makeClass({
 			}
 		}
 		//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders
+	},
+	//http://www.astro.virginia.edu/VITA/ATHENA/rt.html
+	resetRayleighTaylor : function() {
+		var ymid = .5 * (ymin + ymax);
+		var xIndex = 0;
+		var qIndex = 0;
+		for (var j = 0; j < this.nx; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[0 + xIndex];
+				var y = this.x[1 + xIndex];
+				var yGreaterThanMid = y > ymid;
+				var rho = yGreaterThanMid ? 2 : 1;
+				var u = 0;
+				var v = 0;
+				if (useNoise) {
+					u += (Math.random() - .5) * 2 * .01;
+					v += (Math.random() - .5) * 2 * .01;
+				}
+				//energyPotential = rho g y
+				//eInternal = eTotal - eKinetic - energyPotential
+				//P = (gamma - 1) rho eInternal = (gamma - 1) rho (eTotal - eKinetic - energyPotential)
+				//eTotal = P / ((gamma - 1) rho) + eKinetic + energyPotential
+				var width = x - xmin;
+				var height = y - ymin;
+				var energyPotential = rho * (width * externalForceX + height * externalForceY);
+				var pressure = 2.5 - energyPotential; 
+				var energyKinetic = .5 * (u * u + v * v);
+				var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic + energyPotential;
+				this.q[0 + qIndex] = rho;
+				this.q[1 + qIndex] = rho * u;
+				this.q[2 + qIndex] = rho * v;
+				this.q[3 + qIndex] = rho * energyTotal;
+				xIndex += 2;
+				qIndex += 4;
+			}
+		}
 	},
 	boundary : function() {
 		this.boundaryMethod(this.nx, this.q);
@@ -1054,12 +1133,15 @@ var HydroState = makeClass({
 		var pIndex = 0;
 		for (var j = 0; j < this.nx; ++j) {
 			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[0 + 2 * (i + this.nx * j)];
+				var y = this.x[1 + 2 * (i + this.nx * j)];
 				var rho = this.q[0 + qIndex];
 				var u = this.q[1 + qIndex] / rho; 
 				var v = this.q[2 + qIndex] / rho; 
 				var energyTotal = this.q[3 + qIndex] / rho; 
 				var energyKinetic = .5 * (u * u + v * v);
-				var energyThermal = energyTotal - energyKinetic;
+				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+				var energyThermal = energyTotal - energyKinetic - energyPotential;
 				this.pressure[pIndex] = (this.gamma - 1) * rho * energyThermal;
 				++pIndex;
 				qIndex += 4;
@@ -1223,6 +1305,7 @@ $(document).ready(function(){
 	$('#reset-sod').click(function(){ hydro.state.resetSod(); });
 	$('#reset-wave').click(function(){ hydro.state.resetWave(); });
 	$('#reset-kelvin-hemholtz').click(function(){ hydro.state.resetKelvinHemholtz(); });
+	$('#reset-rayleigh-taylor').click(function(){ hydro.state.resetRayleighTaylor(); });
 
 	$('#use-noise').change(function() {
 		useNoise = $(this).is(':checked');
@@ -1255,6 +1338,18 @@ $(document).ready(function(){
 	buildSelect('advect-method', 'advectMethod', advectMethods);
 	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
 
+	$.each([
+		'externalForceX',
+		'externalForceY',
+	], function(i,varName) {
+		window[varName] = Number($('#'+varName).val());
+		$('#'+varName).change(function() {
+			var v = Number($(this).val());
+			if (v !== v) return;	//NaN
+			window[varName] = v;
+		});
+	});
+	
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
 	hydro.lastDataMax = Number($('#dataRangeFixedMax').val());
 	hydro.updateLastDataRange = true;

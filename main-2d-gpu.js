@@ -70,7 +70,8 @@ var drawToScreenMethods = {
 	Energy : 'return texture2D(qTex, pos).w;',
 	//P = (gamma - 1) rho (eTotal - eKinetic)
 	Pressure : 'return texture2D(pressureTex, pos).x;',
-	Curl : 'vec4 q = texture2D(qTex, pos); return (dFdy(q.y) - dFdx(q.z)) / q.w;'
+	//Curl : 'vec4 q = texture2D(qTex, pos); return (dFdy(q.y) * (rangeMax.x - rangeMin.x) * dpos.x - dFdx(q.z) * (rangeMax.y - rangeMin.y) * dpos.y) / q.w;'
+	Curl : 'vec4 q = texture2D(qTex, pos); return (dFdy(q.y)  - dFdx(q.z)) / q.w;'
 };
 
 var fluxMethods = {
@@ -401,7 +402,9 @@ var HydroState = makeClass({
 				.use()
 				.setUniforms({
 					dpos : dpos,
-					gamma : thiz.gamma
+					gamma : thiz.gamma,
+					rangeMin : [xmin, ymin],
+					rangeMax : [xmax, ymax]
 				})
 				.useNone();
 		});
@@ -2034,11 +2037,14 @@ void main() {
 			fragmentCode : mlstr(function(){/*
 #extension GL_OES_standard_derivatives : enable
 varying vec2 pos;
+uniform vec2 dpos;
+uniform vec2 rangeMin;
+uniform vec2 rangeMax;
+uniform float gamma;
+uniform float lastMin, lastMax;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 uniform sampler2D gradientTex;
-uniform float lastMin, lastMax;
-uniform float gamma;
 */}) + mlstr(function(){/*
 float drawToScreenMethod() {
 	$drawToScreenMethodCode
