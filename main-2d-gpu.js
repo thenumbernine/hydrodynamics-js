@@ -33,6 +33,7 @@ var kernelVertexShader;
 
 var solidShader;
 var copyShader;
+var minReduceShader;
 
 var resetSodShader;
 var resetWaveShader;
@@ -41,16 +42,17 @@ var resetKelvinHemholtzShader;
 var computePressureShader;
 var applyPressureToMomentumShader;
 
+var burgersComputeCFLShader;
 var burgersComputeInterfaceVelocityShader;
 var burgersComputeFluxSlopeShader = [];	//[side]
 var burgersComputeFluxShader = {};		//[fluxMethod][side]
 var burgersUpdateStateShader;
 
+var roeComputeCFLShader;
 var roeComputeRoeValueShader = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
 var roeComputeEigenvalueShader = [];		//[side]
 var roeComputeEigenvectorColumnShader = [];	//[side][column state]
 var roeComputeEigenvectorInverseColumnShader = [];	//[side][column state]
-var roeComputeJacobianColumnShader = [];	//[side][column state]
 var roeComputeDeltaQTildeShader = [];	//[side]
 var roeComputeFluxSlopeShader = [];	//[side]
 var roeComputeFluxShader = {};	//[fluxMethod][side]
@@ -144,10 +146,17 @@ var boundaryMethods = {
 var advectMethods = {
 	Burgers : {
 		initStep : function() {
-			//TODO reduce to determien CFL
 		},
 		calcCFLTimestep : function() {
-			//TODO
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.cflReduceTex.obj, 0);
+			fbo.check();
+			quadObj.draw({
+				shader : burgersComputeCFLShader,
+				texs : [this.qTex]
+			});
+		
+			var result = this.reduceToDetermineCFL();
+			return result;
 		},	
 		advect : function(dt) {			
 			var dx = (xmax - xmin) / this.nx;
@@ -245,19 +254,18 @@ var advectMethods = {
 						texs : [this.qTex, this.roeValueTex[side]]
 					});
 				}
-
-				for (var column = 0; column < 4; ++column) {
-					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.jacobianColumnTex[side][column].obj, 0);
-					fbo.check();
-					quadObj.draw({
-						shader : roeComputeJacobianColumnShader[side][column],
-						texs : [this.qTex, this.roeValueTex[side]]
-					});
-				}
 			}
 		},
 		calcCFLTimestep : function() {
-			//TODO reduce to determine CFL
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.cflReduceTex.obj, 0);
+			fbo.check();
+			quadObj.draw({
+				shader : roeComputeCFLShader,
+				texs : [this.eigenvalueTex[0], this.eigenvalueTex[1]]
+			});
+		
+			var result = this.reduceToDetermineCFL();
+			return result;		
 		},
 		advect : function(dt) {
 			var dx = (xmax - xmin) / this.nx;
@@ -320,7 +328,7 @@ var advectMethods = {
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
-				shader : burgersUpdateStateShader,
+				shader : roeUpdateStateShader,
 				uniforms : {
 					dt_dx : [
 						dt / dx,
@@ -352,6 +360,7 @@ var HydroState = makeClass({
 		var shaders = [];
 
 		//burgers
+		shaders.push(burgersComputeCFLShader);
 		shaders.push(burgersComputeInterfaceVelocityShader);
 		shaders = shaders.concat(burgersComputeFluxSlopeShader);	
 		$.each(burgersComputeFluxShader, function(k, fluxShaders) {
@@ -360,6 +369,7 @@ var HydroState = makeClass({
 		shaders.push(burgersUpdateStateShader);
 	
 		//riemann /roe
+		shaders.push(roeComputeCFLShader);
 		shaders = shaders.concat(roeComputeRoeValueShader);
 		shaders = shaders.concat(roeComputeEigenvalueShader);
 		$.each(roeComputeEigenvectorColumnShader, function(k, evShaders) {
@@ -367,9 +377,6 @@ var HydroState = makeClass({
 		});
 		$.each(roeComputeEigenvectorInverseColumnShader, function(k, evInvShaders) {
 			shaders = shaders.concat(evInvShaders);
-		});
-		$.each(roeComputeJacobianColumnShader, function(k, jShaders) {
-			shaders = shaders.concat(jShaders);
 		});
 		shaders = shaders.concat(roeComputeDeltaQTildeShader);
 		shaders = shaders.concat(roeComputeFluxSlopeShader);
@@ -382,6 +389,7 @@ var HydroState = makeClass({
 		shaders.push(computePressureShader);
 		shaders.push(applyPressureToMomentumShader);
 		shaders.push(applyPressureToWorkShader);
+		shaders.push(minReduceShader);
 
 		//display
 		$.each(drawToScreenShader, function(k, drawShader) {
@@ -465,6 +473,9 @@ var HydroState = makeClass({
 			this.fluxTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 
+		this.cflReduceTex = new FloatTexture2D(this.nx, this.nx);
+		this.nextCFLReduceTex = new FloatTexture2D(this.nx, this.nx);
+
 
 		//used for Burgers
 		
@@ -508,13 +519,7 @@ var HydroState = makeClass({
 				this.eigenvectorInverseColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
 			}
 		}
-		this.jacobianColumnTex = [];
-		for (var side = 0; side < 2; ++side) {
-			this.jacobianColumnTex[side] = [];
-			for (var state = 0; state < 4; ++state) {
-				this.jacobianColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
-			}
-		}	
+		
 		//qiTilde_{i-1/2},{j-1/2},side,state	
 		this.dqTildeTex = [];
 		for (var side = 0; side < 2; ++side) {
@@ -646,11 +651,11 @@ var HydroState = makeClass({
 		//get timestep
 		var dt;
 		if (useCFL) {
-			dt = advectMethods[this.advectMethod].calCFLTimestep.call(this);
+			dt = advectMethods[this.advectMethod].calcCFLTimestep.call(this);
 		} else {
 			dt = fixedDT;
 		}
-
+window.lastDT = dt;
 		//do the update
 		this.step(dt);
 			
@@ -662,7 +667,45 @@ var HydroState = makeClass({
 		var tmp = this.qTex;
 		this.qTex = this.nextQTex;
 		this.nextQTex = this.qTex;
+	},
+
+	//reduce to determine CFL
+	reduceToDetermineCFL : function() {
+		var size = this.nx;
+		while (size > 1) {
+			size /= 2;
+			gl.viewport(0, 0, size, size);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextCFLReduceTex.obj, 0);
+			fbo.check();
+			quadObj.draw({
+				shader : minReduceShader,
+				texs : [this.cflReduceTex]
+			});
+			
+			var tmp = this.cflReduceTex;
+			this.cflReduceTex = this.nextCFLReduceTex;
+			this.nextCFLReduceTex = tmp;
+		}
+	
+		//now that the viewport is 1x1, run the encode shader on it
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, encodeTempTex.obj, 0);
+		fbo.check();
+		quadObj.draw({
+			shader : encodeShader[0],
+			texs : [this.cflReduceTex]
+		});
+
+		var cflUint8Result = new Uint8Array(4);
+		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cflUint8Result);
+		var cflFloat32Result = new Float32Array(cflUint8Result.buffer);
+
+		gl.viewport(0, 0, this.nx, this.nx);
+
+		var result = cflFloat32Result[0] * this.cfl;
+		result *= .5;	//when I write out 1's in the minReduce, I read .5's back here ... hmm ...
+		return result;
 	}
+
 });
 
 
@@ -709,8 +752,8 @@ function update() {
 				eigenvectors[row] = [];
 				eigenvectorInverses[row] = [];
 				for (var column = 0; column < 4; ++column) {
-					eigenvectors[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorColumnTex[side][column], row);
-					eigenvectorInverses[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorInverseColumnTex[side][column], row);
+					eigenvectors[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorColumnTex[side][column], encodeTempTex, row);
+					eigenvectorInverses[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorInverseColumnTex[side][column], encodeTempTex, row);
 				}
 			}
 		
@@ -791,79 +834,17 @@ function buildSelect(id, key, map) {
 	});
 }
 
-//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
-//encode shader test function
-var exp2Table = [
-	2.168404E-19, 4.336809E-19, 8.673617E-19, 1.734723E-18,
-	3.469447E-18, 6.938894E-18, 1.387779E-17, 2.775558E-17,
-	5.551115E-17, 1.110223E-16, 2.220446E-16, 4.440892E-16,
-	8.881784E-16, 1.776357E-15, 3.552714E-15, 7.105427E-15,
-	1.421085E-14, 2.842171E-14, 5.684342E-14, 1.136868E-13,
-	2.273737E-13, 4.547474E-13, 9.094947E-13, 1.818989E-12,
-	3.637979E-12, 7.275958E-12, 1.455192E-11, 2.910383E-11,
-	5.820766E-11, 1.164153E-10, 2.328306E-10, 4.656613E-10,
-	9.313226E-10, 1.862645E-09, 3.725290E-09, 7.450581E-09,
-	1.490116E-08, 2.980232E-08, 5.960464E-08, 1.192093E-07,
-	2.384186E-07, 4.768372E-07, 9.536743E-07, 1.907349E-06,
-	3.814697E-06, 7.629395E-06, 1.525879E-05, 3.051758E-05,
-	6.103516E-05, 1.220703E-04, 2.441406E-04, 4.882812E-04,
-	9.765625E-04, 1.953125E-03, 3.906250E-03, 7.812500E-03,
-	1.562500E-02, 3.125000E-02, 6.250000E-02, 1.250000E-01,
-	2.500000E-01, 5.000000E-01, 1.000000E+00, 2.000000E+00,
-	4.000000E+00, 8.000000E+00, 1.600000E+01, 3.200000E+01,
-	6.400000E+01, 1.280000E+02, 2.560000E+02, 5.120000E+02,
-	1.024000E+03, 2.048000E+03, 4.096000E+03, 8.192000E+03,
-	1.638400E+04, 3.276800E+04, 6.553600E+04, 1.310720E+05,
-	2.621440E+05, 5.242880E+05, 1.048576E+06, 2.097152E+06,
-	4.194304E+06, 8.388608E+06, 1.677722E+07, 3.355443E+07,
-	6.710886E+07, 1.342177E+08, 2.684355E+08, 5.368709E+08,
-	1.073742E+09, 2.147484E+09, 4.294967E+09, 8.589935E+09,
-	1.717987E+10, 3.435974E+10, 6.871948E+10, 1.374390E+11,
-	2.748779E+11, 5.497558E+11, 1.099512E+12, 2.199023E+12,
-	4.398047E+12, 8.796093E+12, 1.759219E+13, 3.518437E+13,
-	7.036874E+13, 1.407375E+14, 2.814750E+14, 5.629500E+14,
-	1.125900E+15, 2.251800E+15, 4.503600E+15, 9.007199E+15,
-	1.801440E+16, 3.602880E+16, 7.205759E+16, 1.441152E+17,
-	2.882304E+17, 5.764608E+17, 1.152922E+18, 2.305843E+18
-];
-function decodeFloatArray(input, output) {
-	var
-		m, e, i_sign,
-		i, i4, len;
-
-	for (i = 0, len = output.length; i < len; i += 1) {
-		i4 = i * 4;
-		m = input[i4 + 1] * 3.921569E-03
-			+ input[i4 + 2] * 1.537870E-05
-			+ input[i4 + 3] * 6.030863E-08;
-		e = input[i4 + 0];
-		i_sign = 0;
-
-		if (e & 0x80) {
-			i_sign = 1;
-			e &= ~0x80;
-		}
-		if (e & 0x40) {
-			m = -m;
-			e &= ~0x40;
-		}
-		if (i_sign) {
-			e = -e;
-		}
-		output[i] = m * exp2Table[e + 62];
-	}
-}
-function getFloatTexData(fbo, tex, channel) {
-	var destUint8Array = new Uint8Array(encodeTempTex.width * encodeTempTex.height * 4);
-	fbo.setColorAttachmentTex2D(0, encodeTempTex);
+function getFloatTexData(fbo, srcTex, destTex, channel) {
+	var destUint8Array = new Uint8Array(destTex.width * destTex.height * 4);
+	fbo.setColorAttachmentTex2D(0, destTex);
 	fbo.draw({
 		callback : function() {
-			gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
+			gl.viewport(0, 0, destTex.width, destTex.height);
 			quadObj.draw({
 				shader : encodeShader[channel],
-				texs : [tex]
+				texs : [srcTex]
 			});
-			gl.readPixels(0, 0, encodeTempTex.width, encodeTempTex.height, encodeTempTex.format, encodeTempTex.type, destUint8Array);
+			gl.readPixels(0, 0, destTex.width, destTex.height, destTex.format, destTex.type, destUint8Array);
 		}
 	});
 	var destFloat32Array = new Float32Array(destUint8Array.buffer);
@@ -1054,6 +1035,37 @@ void main() {
 			//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
 		});
 
+		burgersComputeCFLShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 dpos;
+uniform vec2 rangeMin, rangeMax; 
+uniform float gamma;
+uniform sampler2D qTex;
+void main() {
+	vec4 q = texture2D(qTex, pos);
+	float rho = q.x;
+	vec2 vel = q.yz / rho;
+	float energyTotal = q.w / rho;
+	float energyKinetic = .5 * dot(vel, vel);
+	float energyThermal = energyTotal - energyKinetic;
+	float speedOfSound = sqrt(gamma * (gamma - 1.) * energyThermal);
+	vec2 dxi = (rangeMax - rangeMin) * dpos;
+	vec2 cfl = vec2(
+		dxi.x / (speedOfSound + abs(vel.x)),
+		dxi.y / (speedOfSound + abs(vel.y)));
+	gl_FragColor = vec4(min(cfl.x, cfl.y), 0., 0., 0.);
+}
+*/}),	
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0,
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax]
+			}
+		});
+
 		burgersComputeInterfaceVelocityShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
@@ -1188,6 +1200,39 @@ void main() {
 
 
 		//used for Riemann
+
+		roeComputeCFLShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 dpos;
+uniform vec2 rangeMin;
+uniform vec2 rangeMax;
+uniform sampler2D eigenvalueXTex;
+uniform sampler2D eigenvalueYTex;
+void main() {
+	vec4 eigenvalueX = texture2D(eigenvalueXTex, pos);
+	vec4 eigenvalueY = texture2D(eigenvalueYTex, pos);
+	
+	float minLambdaX = min(0., min(min(eigenvalueX.x, eigenvalueX.y), min(eigenvalueX.z, eigenvalueX.w)));
+	float maxLambdaX = max(0., max(max(eigenvalueX.x, eigenvalueX.y), max(eigenvalueX.z, eigenvalueX.w)));
+	float minLambdaY = min(0., min(min(eigenvalueY.x, eigenvalueY.y), min(eigenvalueY.z, eigenvalueY.w)));
+	float maxLambdaY = max(0., max(max(eigenvalueY.x, eigenvalueY.y), max(eigenvalueY.z, eigenvalueY.w)));
+	
+	vec2 dxi = (rangeMax - rangeMin) * dpos;
+	gl_FragColor = vec4(
+		min( dxi.x / (maxLambdaX - minLambdaX), dxi.y / (maxLambdaY - minLambdaY)),
+		0., 0., 0.);
+}
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				eigenvalueXTex : 0,
+				eigenvalueYTex : 1,
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax]
+			}
+		});
 
 		$.each(coordNames, function(i,coordName) {
 			roeComputeRoeValueShader[i] = new GL.ShaderProgram({
@@ -1421,106 +1466,6 @@ void main() {
 			});
 		});
 
-		var roeComputeJacobianColumnCode = [
-			//left/right
-			[
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		0.,
-		.5 * (gamma - 1.) * velocitySq - velocity.x * velocity.x,
-		-velocity.x * velocity.y,
-		(.5 * (gamma - 1.) * velocitySq - hTotal) * velocity.x);
-*/}),
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		1.,
-		(3. - gamma) * velocity.x,
-		velocity.y,
-		hTotal - (gamma - 1.) * velocity.x * velocity.x);
-*/}),
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		0.,
-		-(gamma - 1.) * velocity.y,
-		velocity.x,
-		-(gamma - 1.) * velocity.x * velocity.y);
-*/}),
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		0.,
-		gamma - 1.,
-		0.,
-		gamma * velocity.x);
-*/})
-			],
-			//up/down
-			[
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		0.,
-		-velocity.x * velocity.y,
-		.5 * (gamma - 1.) * velocitySq - velocity.y * velocity.y,
-		(.5 * (gamma - 1.) * velocitySq - hTotal) * velocity.y);
-*/}),
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		0.,
-		velocity.y,
-		-(gamma - 1.) * velocity.x,
-		-(gamma - 1.) * velocity.x * velocity.y);
-*/}),
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		1.,
-		velocity.x,
-		(3. - gamma) * velocity.y,
-		hTotal - (gamma - 1.) * velocity.y * velocity.y);
-*/}),
-				mlstr(function(){/*
-	gl_FragColor = vec4(
-		0.,
-		0.,
-		gamma - 1.,
-		gamma * velocity.y);
-*/})
-			]
-		];
-	
-		for (var side = 0; side < 2; ++side) {
-			roeComputeJacobianColumnShader[side] = [];
-			for (var column = 0; column < 4; ++column) {
-				var code = roeComputeJacobianColumnCode[side][column];
-				roeComputeJacobianColumnShader[side][column] = new GL.ShaderProgram({
-					vertexShader : kernelVertexShader,
-					fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform float gamma;
-uniform sampler2D qTex;
-uniform sampler2D roeValueTex;
-void main() {
-	vec4 roeValues = texture2D(roeValueTex, pos);
-	vec2 velocity = roeValues.xy;
-	float hTotal = roeValues.z; 
-	float speedOfSound = roeValues.w;
-
-	vec2 normal = vec2(0., 0.);
-	normal[$side] = 1.;
-	vec2 tangent = vec2(-normal.y, normal.x);
-	
-	float velocityN = dot(velocity, normal);
-	float velocityT = dot(velocity, tangent);
-	float velocitySq = dot(velocity, velocity);
-	
-*/}).replace(/\$side/g, side) + code + '\n}',
-					fragmentPrecision : 'best',
-					uniforms : {
-						qTex : 0,
-						roeValueTex : 1
-					}
-				});
-			}
-		}
-
 		$.each(coordNames, function(i, coordName) {
 			roeComputeDeltaQTildeShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
@@ -1621,22 +1566,14 @@ uniform sampler2D qTex;
 uniform sampler2D dqTildeTex;
 uniform sampler2D rTildeTex;
 uniform sampler2D eigenvalueTex;
-uniform sampler2D jacobianCol0Tex;
-uniform sampler2D jacobianCol1Tex;
-uniform sampler2D jacobianCol2Tex;
-uniform sampler2D jacobianCol3Tex;
+uniform sampler2D eigenvectorInverseCol0Tex;
+uniform sampler2D eigenvectorInverseCol1Tex;
+uniform sampler2D eigenvectorInverseCol2Tex;
+uniform sampler2D eigenvectorInverseCol3Tex;
 uniform sampler2D eigenvectorCol0Tex;
 uniform sampler2D eigenvectorCol1Tex;
 uniform sampler2D eigenvectorCol2Tex;
 uniform sampler2D eigenvectorCol3Tex;
-
-mat4 scale(vec4 s) {
-	return mat4(
-		s[0], 0., 0., 0.,
-		0., s[1], 0., 0.,
-		0., 0., s[2], 0.,
-		0., 0., 0., s[3]);
-}
 
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1656,24 +1593,32 @@ void main() {
 		eigenvectorCol1, 
 		eigenvectorCol2, 
 		eigenvectorCol3);
+	
+	vec4 eigenvectorInverseCol0 = texture2D(eigenvectorInverseCol0Tex, pos);
+	vec4 eigenvectorInverseCol1 = texture2D(eigenvectorInverseCol1Tex, pos);
+	vec4 eigenvectorInverseCol2 = texture2D(eigenvectorInverseCol2Tex, pos);
+	vec4 eigenvectorInverseCol3 = texture2D(eigenvectorInverseCol3Tex, pos);
+	mat4 eigenvectorInverseMat = mat4(
+		eigenvectorInverseCol0, 
+		eigenvectorInverseCol1, 
+		eigenvectorInverseCol2, 
+		eigenvectorInverseCol3);
 
-	vec4 jacobianCol0 = texture2D(jacobianCol0Tex, pos);
-	vec4 jacobianCol1 = texture2D(jacobianCol1Tex, pos);
-	vec4 jacobianCol2 = texture2D(jacobianCol2Tex, pos);
-	vec4 jacobianCol3 = texture2D(jacobianCol3Tex, pos);
-	mat4 jacobianMat = mat4(
-		jacobianCol0, 
-		jacobianCol1, 
-		jacobianCol2, 
-		jacobianCol3);
+	mat4 eigenvectorTimesEigenvalueMat = mat4(
+		eigenvectorCol0 * eigenvalues[0], 
+		eigenvectorCol1 * eigenvalues[1], 
+		eigenvectorCol2 * eigenvalues[2], 
+		eigenvectorCol3 * eigenvalues[3]);
 
-	vec4 fluxAvg = jacobianMat * ((q + qPrev) * .5);
+	mat4 interfaceMat = eigenvectorTimesEigenvalueMat * eigenvectorInverseMat;
+
+	vec4 fluxAvg = interfaceMat * ((q + qPrev) * .5);
 
 	vec4 dqTilde = texture2D(dqTildeTex, pos);
 	vec4 rTilde = texture2D(rTildeTex, pos);
+	vec4 phi = fluxMethod(rTilde);
 
 	vec4 theta = step(eigenvalues, vec4(0.)) * 2. - 1.;
-	vec4 phi = fluxMethod(rTilde);
 	vec4 epsilon = eigenvalues * dt_dx;
 	vec4 deltaFluxTilde = eigenvalues * dqTilde;
 	vec4 fluxTilde = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
@@ -1686,10 +1631,10 @@ void main() {
 						dqTildeTex : 1,
 						rTildeTex : 2,
 						eigenvalueTex : 3,
-						jacobianCol0Tex : 4,
-						jacobianCol1Tex : 5,
-						jacobianCol2Tex : 6,
-						jacobianCol3Tex : 7,
+						eigenvectorInverseCol0Tex : 4,
+						eigenvectorInverseCol1Tex : 5,
+						eigenvectorInverseCol2Tex : 6,
+						eigenvectorInverseCol3Tex : 7,
 						eigenvectorCol0Tex : 8,
 						eigenvectorCol1Tex : 9,
 						eigenvectorCol2Tex : 10,
@@ -1840,6 +1785,28 @@ void main() {
 			}
 		});
 
+		minReduceShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform vec2 dpos;
+uniform sampler2D srcTex;
+void main() {
+	vec4 srcA = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(.5, .5));
+	vec4 srcB = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(1.5, .5));
+	vec4 srcC = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(.5, 1.5));
+	vec4 srcD = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(1.5, 1.5));
+	gl_FragColor = vec4(
+		min(min(srcA.x, srcB.x), min(srcC.x, srcD.x)),
+		0., 0., 0.);
+}
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				srcTex : 0
+			}
+		});
+
 		fbo = new GL.Framebuffer({
 			width : this.nx,
 			height : this.nx
@@ -1918,7 +1885,21 @@ void main() {
 		if (hydro.updateLastDataRange) return;
 		hydro.lastDataMax = Number($('#dataRangeFixedMax').val()); 
 	});
-
+	
+	$('#timeStepCFLBased').change(function() {
+		if (!$(this).is(':checked')) return;
+		useCFL = true;
+	});
+	$('#timeStepCFL').val(hydro.state.cfl);
+	$('#timeStepCFL').change(function() {
+		var v = Number($(this).val());
+		if (v != v) return;
+		hydro.state.cfl = v;
+	});
+	$('#timeStepFixed').change(function() {
+		if (!$(this).is(':checked')) return;
+		useCFL = false;
+	});
 	$('#timeStepValue').val(fixedDT);
 	$('#timeStepValue').change(function() {
 		var v = Number($(this).val());
@@ -2142,7 +2123,7 @@ void main() {
 	var coords = [];
 	var maxErr = [];
 	for (var channel = 0; channel < 4; ++channel) {
-		coords[channel] = getFloatTexData(fbo, tmpTex, channel);
+		coords[channel] = getFloatTexData(fbo, tmpTex, encodeTempTex, channel);
 		maxErr[channel] = 0;
 	}
 	for (var j = 0; j < nx; ++j) {

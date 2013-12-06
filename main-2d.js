@@ -362,6 +362,7 @@ var advectMethods = {
 					qIndex += 4;
 				}
 			}
+
 			return this.cfl * mindum;
 		},
 		advect : function(dt) {
