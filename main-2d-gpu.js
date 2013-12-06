@@ -49,7 +49,8 @@ var burgersUpdateStateShader;
 var roeComputeRoeValueShader = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
 var roeComputeEigenvalueShader = [];		//[side]
 var roeComputeEigenvectorColumnShader = [];	//[side][column state]
-var roeComputeEigenvectorInverseColumnShader = [];	//[side][row state]
+var roeComputeEigenvectorInverseColumnShader = [];	//[side][column state]
+var roeComputeJacobianColumnShader = [];	//[side][column state]
 var roeComputeDeltaQTildeShader = [];	//[side]
 var roeComputeFluxSlopeShader = [];	//[side]
 var roeComputeFluxShader = {};	//[fluxMethod][side]
@@ -244,6 +245,15 @@ var advectMethods = {
 						texs : [this.qTex, this.roeValueTex[side]]
 					});
 				}
+
+				for (var column = 0; column < 4; ++column) {
+					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.jacobianColumnTex[side][column].obj, 0);
+					fbo.check();
+					quadObj.draw({
+						shader : roeComputeJacobianColumnShader[side][column],
+						texs : [this.qTex, this.roeValueTex[side]]
+					});
+				}
 			}
 		},
 		calcCFLTimestep : function() {
@@ -357,6 +367,9 @@ var HydroState = makeClass({
 		});
 		$.each(roeComputeEigenvectorInverseColumnShader, function(k, evInvShaders) {
 			shaders = shaders.concat(evInvShaders);
+		});
+		$.each(roeComputeJacobianColumnShader, function(k, jShaders) {
+			shaders = shaders.concat(jShaders);
 		});
 		shaders = shaders.concat(roeComputeDeltaQTildeShader);
 		shaders = shaders.concat(roeComputeFluxSlopeShader);
@@ -495,7 +508,13 @@ var HydroState = makeClass({
 				this.eigenvectorInverseColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
 			}
 		}
-		
+		this.jacobianColumnTex = [];
+		for (var side = 0; side < 2; ++side) {
+			this.jacobianColumnTex[side] = [];
+			for (var state = 0; state < 4; ++state) {
+				this.jacobianColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+			}
+		}	
 		//qiTilde_{i-1/2},{j-1/2},side,state	
 		this.dqTildeTex = [];
 		for (var side = 0; side < 2; ++side) {
@@ -678,6 +697,47 @@ function update() {
 	//iterate
 	hydro.update();
 
+	/*
+	//extract eigenvector and inverse textures
+	if (hydro.state.advectMethod == 'Riemann / Roe') {
+		var nx = hydro.state.nx;
+		var maxmaxerr = 0;
+		for (var side = 0; side < 2; ++side) {
+			var eigenvectors = [];
+			var eigenvectorInverses = [];
+			for (var row = 0; row < 4; ++row) {
+				eigenvectors[row] = [];
+				eigenvectorInverses[row] = [];
+				for (var column = 0; column < 4; ++column) {
+					eigenvectors[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorColumnTex[side][column], row);
+					eigenvectorInverses[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorInverseColumnTex[side][column], row);
+				}
+			}
+		
+			//now test them all
+			for (var i = 0; i < 4; ++i) {
+				for (var j = 0; j < 4; ++j) {
+					var maxErr = 0;
+					for (var e = 0; e < nx * nx; ++e) {
+						var s = 0;
+						for (var k = 0; k < 4; ++k) {
+							s += eigenvectors[i][k][e] * eigenvectorInverses[k][j][e];
+						}
+						if (i == j) s--;
+						maxErr = Math.max(maxErr, Math.abs(s));
+					}
+					maxmaxerr = Math.max(maxmaxerr, maxErr);
+					console.log('side',side,'coord',i,j,'maxerr',maxErr);
+				}
+			}
+		}
+		console.log('greatest max err',maxmaxerr);
+		console.log('done!');
+		hydro.state.advectMethod = 'Burgers';
+	//looks like we're close to the identity matrix, but we're getting some error, and it's building in the system
+	}
+	*/
+
 	//reset viewport
 	gl.viewport(0, 0, GL.canvas.width, GL.canvas.height);
 	
@@ -796,7 +856,6 @@ function decodeFloatArray(input, output) {
 function getFloatTexData(fbo, tex, channel) {
 	var destUint8Array = new Uint8Array(encodeTempTex.width * encodeTempTex.height * 4);
 	fbo.setColorAttachmentTex2D(0, encodeTempTex);
-	console.log(encodeTempTex);
 	fbo.draw({
 		callback : function() {
 			gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
@@ -1362,6 +1421,106 @@ void main() {
 			});
 		});
 
+		var roeComputeJacobianColumnCode = [
+			//left/right
+			[
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		0.,
+		.5 * (gamma - 1.) * velocitySq - velocity.x * velocity.x,
+		-velocity.x * velocity.y,
+		(.5 * (gamma - 1.) * velocitySq - hTotal) * velocity.x);
+*/}),
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		1.,
+		(3. - gamma) * velocity.x,
+		velocity.y,
+		hTotal - (gamma - 1.) * velocity.x * velocity.x);
+*/}),
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		0.,
+		-(gamma - 1.) * velocity.y,
+		velocity.x,
+		-(gamma - 1.) * velocity.x * velocity.y);
+*/}),
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		0.,
+		gamma - 1.,
+		0.,
+		gamma * velocity.x);
+*/})
+			],
+			//up/down
+			[
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		0.,
+		-velocity.x * velocity.y,
+		.5 * (gamma - 1.) * velocitySq - velocity.y * velocity.y,
+		(.5 * (gamma - 1.) * velocitySq - hTotal) * velocity.y);
+*/}),
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		0.,
+		velocity.y,
+		-(gamma - 1.) * velocity.x,
+		-(gamma - 1.) * velocity.x * velocity.y);
+*/}),
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		1.,
+		velocity.x,
+		(3. - gamma) * velocity.y,
+		hTotal - (gamma - 1.) * velocity.y * velocity.y);
+*/}),
+				mlstr(function(){/*
+	gl_FragColor = vec4(
+		0.,
+		0.,
+		gamma - 1.,
+		gamma * velocity.y);
+*/})
+			]
+		];
+	
+		for (var side = 0; side < 2; ++side) {
+			roeComputeJacobianColumnShader[side] = [];
+			for (var column = 0; column < 4; ++column) {
+				var code = roeComputeJacobianColumnCode[side][column];
+				roeComputeJacobianColumnShader[side][column] = new GL.ShaderProgram({
+					vertexShader : kernelVertexShader,
+					fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform float gamma;
+uniform sampler2D qTex;
+uniform sampler2D roeValueTex;
+void main() {
+	vec4 roeValues = texture2D(roeValueTex, pos);
+	vec2 velocity = roeValues.xy;
+	float hTotal = roeValues.z; 
+	float speedOfSound = roeValues.w;
+
+	vec2 normal = vec2(0., 0.);
+	normal[$side] = 1.;
+	vec2 tangent = vec2(-normal.y, normal.x);
+	
+	float velocityN = dot(velocity, normal);
+	float velocityT = dot(velocity, tangent);
+	float velocitySq = dot(velocity, velocity);
+	
+*/}).replace(/\$side/g, side) + code + '\n}',
+					fragmentPrecision : 'best',
+					uniforms : {
+						qTex : 0,
+						roeValueTex : 1
+					}
+				});
+			}
+		}
+
 		$.each(coordNames, function(i, coordName) {
 			roeComputeDeltaQTildeShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
@@ -1462,10 +1621,10 @@ uniform sampler2D qTex;
 uniform sampler2D dqTildeTex;
 uniform sampler2D rTildeTex;
 uniform sampler2D eigenvalueTex;
-uniform sampler2D eigenvectorInverseCol0Tex;
-uniform sampler2D eigenvectorInverseCol1Tex;
-uniform sampler2D eigenvectorInverseCol2Tex;
-uniform sampler2D eigenvectorInverseCol3Tex;
+uniform sampler2D jacobianCol0Tex;
+uniform sampler2D jacobianCol1Tex;
+uniform sampler2D jacobianCol2Tex;
+uniform sampler2D jacobianCol3Tex;
 uniform sampler2D eigenvectorCol0Tex;
 uniform sampler2D eigenvectorCol1Tex;
 uniform sampler2D eigenvectorCol2Tex;
@@ -1498,20 +1657,17 @@ void main() {
 		eigenvectorCol2, 
 		eigenvectorCol3);
 
-	vec4 eigenvectorInverseCol0 = texture2D(eigenvectorInverseCol0Tex, pos);
-	vec4 eigenvectorInverseCol1 = texture2D(eigenvectorInverseCol1Tex, pos);
-	vec4 eigenvectorInverseCol2 = texture2D(eigenvectorInverseCol2Tex, pos);
-	vec4 eigenvectorInverseCol3 = texture2D(eigenvectorInverseCol3Tex, pos);
-	mat4 eigenvectorInverseMat = mat4(
-		eigenvectorInverseCol0, 
-		eigenvectorInverseCol1, 
-		eigenvectorInverseCol2, 
-		eigenvectorInverseCol3);
+	vec4 jacobianCol0 = texture2D(jacobianCol0Tex, pos);
+	vec4 jacobianCol1 = texture2D(jacobianCol1Tex, pos);
+	vec4 jacobianCol2 = texture2D(jacobianCol2Tex, pos);
+	vec4 jacobianCol3 = texture2D(jacobianCol3Tex, pos);
+	mat4 jacobianMat = mat4(
+		jacobianCol0, 
+		jacobianCol1, 
+		jacobianCol2, 
+		jacobianCol3);
 
-	mat4 eigenvalueMat = scale(eigenvalues);
-	mat4 interfaceMat = eigenvectorMat * eigenvalueMat * eigenvectorInverseMat;
-
-	vec4 fluxAvg = interfaceMat * ((q + qPrev) * .5);
+	vec4 fluxAvg = jacobianMat * ((q + qPrev) * .5);
 
 	vec4 dqTilde = texture2D(dqTildeTex, pos);
 	vec4 rTilde = texture2D(rTildeTex, pos);
@@ -1530,10 +1686,10 @@ void main() {
 						dqTildeTex : 1,
 						rTildeTex : 2,
 						eigenvalueTex : 3,
-						eigenvectorInverseCol0Tex : 4,
-						eigenvectorInverseCol1Tex : 5,
-						eigenvectorInverseCol2Tex : 6,
-						eigenvectorInverseCol3Tex : 7,
+						jacobianCol0Tex : 4,
+						jacobianCol1Tex : 5,
+						jacobianCol2Tex : 6,
+						jacobianCol3Tex : 7,
 						eigenvectorCol0Tex : 8,
 						eigenvectorCol1Tex : 9,
 						eigenvectorCol2Tex : 10,
@@ -1952,7 +2108,7 @@ void main() {
 	onresize();
 	update();
 
-return;
+
 	//check ...	
 	var checkCoordAccuracyShader = new GL.ShaderProgram({
 		vertexShader : kernelVertexShader,
