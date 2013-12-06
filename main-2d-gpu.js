@@ -46,11 +46,11 @@ var burgersComputeFluxSlopeShader = [];	//[side]
 var burgersComputeFluxShader = {};		//[fluxMethod][side]
 var burgersUpdateStateShader;
 
-var roeComputeInterfaceValuesShader = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
+var roeComputeRoeValueShader = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
 var roeComputeEigenvalueShader = [];		//[side]
 var roeComputeEigenvectorColumnShader = [];	//[side][column state]
-var roeComputeEigenvectorInverseRowShader = [];	//[side][row state]
-var roeComputeInterfaceDeltaQTildeShader = [];	//[side]
+var roeComputeEigenvectorInverseColumnShader = [];	//[side][row state]
+var roeComputeDeltaQTildeShader = [];	//[side]
 var roeComputeFluxSlopeShader = [];	//[side]
 var roeComputeFluxShader = {};	//[fluxMethod][side]
 var roeUpdateStateShader;
@@ -62,12 +62,12 @@ var encodeShader = [];	//[channel]
 var coordNames = ['x', 'y'];
 
 var drawToScreenMethods = {
-	Density : 'return q.x;',
-	Velocity : 'return length(q.yz) / q.x;',
-	Energy : 'return q.w;',
+	Density : 'return texture2D(qTex, pos).x;',
+	Velocity : 'vec4 q = texture2D(qTex, pos); return length(q.yz) / q.x;',
+	Energy : 'return texture2D(qTex, pos).w;',
 	//P = (gamma - 1) rho (eTotal - eKinetic)
-	Pressure : 'return pressure.x;',
-	Curl : 'return (dFdy(q.y) - dFdx(q.z)) / q.w;'
+	Pressure : 'return texture2D(pressureTex, pos).x;',
+	Curl : 'vec4 q = texture2D(qTex, pos); return (dFdy(q.y) - dFdx(q.z)) / q.w;'
 };
 
 var fluxMethods = {
@@ -213,35 +213,35 @@ var advectMethods = {
 	'Riemann / Roe' : {
 		initStep : function() {
 			for (var side = 0; side < 2; ++side) {
-				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceValuesTex[side].obj, 0);
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.roeValueTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
-					shader : roeComputeInterfaceValuesShader[side],
+					shader : roeComputeRoeValueShader[side],
 					texs : [this.qTex]
 				});
 			
-				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceEigenvalueTex[side].obj, 0);
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvalueTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
 					shader : roeComputeEigenvalueShader[side],
-					texs : [this.qTex, this.interfaceValuesTex[side]]
+					texs : [this.qTex, this.roeValueTex[side]]
 				});
 
 				for (var column = 0; column < 4; ++column) {
-					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceEigenvectorColumnTex[side][column].obj, 0);
+					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvectorColumnTex[side][column].obj, 0);
 					fbo.check();
 					quadObj.draw({
 						shader : roeComputeEigenvectorColumnShader[side][column],
-						texs : [this.qTex, this.interfaceValuesTex[side]]
+						texs : [this.qTex, this.roeValueTex[side]]
 					});
 				}
 
-				for (var row = 0; row < 4; ++row) {
-					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceEigenvectorInverseRowTex[side][row].obj, 0);
+				for (var column = 0; column < 4; ++column) {
+					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvectorInverseColumnTex[side][column].obj, 0);
 					fbo.check();
 					quadObj.draw({
-						shader : roeComputeEigenvectorInverseRowShader[side][row],
-						texs : [this.qTex, this.interfaceValuesTex[side]]
+						shader : roeComputeEigenvectorInverseColumnShader[side][column],
+						texs : [this.qTex, this.roeValueTex[side]]
 					});
 				}
 			}
@@ -255,16 +255,16 @@ var advectMethods = {
 			var dxi = [dx, dy];
 			
 			for (var side = 0; side < 2; ++side) {
-				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.interfaceDeltaQTildeTex[side].obj, 0);
+				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dqTildeTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
-					shader : roeComputeInterfaceDeltaQTildeShader[side],
+					shader : roeComputeDeltaQTildeShader[side],
 					texs : [
 						this.qTex, 
-						this.interfaceEigenvectorInverseRowTex[side][0],
-						this.interfaceEigenvectorInverseRowTex[side][1],
-						this.interfaceEigenvectorInverseRowTex[side][2],
-						this.interfaceEigenvectorInverseRowTex[side][3]
+						this.eigenvectorInverseColumnTex[side][0],
+						this.eigenvectorInverseColumnTex[side][1],
+						this.eigenvectorInverseColumnTex[side][2],
+						this.eigenvectorInverseColumnTex[side][3]
 					]
 				});
 			}
@@ -275,8 +275,8 @@ var advectMethods = {
 				quadObj.draw({
 					shader : roeComputeFluxSlopeShader[side],
 					texs : [
-						this.interfaceDeltaQTildeTex[side],
-						this.interfaceEigenvalueTex[side]
+						this.dqTildeTex[side],
+						this.eigenvalueTex[side]
 					]
 				});
 			}
@@ -291,17 +291,17 @@ var advectMethods = {
 					},
 					texs : [
 						this.qTex,
-						this.interfaceDeltaQTildeTex[side],
+						this.dqTildeTex[side],
 						this.rTildeTex[side],
-						this.interfaceEigenvalueTex[side],
-						this.interfaceEigenvectorInverseRowTex[side][0],
-						this.interfaceEigenvectorInverseRowTex[side][1],
-						this.interfaceEigenvectorInverseRowTex[side][2],
-						this.interfaceEigenvectorInverseRowTex[side][3],
-						this.interfaceEigenvectorColumnTex[side][0],
-						this.interfaceEigenvectorColumnTex[side][1],
-						this.interfaceEigenvectorColumnTex[side][2],
-						this.interfaceEigenvectorColumnTex[side][3]
+						this.eigenvalueTex[side],
+						this.eigenvectorInverseColumnTex[side][0],
+						this.eigenvectorInverseColumnTex[side][1],
+						this.eigenvectorInverseColumnTex[side][2],
+						this.eigenvectorInverseColumnTex[side][3],
+						this.eigenvectorColumnTex[side][0],
+						this.eigenvectorColumnTex[side][1],
+						this.eigenvectorColumnTex[side][2],
+						this.eigenvectorColumnTex[side][3]
 					]
 				});
 			}
@@ -350,15 +350,15 @@ var HydroState = makeClass({
 		shaders.push(burgersUpdateStateShader);
 	
 		//riemann /roe
-		shaders = shaders.concat(roeComputeInterfaceValuesShader);
+		shaders = shaders.concat(roeComputeRoeValueShader);
 		shaders = shaders.concat(roeComputeEigenvalueShader);
 		$.each(roeComputeEigenvectorColumnShader, function(k, evShaders) {
 			shaders = shaders.concat(evShaders);
 		});
-		$.each(roeComputeEigenvectorInverseRowShader, function(k, evInvShaders) {
+		$.each(roeComputeEigenvectorInverseColumnShader, function(k, evInvShaders) {
 			shaders = shaders.concat(evInvShaders);
 		});
-		shaders = shaders.concat(roeComputeInterfaceDeltaQTildeShader);
+		shaders = shaders.concat(roeComputeDeltaQTildeShader);
 		shaders = shaders.concat(roeComputeFluxSlopeShader);
 		$.each(roeComputeFluxShader, function(k, fluxShaders) {
 			shaders = shaders.concat(fluxShaders);
@@ -471,35 +471,35 @@ var HydroState = makeClass({
 	
 
 		//v_{i-1/2},{j-1/2},side = [velocity.x, velocity.y, hTotal, speedOfSound]
-		this.interfaceValuesTex = [];
+		this.roeValueTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.interfaceValuesTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.roeValueTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 
 		//a_{i-1/2},{j-1/2},side,state,state
-		this.interfaceEigenvalueTex  = [];
+		this.eigenvalueTex  = [];
 		for (var side = 0; side < 2; ++side) {
-			this.interfaceEigenvalueTex[side] = new FloatTexture2D(this.nx, this.nx); 
+			this.eigenvalueTex[side] = new FloatTexture2D(this.nx, this.nx); 
 		}
-		this.interfaceEigenvectorColumnTex = [];
+		this.eigenvectorColumnTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.interfaceEigenvectorColumnTex[side] = [];
+			this.eigenvectorColumnTex[side] = [];
 			for (var state = 0; state < 4; ++state) {
-				this.interfaceEigenvectorColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+				this.eigenvectorColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
 			}
 		}
-		this.interfaceEigenvectorInverseRowTex = [];
+		this.eigenvectorInverseColumnTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.interfaceEigenvectorInverseRowTex[side] = [];
+			this.eigenvectorInverseColumnTex[side] = [];
 			for (var state = 0; state < 4; ++state) {
-				this.interfaceEigenvectorInverseRowTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+				this.eigenvectorInverseColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
 			}
 		}
 		
 		//qiTilde_{i-1/2},{j-1/2},side,state	
-		this.interfaceDeltaQTildeTex = [];
+		this.dqTildeTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.interfaceDeltaQTildeTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.dqTildeTex[side] = new FloatTexture2D(this.nx, this.nx);
 		}
 
 		//rTilde_{i-1/2},{j-1/2},side,state
@@ -1131,7 +1131,7 @@ void main() {
 		//used for Riemann
 
 		$.each(coordNames, function(i,coordName) {
-			roeComputeInterfaceValuesShader[i] = new GL.ShaderProgram({
+			roeComputeRoeValueShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
 				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
@@ -1191,9 +1191,9 @@ void main() {
 varying vec2 pos;
 uniform float gamma;
 uniform sampler2D qTex;
-uniform sampler2D roeTex;
+uniform sampler2D roeValueTex;
 void main() {
-	vec4 roeValues = texture2D(roeTex, pos);
+	vec4 roeValues = texture2D(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
 	float hTotal = roeValues.z; 
 	float speedOfSound = roeValues.w;
@@ -1217,7 +1217,7 @@ void main() {
 				fragmentPrecision : 'best',
 				uniforms : {
 					qTex : 0,
-					roeTex : 1
+					roeValueTex : 1
 				}
 			});
 		});
@@ -1266,9 +1266,9 @@ void main() {
 varying vec2 pos;
 uniform float gamma;
 uniform sampler2D qTex;
-uniform sampler2D roeTex;
+uniform sampler2D roeValueTex;
 void main() {
-	vec4 roeValues = texture2D(roeTex, pos);
+	vec4 roeValues = texture2D(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
 	float hTotal = roeValues.z; 
 	float speedOfSound = roeValues.w;
@@ -1286,59 +1286,60 @@ void main() {
 					fragmentPrecision : 'best',
 					uniforms : {
 						qTex : 0,
-						roeTex : 1
+						roeValueTex : 1
 					}
 				});
 			});
 		});
 
-		var roeComputeEigenvectorInverseRowCode = [
+		/*
+		rows are min, mid normal, mid tangent, max
+		but I'm going to write these out in columns for easier reconstruction of the original matrix 
+		... at least I think it'll be easier
+		*/
+		var roeComputeEigenvectorInverseColumnCode = [
 			mlstr(function(){/*
-	//min row
 	gl_FragColor = vec4(
-		(.5 * (gamma - 1.) * velocitySq + speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound),
-		-(normal.x * speedOfSound + (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound),
-		-(normal.y * speedOfSound + (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound),
-		(gamma - 1.) / (2. * speedOfSound * speedOfSound));
+		(.5 * (gamma - 1.) * velocitySq + speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound),	//ei_0,0
+		1. - .5 * (gamma - 1.) * velocitySq / (speedOfSound * speedOfSound),	//ei_1,0
+		-velocityT, //ei_2,0
+		(.5 * (gamma - 1.) * velocitySq - speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound));	//ei_3,0
 */}),
 			mlstr(function(){/*
-	//mid normal row
 	gl_FragColor = vec4(
-		1. - .5 * (gamma - 1.) * velocitySq / (speedOfSound * speedOfSound),
-		(gamma - 1.) * velocity.x / (speedOfSound * speedOfSound),
-		(gamma - 1.) * velocity.y / (speedOfSound * speedOfSound),
-		-(gamma - 1.) / (speedOfSound * speedOfSound));
+		-(normal.x * speedOfSound + (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound),	//ei_0,1
+		(gamma - 1.) * velocity.x / (speedOfSound * speedOfSound),	//ei_1,1
+		tangent.x,	//ei_2,1
+		(normal.x * speedOfSound - (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound));	//ei_3,1
 */}),
 			mlstr(function(){/*
-	//mid tangent row
 	gl_FragColor = vec4(
-		-velocityT, 
-		tangent.x,
-		tangent.y,
-		0.);
+		-(normal.y * speedOfSound + (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound),	//ei_0,2
+		(gamma - 1.) * velocity.y / (speedOfSound * speedOfSound),	//ei_1,2
+		tangent.y,	//ei_2,2
+		(normal.y * speedOfSound - (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound));	//ei_3,2
 */}),
 			mlstr(function(){/*
-	//max row
 	gl_FragColor = vec4(
-		(.5 * (gamma - 1.) * velocitySq - speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound),
-		(normal.x * speedOfSound - (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound),
-		(normal.y * speedOfSound - (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound),
-		(gamma - 1.) / (2. * speedOfSound * speedOfSound));
+		(gamma - 1.) / (2. * speedOfSound * speedOfSound),	//ei_0,3
+		-(gamma - 1.) / (speedOfSound * speedOfSound),	//ei_1,3
+		0.,	//ei_2,3
+		(gamma - 1.) / (2. * speedOfSound * speedOfSound));	//ei_3,3
 */})
 		];
 
 		$.each(coordNames, function(i,coordName) {	
-			roeComputeEigenvectorInverseRowShader[i] = [];
-			$.each(roeComputeEigenvectorInverseRowCode, function(j,code) {
-				roeComputeEigenvectorInverseRowShader[i][j] = new GL.ShaderProgram({
+			roeComputeEigenvectorInverseColumnShader[i] = [];
+			$.each(roeComputeEigenvectorInverseColumnCode, function(j,code) {
+				roeComputeEigenvectorInverseColumnShader[i][j] = new GL.ShaderProgram({
 					vertexShader : kernelVertexShader,
 					fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform float gamma;
 uniform sampler2D qTex;
-uniform sampler2D roeTex;
+uniform sampler2D roeValueTex;
 void main() {
-	vec4 roeValues = texture2D(roeTex, pos);
+	vec4 roeValues = texture2D(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
 	float hTotal = roeValues.z; 
 	float speedOfSound = roeValues.w;
@@ -1355,51 +1356,51 @@ void main() {
 					fragmentPrecision : 'best',
 					uniforms : {
 						qTex : 0,
-						roeTex : 1
+						roeValueTex : 1
 					}
 				});
 			});
 		});
 
 		$.each(coordNames, function(i, coordName) {
-			roeComputeInterfaceDeltaQTildeShader[i] = new GL.ShaderProgram({
+			roeComputeDeltaQTildeShader[i] = new GL.ShaderProgram({
 				vertexShader : kernelVertexShader,
 				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 dpos;
 uniform sampler2D qTex;
-uniform sampler2D eigenvectorInverseRow0Tex;
-uniform sampler2D eigenvectorInverseRow1Tex;
-uniform sampler2D eigenvectorInverseRow2Tex;
-uniform sampler2D eigenvectorInverseRow3Tex;
+uniform sampler2D eigenvectorInverseCol0Tex;
+uniform sampler2D eigenvectorInverseCol1Tex;
+uniform sampler2D eigenvectorInverseCol2Tex;
+uniform sampler2D eigenvectorInverseCol3Tex;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
 
-	vec4 eigenvectorInverseRow0 = texture2D(eigenvectorInverseRow0Tex, pos);
-	vec4 eigenvectorInverseRow1 = texture2D(eigenvectorInverseRow1Tex, pos);
-	vec4 eigenvectorInverseRow2 = texture2D(eigenvectorInverseRow2Tex, pos);
-	vec4 eigenvectorInverseRow3 = texture2D(eigenvectorInverseRow3Tex, pos);
+	vec4 eigenvectorInverseCol0 = texture2D(eigenvectorInverseCol0Tex, pos);
+	vec4 eigenvectorInverseCol1 = texture2D(eigenvectorInverseCol1Tex, pos);
+	vec4 eigenvectorInverseCol2 = texture2D(eigenvectorInverseCol2Tex, pos);
+	vec4 eigenvectorInverseCol3 = texture2D(eigenvectorInverseCol3Tex, pos);
+	mat4 eigenvectorInverse = mat4(
+		eigenvectorInverseCol0,
+		eigenvectorInverseCol1,
+		eigenvectorInverseCol2,
+		eigenvectorInverseCol3);
 
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 	vec4 q = texture2D(qTex, pos);
 	vec4 dq = q - qPrev;
 
-	gl_FragColor = vec4(
-		dot(eigenvectorInverseRow0, dq),
-		dot(eigenvectorInverseRow1, dq),
-		dot(eigenvectorInverseRow2, dq),
-		dot(eigenvectorInverseRow3, dq)
-	);
+	gl_FragColor = eigenvectorInverse * dq;
 }
 */}).replace(/\$side/g, i),
 				fragmentPrecision : 'best',
 				uniforms : {
 					qTex : 0,
-					eigenvectorInverseRow0Tex : 1,
-					eigenvectorInverseRow1Tex : 2,
-					eigenvectorInverseRow2Tex : 3,
-					eigenvectorInverseRow3Tex : 4
+					eigenvectorInverseCol0Tex : 1,
+					eigenvectorInverseCol1Tex : 2,
+					eigenvectorInverseCol2Tex : 3,
+					eigenvectorInverseCol3Tex : 4
 				}
 			});
 		});	
@@ -1422,7 +1423,7 @@ void main() {
 */}) + [0,1,2,3].map(function(j) {
 	return mlstr(function(){/*
 	if (abs(dqTilde[$j]) > 0.) {
-		if (eigenvalues[$j] >= 0.) {
+		if (eigenvalues[$j] > 0.) {
 			gl_FragColor[$j] = dqTildePrev[$j] / dqTilde[$j];
 		} else {
 			gl_FragColor[$j] = dqTildeNext[$j] / dqTilde[$j];
@@ -1461,22 +1462,14 @@ uniform sampler2D qTex;
 uniform sampler2D dqTildeTex;
 uniform sampler2D rTildeTex;
 uniform sampler2D eigenvalueTex;
-uniform sampler2D eigenvectorInverseRow0Tex;
-uniform sampler2D eigenvectorInverseRow1Tex;
-uniform sampler2D eigenvectorInverseRow2Tex;
-uniform sampler2D eigenvectorInverseRow3Tex;
+uniform sampler2D eigenvectorInverseCol0Tex;
+uniform sampler2D eigenvectorInverseCol1Tex;
+uniform sampler2D eigenvectorInverseCol2Tex;
+uniform sampler2D eigenvectorInverseCol3Tex;
 uniform sampler2D eigenvectorCol0Tex;
 uniform sampler2D eigenvectorCol1Tex;
 uniform sampler2D eigenvectorCol2Tex;
 uniform sampler2D eigenvectorCol3Tex;
-
-mat4 transpose(mat4 m) {
-	return mat4(
-		m[0][0], m[1][0], m[2][0], m[3][0],
-		m[0][1], m[1][1], m[2][1], m[3][1],
-		m[0][2], m[1][2], m[2][2], m[3][2],
-		m[0][3], m[1][3], m[2][3], m[3][3]);
-}
 
 mat4 scale(vec4 s) {
 	return mat4(
@@ -1499,24 +1492,32 @@ void main() {
 	vec4 eigenvectorCol1 = texture2D(eigenvectorCol1Tex, pos);
 	vec4 eigenvectorCol2 = texture2D(eigenvectorCol2Tex, pos);
 	vec4 eigenvectorCol3 = texture2D(eigenvectorCol3Tex, pos);
-	mat4 eigenvectorMat = mat4(eigenvectorCol0, eigenvectorCol1, eigenvectorCol2, eigenvectorCol3);
+	mat4 eigenvectorMat = mat4(
+		eigenvectorCol0, 
+		eigenvectorCol1, 
+		eigenvectorCol2, 
+		eigenvectorCol3);
 
-	vec4 eigenvectorInverseRow0 = texture2D(eigenvectorInverseRow0Tex, pos);
-	vec4 eigenvectorInverseRow1 = texture2D(eigenvectorInverseRow1Tex, pos);
-	vec4 eigenvectorInverseRow2 = texture2D(eigenvectorInverseRow2Tex, pos);
-	vec4 eigenvectorInverseRow3 = texture2D(eigenvectorInverseRow3Tex, pos);
-	mat4 eigenvectorInverseMatTr = mat4(eigenvectorInverseRow0, eigenvectorInverseRow1, eigenvectorInverseRow2, eigenvectorInverseRow3);
-	mat4 eigenvectorInverseMat = transpose(eigenvectorInverseMatTr );
+	vec4 eigenvectorInverseCol0 = texture2D(eigenvectorInverseCol0Tex, pos);
+	vec4 eigenvectorInverseCol1 = texture2D(eigenvectorInverseCol1Tex, pos);
+	vec4 eigenvectorInverseCol2 = texture2D(eigenvectorInverseCol2Tex, pos);
+	vec4 eigenvectorInverseCol3 = texture2D(eigenvectorInverseCol3Tex, pos);
+	mat4 eigenvectorInverseMat = mat4(
+		eigenvectorInverseCol0, 
+		eigenvectorInverseCol1, 
+		eigenvectorInverseCol2, 
+		eigenvectorInverseCol3);
 
-	mat4 interfaceMat = eigenvectorMat * scale(eigenvalues);
-	interfaceMat = interfaceMat * eigenvectorInverseMat;
+	mat4 eigenvalueMat = scale(eigenvalues);
+	mat4 interfaceMat = eigenvectorMat * eigenvalueMat * eigenvectorInverseMat;
 
-	vec4 fluxAvg = interfaceMat * (q + qPrev) * .5;
+	vec4 fluxAvg = interfaceMat * ((q + qPrev) * .5);
 
 	vec4 dqTilde = texture2D(dqTildeTex, pos);
+	vec4 rTilde = texture2D(rTildeTex, pos);
 
-	vec4 theta = step(eigenvalues, vec4(0.));
-	vec4 phi = fluxMethod(theta);
+	vec4 theta = step(eigenvalues, vec4(0.)) * 2. - 1.;
+	vec4 phi = fluxMethod(rTilde);
 	vec4 epsilon = eigenvalues * dt_dx;
 	vec4 deltaFluxTilde = eigenvalues * dqTilde;
 	vec4 fluxTilde = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
@@ -1526,13 +1527,13 @@ void main() {
 					fragmentPrecision : 'best',
 					uniforms : {
 						qTex : 0,
-						rTildeTex : 1,
-						dqTildeTex : 2,
+						dqTildeTex : 1,
+						rTildeTex : 2,
 						eigenvalueTex : 3,
-						eigenvectorInverseRow0Tex : 4,
-						eigenvectorInverseRow1Tex : 5,
-						eigenvectorInverseRow2Tex : 6,
-						eigenvectorInverseRow3Tex : 7,
+						eigenvectorInverseCol0Tex : 4,
+						eigenvectorInverseCol1Tex : 5,
+						eigenvectorInverseCol2Tex : 6,
+						eigenvectorInverseCol3Tex : 7,
 						eigenvectorCol0Tex : 8,
 						eigenvectorCol1Tex : 9,
 						eigenvectorCol2Tex : 10,
@@ -1781,7 +1782,7 @@ void main() {
 	colorSchemes.Heat = new GL.GradientTexture({
 		width:256, 
 		colors:[
-			[0,0,.5],
+			[0,0,0],
 			[0,0,1],
 			[1,1,0],
 			[1,0,0],
@@ -1902,15 +1903,13 @@ uniform sampler2D gradientTex;
 uniform float lastMin, lastMax;
 uniform float gamma;
 */}) + mlstr(function(){/*
-float drawToScreenMethod(vec4 q, vec4 pressure) {
+float drawToScreenMethod() {
 	$drawToScreenMethodCode
 }			
 */}).replace(/\$drawToScreenMethodCode/g, drawToScreenMethodCode)
 + mlstr(function(){/*
 void main() {
-	vec4 q = texture2D(qTex, pos);
-	vec4 pressure = texture2D(pressureTex, pos);
-	float v = (drawToScreenMethod(q, pressure) - lastMin) / (lastMax - lastMin);
+	float v = (drawToScreenMethod() - lastMin) / (lastMax - lastMin);
 	gl_FragColor = texture2D(gradientTex, vec2(v, .5)); 
 }	
 */}),
