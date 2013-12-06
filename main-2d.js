@@ -1154,10 +1154,19 @@ var HydroState = makeClass({
 				var qIndex = 4 * (i + this.nx * j);
 				for (var side = 0; side < 2; ++side) {
 					var plusIndex = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
+					var centerIndex = i + this.nx * j;
 					var minusIndex = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-					this.q[1+side + qIndex] -= dt 
-						* (this.pressure[plusIndex] - this.pressure[minusIndex]) 
-						/ (this.x[side + 2 * plusIndex] - this.x[side + 2 * minusIndex]);
+					var dPressure = this.pressure[plusIndex] - this.pressure[minusIndex];
+					var dx = this.x[side + 2 * plusIndex] - this.x[side + 2 * minusIndex];
+					var rho = this.q[0 + 4 * centerIndex];
+					var xPrev = this.x[0 + 2 * minusIndex];
+					var yPrev = this.x[1 + 2 * minusIndex];
+					var xNext = this.x[0 + 2 * plusIndex];
+					var yNext = this.x[1 + 2 * plusIndex];
+					var energyPotentialNext = (xNext - xmin) * externalForceX + (yNext - ymin) * externalForceY;
+					var energyPotentialPrev = (xPrev - xmin) * externalForceX + (yPrev - ymin) * externalForceY;
+					var dEnergyPotential = energyPotentialNext - energyPotentialPrev;
+					this.q[1+side + qIndex] -= dt / dx * (dPressure + rho * dEnergyPotential);
 				}
 			}
 		}
