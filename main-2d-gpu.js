@@ -107,16 +107,7 @@ var fluxMethods = {
 var boundaryMethods = {
 	periodic : function() {
 		//set all lookup texture wraps to REPEAT
-		$.each([
-			this.qTex,
-			this.nextQTex,
-			this.pressureTex,
-			this.fluxTex[0],
-			this.fluxTex[1],
-			this.rTex[0],
-			this.rTex[1],
-			this.uiTex
-		], function(i, tex) {
+		$.each(this.allFloatTexs, function(i, tex) {
 			tex.bind();
 			tex.setWrap({s : gl.REPEAT, t : gl.REPEAT});
 		});
@@ -132,16 +123,7 @@ var boundaryMethods = {
 	*/
 	freeflow : function(nx,q) {
 		//set all lookup texture wraps to ... CLAMP
-		$.each([
-			this.qTex,
-			this.nextQTex,
-			this.pressureTex,
-			this.fluxTex[0],
-			this.fluxTex[1],
-			this.rTex[0],
-			this.rTex[1],
-			this.uiTex
-		], function(i, tex) {
+		$.each(this.allFloatTexs, function(i, tex) {
 			tex.bind();
 			tex.setWrap({s : gl.CLAMP_TO_EDGE, t : gl.CLAMP_TO_EDGE});
 		});
@@ -413,6 +395,8 @@ var HydroState = makeClass({
 			}
 		});
 
+		this.allFloatTexs = [];
+
 		//I'm skipping on x_i,j
 		//Instead just use the uniforms xmin, xmax, ymin, ymax
 
@@ -426,12 +410,15 @@ var HydroState = makeClass({
 		//q_i,j,2: momentum: rho * v
 		//q_i,j,3: work: rho * e
 		this.qTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
+		this.allFloatTexs.push(this.qTex);
 		this.nextQTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
+		this.allFloatTexs.push(this.nextQTex);
 
 		this.resetSod();
 		
 		//p_i,j: pressure
 		this.pressureTex = new FloatTexture2D(this.nx, this.nx);
+		this.allFloatTexs.push(this.pressureTex);
 
 		//TODO it is tempting to merge r, f, and ui into an edge structure
 		//and associate them with the nodes on either side of them,
@@ -441,10 +428,13 @@ var HydroState = makeClass({
 		this.fluxTex = [];
 		for (var side = 0; side < 2; ++side) {
 			this.fluxTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.allFloatTexs.push(this.fluxTex[side]);
 		}
 
 		this.cflReduceTex = new FloatTexture2D(this.nx, this.nx);
+		this.allFloatTexs.push(this.cflReduceTex);
 		this.nextCFLReduceTex = new FloatTexture2D(this.nx, this.nx);
+		this.allFloatTexs.push(this.nextCFLReduceTex);
 
 
 		//used for Burgers
@@ -454,11 +444,13 @@ var HydroState = makeClass({
 		this.rTex = [];
 		for (var side = 0; side < 2; ++side) {
 			this.rTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.allFloatTexs.push(this.rTex[side]);
 		}
 		
 		//only used with Burger's eqn advection code
 		//u_{i-1/2},{j-1/2},dim: interface velocity
 		this.uiTex = new FloatTexture2D(this.nx, this.nx);
+		this.allFloatTexs.push(this.uiTex);
 
 
 		//used for Riemann
@@ -468,38 +460,41 @@ var HydroState = makeClass({
 		this.roeValueTex = [];
 		for (var side = 0; side < 2; ++side) {
 			this.roeValueTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.allFloatTexs.push(this.roeValueTex[side]);
 		}
 
 		//a_{i-1/2},{j-1/2},side,state,state
 		this.eigenvalueTex  = [];
 		for (var side = 0; side < 2; ++side) {
 			this.eigenvalueTex[side] = new FloatTexture2D(this.nx, this.nx); 
+			this.allFloatTexs.push(this.eigenvalueTex[side]);
 		}
 		this.eigenvectorColumnTex = [];
 		for (var side = 0; side < 2; ++side) {
 			this.eigenvectorColumnTex[side] = [];
 			for (var state = 0; state < 4; ++state) {
 				this.eigenvectorColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+				this.allFloatTexs.push(this.eigenvectorColumnTex[side][state]);
 			}
 		}
 		this.eigenvectorInverseColumnTex = [];
 		for (var side = 0; side < 2; ++side) {
 			this.eigenvectorInverseColumnTex[side] = [];
 			for (var state = 0; state < 4; ++state) {
-				this.eigenvectorInverseColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+				this.allFloatTexs.push(this.eigenvectorInverseColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx));
 			}
 		}
 		
 		//qiTilde_{i-1/2},{j-1/2},side,state	
 		this.dqTildeTex = [];
 		for (var side = 0; side < 2; ++side) {
-			this.dqTildeTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.allFloatTexs.push(this.dqTildeTex[side] = new FloatTexture2D(this.nx, this.nx));
 		}
 
 		//rTilde_{i-1/2},{j-1/2},side,state
 		this.rTildeTex = []; 
 		for (var side = 0; side < 2; ++side) {
-			this.rTildeTex[side] = new FloatTexture2D(this.nx, this.nx); 
+			this.allFloatTexs.push(this.rTildeTex[side] = new FloatTexture2D(this.nx, this.nx)); 
 		}
 
 		//number of ghost cells
