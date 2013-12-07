@@ -33,6 +33,9 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 - CFL is inaccurate.  something about the reduce kernel, if you have the fragment write out 1's, the float32 texture reader gets back .5
 - implicit Jacobi
 
+2D unstructured? 3D? 3D-GPU? 3D-unstructured? 3D-GPU-unstructured?
+
+
 all:
 - swappable equations of state
 	- MHD

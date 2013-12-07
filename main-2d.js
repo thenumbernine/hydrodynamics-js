@@ -1089,8 +1089,8 @@ var HydroState = makeClass({
 				}
 				var energyKinetic = .5 * (u * u + v * v);
 				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-				var energyThermal = 1 - energyPotential;
-				var energyTotal = energyKinetic + energyThermal;
+				var energyThermal = 1;
+				var energyTotal = energyKinetic + energyThermal + energyPotential;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u; 
 				this.q[2 + qIndex] = rho * v; 
@@ -1121,8 +1121,8 @@ var HydroState = makeClass({
 				}
 				var energyKinetic = .5 * (u * u + v * v);
 				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-				var energyThermal = 1 - energyPotential;
-				var energyTotal = energyKinetic + energyThermal;
+				var energyThermal = 1;
+				var energyTotal = energyKinetic + energyThermal + energyPotential;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u;
 				this.q[2 + qIndex] = rho * v;
@@ -1149,8 +1149,10 @@ var HydroState = makeClass({
 					u += (Math.random() - .5) * 2 * .01;
 					v += (Math.random() - .5) * 2 * .01;
 				}
-				//P = (gamma - 1) rho (eTotal - eKinetic)
-				//eTotal = P / ((gamma - 1) rho) + eKinetic
+				//P = (gamma - 1) rho (eTotal - eKinetic - ePotential)
+				//eTotal = P / ((gamma - 1) rho) + eKinetic + ePotential
+				//eTotal = eThermal + eKinetic + ePotential
+				//eThermal = P / ((gamma - 1) rho)
 				var pressure = 2.5;
 				var energyKinetic = .5 * (u * u + v * v);
 				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
@@ -1175,7 +1177,7 @@ var HydroState = makeClass({
 				var x = this.x[0 + xIndex];
 				var y = this.x[1 + xIndex];
 				var yGreaterThanMid = y > ymid;
-				var rho = yGreaterThanMid ? 2 : 1;
+				var rho = 1;//yGreaterThanMid ? 2 : 1;
 				var u = 0;
 				var v = 0;
 				if (useNoise) {
@@ -1183,13 +1185,13 @@ var HydroState = makeClass({
 					v += (Math.random() - .5) * 2 * .01;
 				}
 				//energyPotential = rho g y
-				//eInternal = eTotal - eKinetic - energyPotential
-				//P = (gamma - 1) rho eInternal = (gamma - 1) rho (eTotal - eKinetic - energyPotential)
+				//eThermal = eTotal - eKinetic - energyPotential
+				//P = (gamma - 1) rho eThermal = (gamma - 1) rho (eTotal - eKinetic - energyPotential)
 				//eTotal = P / ((gamma - 1) rho) + eKinetic + energyPotential
 				var width = x - xmin;
 				var height = y - ymin;
-				var energyPotential = rho * (width * externalForceX + height * externalForceY);
-				var pressure = 2.5 - energyPotential; 
+				var energyPotential = width * externalForceX + height * externalForceY;
+				var pressure = 2.5 - rho * energyPotential; 
 				var energyKinetic = .5 * (u * u + v * v);
 				var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic + energyPotential;
 				this.q[0 + qIndex] = rho;
@@ -1239,28 +1241,21 @@ var HydroState = makeClass({
 		}
 		
 		//apply momentum diffusion = pressure
+		var externalForce = [externalForceX, externalForceY];
 		for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 				var qIndex = 4 * (i + this.nx * j);
 				for (var side = 0; side < 2; ++side) {
 					var plusIndex = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
-					var centerIndex = i + this.nx * j;
 					var minusIndex = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
 					var dPressure = this.pressure[plusIndex] - this.pressure[minusIndex];
 					var dx = this.x[side + 2 * plusIndex] - this.x[side + 2 * minusIndex];
-					var rho = this.q[0 + 4 * centerIndex];
-					var xPrev = this.x[0 + 2 * minusIndex];
-					var yPrev = this.x[1 + 2 * minusIndex];
-					var xNext = this.x[0 + 2 * plusIndex];
-					var yNext = this.x[1 + 2 * plusIndex];
-					var energyPotentialNext = (xNext - xmin) * externalForceX + (yNext - ymin) * externalForceY;
-					var energyPotentialPrev = (xPrev - xmin) * externalForceX + (yPrev - ymin) * externalForceY;
-					var dEnergyPotential = energyPotentialNext - energyPotentialPrev;
-					this.q[1+side + qIndex] -= dt / dx * (dPressure + rho * dEnergyPotential);
+					var rho = this.q[0 + qIndex];
+					this.q[1+side + qIndex] -= dt * (dPressure / dx + rho * externalForce[side]);
 				}
 			}
 		}
-
+		
 		//apply work diffusion = momentum
 		var dxi = [];
 		for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
@@ -1269,12 +1264,15 @@ var HydroState = makeClass({
 				for (var side = 0; side < 2; ++side) {
 					var plusIndex = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
 					var minusIndex = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+					var dx = this.x[side + 2 * plusIndex] - this.x[side + 2 * minusIndex];
 					//this is pulling the coordinate associated with the interface's direction
 					//a more robust method would be to take both velocity components and dot them with the interface tangent
 					var uR = this.q[1+side + 4 * plusIndex] / this.q[0 + 4 * plusIndex];
 					var uL = this.q[1+side + 4 * minusIndex] / this.q[0 + 4 * minusIndex];
-					this.q[3 + qIndex] -= dt * (this.pressure[plusIndex] * uR - this.pressure[minusIndex] * uL) 
-								/ (this.x[side + 2 * plusIndex] - this.x[side + 2 * minusIndex]);
+					var pressureR = this.pressure[plusIndex];
+					var pressureL = this.pressure[minusIndex];
+					var momentum = this.q[1+side + qIndex];
+					this.q[3 + qIndex] -= dt * ((pressureR * uR - pressureL * uL) / dx + momentum * externalForce[side]);
 				}
 			}
 		}
@@ -1543,11 +1541,12 @@ $(document).ready(function(){
 	colorSchemes.Heat = new GL.GradientTexture({
 		width:256, 
 		colors:[
-			[0,0,.5],
+			[0,0,0],
 			[0,0,1],
 			[1,1,0],
 			[1,0,0],
-		]
+		],
+		dontRepeat : true
 	});
 
 	var isobarSize = 16;
