@@ -380,33 +380,41 @@ var boundaryMethods = {
 	constant : {
 		top : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
-				for (var state = 0; state < 4; ++state) {
-					q[state + 4 * (i + nx * (0))] = boundaryTopConstantValue;
-					q[state + 4 * (i + nx * (1))] = boundaryTopConstantValue;
+				for (var state = 0; state <= 2; ++state) {
+					q[state + 4 * (i + nx * (0))] = q[state + 4 * (i + nx * (1))] = q[state + 4 * (i + nx * (2))];
+				}
+				for (var offset = 0; offset <= 1; ++offset) {
+					q[3 + 4 * (i + nx * offset)] = boundaryTopConstantValue;
 				}
 			}
 		},
 		left : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
-				for (var state = 0; state < 4; ++state) {
-					q[state + 4 * (0 + nx * i)] = boundaryLeftConstantValue;
-					q[state + 4 * (1 + nx * i)] = boundaryLeftConstantValue;
+				for (var state = 0; state <= 2; ++state) {
+					q[state + 4 * (0 + nx * i)] = q[state + 4 * (1 + nx * i)] = q[state + 4 * (2 + nx * i)];
+				}
+				for (var offset = 0; offset <= 1; ++offset) {
+					q[3 + 4 * (offset + nx * i)] = boundaryLeftConstantValue;
 				}
 			}
 		},
 		right : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
-				for (var state = 0; state < 4; ++state) {
-					q[state + 4 * (nx-2 + nx * i)] = boundaryRightConstantValue;
-					q[state + 4 * (nx-1 + nx * i)] = boundaryRightConstantValue;
+				for (var state = 0; state <= 2; ++state) {
+					q[state + 4 * (nx-1 + nx * i)] = q[state + 4 * (nx-2 + nx * i)] = q[state + 4 * (nx-3 + nx * i)];
+				}
+				for (var offset = 0; offset <= 1; ++offset) {
+					q[3 + 4 * (nx-1-offset + nx * i)] = boundaryRightConstantValue;
 				}
 			}
 		},
 		bottom : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
-				for (var state = 0; state < 4; ++state) {
-					q[state + 4 * (i + nx * (nx-2))] = boundaryBottomConstantValue;
-					q[state + 4 * (i + nx * (nx-1))] = boundaryBottomConstantValue;
+				for (var state = 0; state <= 2; ++state) {
+					q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * (nx-3))];
+				}
+				for (var offset = 0; offset <= 1; ++offset) {
+					q[3 + 4 * (i + nx * (nx-1-offset))] = boundaryBottomConstantValue;
 				}
 			}
 		}

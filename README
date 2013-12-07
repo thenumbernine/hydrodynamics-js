@@ -6,3 +6,36 @@ Almost got a Roe solver, or I do but I know I still have to iron some kinks out 
 sources: 
 the "Hydrodynamics II" book found online here: http://www.mpia-hd.mpg.de/homes/dullemon/lectures/hydrodynamicsII/ 
 cfd codes: (haven't used these yet, but I want to) http://www.cfdbooks.com/cfdcodes.html 
+"Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro
+http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
+
+
+
+	TODO
+
+1D:
+- more implicit options? fixed point?  some Newton/Levenberg Marquardt/BFGS stuff?
+
+2D:
+- constant boundary still buggy
+- hydrostatic pressure still buggy
+	- get Rayleigh-Taylor instability demo working
+- arbitrary boundaries possibly from a boundary buffer
+	- Von Karman vortex street demo
+- mouse input for velocity and for boundary painting
+- FBO-based advection or particle simulation for streamline tracing
+- implicit Gauss-Seidel
+
+2D-GPU
+- hydrostatic pressure at all
+- constant boundary options at all
+- Riemann solver is unstable -- eigenbasis accuracy issues
+- CFL is inaccurate.  something about the reduce kernel, if you have the fragment write out 1's, the float32 texture reader gets back .5
+- implicit Jacobi
+
+all:
+- swappable equations of state
+	- MHD
+	- ADM
+	- elastic solids?
+- AMR
