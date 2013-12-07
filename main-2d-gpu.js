@@ -22,10 +22,15 @@ var fixedDT = .00025;
 
 var mouse;
 
+var externalForceX = 0;
+var externalForceY = 0;
+
 var fbo;
 var FloatTexture2D;
 
 var quadVtxBuf, quadObj;
+		
+var allShaders = [];
 
 var drawToScreenShader = {};
 
@@ -357,54 +362,16 @@ var HydroState = makeClass({
 
 		var dpos = [1/this.nx, 1/this.nx];
 		
-		//provide default dpos values to shaders
-		var shaders = [];
-
-		//burgers
-		shaders.push(burgersComputeCFLShader);
-		shaders.push(burgersComputeInterfaceVelocityShader);
-		shaders = shaders.concat(burgersComputeFluxSlopeShader);	
-		$.each(burgersComputeFluxShader, function(k, fluxShaders) {
-			shaders = shaders.concat(fluxShaders);
-		});
-		shaders.push(burgersUpdateStateShader);
-	
-		//riemann /roe
-		shaders.push(roeComputeCFLShader);
-		shaders = shaders.concat(roeComputeRoeValueShader);
-		shaders = shaders.concat(roeComputeEigenvalueShader);
-		$.each(roeComputeEigenvectorColumnShader, function(k, evShaders) {
-			shaders = shaders.concat(evShaders);
-		});
-		$.each(roeComputeEigenvectorInverseColumnShader, function(k, evInvShaders) {
-			shaders = shaders.concat(evInvShaders);
-		});
-		shaders = shaders.concat(roeComputeDeltaQTildeShader);
-		shaders = shaders.concat(roeComputeFluxSlopeShader);
-		$.each(roeComputeFluxShader, function(k, fluxShaders) {
-			shaders = shaders.concat(fluxShaders);
-		});
-		shaders.push(roeUpdateStateShader);
-
-		//common to both
-		shaders.push(computePressureShader);
-		shaders.push(applyPressureToMomentumShader);
-		shaders.push(applyPressureToWorkShader);
-		shaders.push(minReduceShader);
-
-		//display
-		$.each(drawToScreenShader, function(k, drawShader) {
-			shaders.push(drawShader);
-		});
-
-		$.each(shaders, function(i,shader) {
+		//provide default dpos values to allShaders
+		$.each(allShaders, function(i,shader) {
 			shader
 				.use()
 				.setUniforms({
 					dpos : dpos,
 					gamma : thiz.gamma,
 					rangeMin : [xmin, ymin],
-					rangeMax : [xmax, ymax]
+					rangeMax : [xmax, ymax],
+					externalForce : [externalForceX, externalForceY]
 				})
 				.useNone();
 		});
@@ -623,6 +590,7 @@ var HydroState = makeClass({
 		quadObj.draw({
 			shader : applyPressureToMomentumShader,
 			uniforms : {
+				dt : dt,
 				dt_dx : [dt / dx, dt / dy]
 			},
 			texs : [this.qTex, this.pressureTex]
@@ -635,6 +603,7 @@ var HydroState = makeClass({
 		quadObj.draw({
 			shader : applyPressureToWorkShader,
 			uniforms : {
+				dt : dt,
 				dt_dx : [dt / dx, dt / dy]
 			},
 			texs : [this.qTex, this.pressureTex]
@@ -937,6 +906,7 @@ varying vec2 pos;
 uniform sampler2D randomTex;
 uniform vec2 rangeMin; 
 uniform vec2 rangeMax; 
+uniform vec2 externalForce;
 uniform float noiseAmplitude;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -952,8 +922,9 @@ void main() {
 	vec2 vel = vec2(0., 0.);
 	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
 	float energyKinetic = .5 * dot(vel, vel);
+	float energyPotential = dot(gridPos - rangeMin, externalForce);
 	float energyThermal = 1.;
-	float energyTotal = energyKinetic + energyThermal;
+	float energyTotal = energyKinetic + energyThermal + energyPotential;
 	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }		
 */}),
@@ -972,6 +943,7 @@ varying vec2 pos;
 uniform sampler2D randomTex;
 uniform vec2 rangeMin; 
 uniform vec2 rangeMax; 
+uniform vec2 externalForce;
 uniform float noiseAmplitude;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -983,8 +955,9 @@ void main() {
 	vec2 vel = vec2(0., 0.);
 	vel.xy += (texture2D(randomTex, pos).xy - .5) * 2. * noiseAmplitude;
 	float energyKinetic = .5 * dot(vel, vel);
+	float energyPotential = dot(gridPos - rangeMin, externalForce);
 	float energyThermal = 1.;
-	float energyTotal = energyKinetic + energyThermal;
+	float energyTotal = energyKinetic + energyThermal + energyPotential;
 	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }		
 */}),
@@ -1004,6 +977,7 @@ uniform sampler2D randomTex;
 uniform vec2 rangeMin; 
 uniform vec2 rangeMax; 
 uniform float noiseAmplitude;
+uniform vec2 externalForce;
 uniform float gamma;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1025,7 +999,8 @@ void main() {
 	//eTotal = P / ((gamma - 1) rho) + eKinetic
 	float pressure = 2.5;
 	float energyKinetic = .5 * dot(vel, vel);
-	float energyTotal = pressure / ((gamma - 1.) * rho) + energyKinetic; 
+	float energyPotential = dot(gridPos - rangeMin, externalForce);
+	float energyTotal = pressure / ((gamma - 1.) * rho) + energyKinetic + energyPotential; 
 	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }		
 */}),
@@ -1043,16 +1018,20 @@ void main() {
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 dpos;
-uniform vec2 rangeMin, rangeMax; 
+uniform vec2 rangeMin;
+uniform vec2 rangeMax; 
+uniform vec2 externalForce;
 uniform float gamma;
 uniform sampler2D qTex;
 void main() {
+	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	vec4 q = texture2D(qTex, pos);
 	float rho = q.x;
 	vec2 vel = q.yz / rho;
 	float energyTotal = q.w / rho;
 	float energyKinetic = .5 * dot(vel, vel);
-	float energyThermal = energyTotal - energyKinetic;
+	float energyPotential = dot(gridPos - rangeMin, externalForce);
+	float energyThermal = energyTotal - energyKinetic - energyPotential;
 	float speedOfSound = sqrt(gamma * (gamma - 1.) * energyThermal);
 	vec2 dxi = (rangeMax - rangeMin) * dpos;
 	vec2 cfl = vec2(
@@ -1243,29 +1222,38 @@ void main() {
 				fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 dpos;
+uniform vec2 rangeMin;
+uniform vec2 rangeMax;
+uniform vec2 externalForce;
 uniform float gamma;
 uniform sampler2D qTex;
 void main() {
 	vec2 sidestep = vec2(0.);
 	sidestep[$side] = dpos[$side];
-	vec4 q = texture2D(qTex, pos);
-	vec4 qPrev = texture2D(qTex, pos - sidestep);
-
-	float densityL = qPrev.x;
-	vec2 velocityL = qPrev.yz / densityL; 
-	float energyTotalL = qPrev.w / densityL;
+	
+	vec2 posL = pos - sidestep;
+	vec2 gridposL = rangeMin + posL * (rangeMax - rangeMin);
+	vec4 qL = texture2D(qTex, posL);
+	float densityL = qL.x;
+	vec2 velocityL = qL.yz / densityL; 
+	float energyTotalL = qL.w / densityL;
 	float energyKineticL = .5 * dot(velocityL, velocityL);
-	float energyThermalL = energyTotalL - energyKineticL;
+	float energyPotentialL = dot(gridposL - rangeMin, externalForce);
+	float energyThermalL = energyTotalL - energyKineticL - energyPotentialL;
 	float pressureL = (gamma - 1.) * densityL * energyThermalL;
 	float speedOfSoundL = sqrt(gamma * pressureL / densityL);
 	float hTotalL = energyTotalL + pressureL / densityL;
 	float roeWeightL = sqrt(densityL);
 	
-	float densityR = q.x; 
-	vec2 velocityR = q.yz / densityR;
-	float energyTotalR = q.w / densityR; 
+	vec2 posR = pos;
+	vec2 gridposR = rangeMin + posR * (rangeMax - rangeMin);
+	vec4 qR = texture2D(qTex, posR);
+	float densityR = qR.x; 
+	vec2 velocityR = qR.yz / densityR;
+	float energyTotalR = qR.w / densityR; 
 	float energyKineticR = .5 * dot(velocityR, velocityR);
-	float energyThermalR = energyTotalR - energyKineticR;
+	float energyPotentialR = dot(gridposR - rangeMin, externalForce);
+	float energyThermalR = energyTotalR - energyKineticR - energyPotentialR;
 	float pressureR = (gamma - 1.) * densityR * energyThermalR;
 	float speedOfSoundR = sqrt(gamma * pressureR / densityR);
 	float hTotalR = energyTotalR + pressureR / densityR;
@@ -1659,15 +1647,20 @@ void main() {
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 dpos;
+uniform vec2 rangeMin;
+uniform vec2 rangeMax;
+uniform vec2 externalForce;
 uniform float gamma;
 uniform sampler2D qTex;
 void main() {
+	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	vec4 q = texture2D(qTex, pos);
 	float rho = q.x;
 	vec2 vel = q.yz / rho;
 	float energyTotal = q.w / rho;
 	float energyKinetic = .5 * dot(vel, vel);
-	float energyThermal = energyTotal - energyKinetic;
+	float energyPotential = dot(gridPos - rangeMin, externalForce);
+	float energyThermal = energyTotal - energyKinetic - energyPotential;
 	gl_FragColor = vec4(0.);
 	gl_FragColor.x = (gamma - 1.) * rho * energyThermal;
 }
@@ -1683,7 +1676,9 @@ void main() {
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 dpos;
+uniform float dt;
 uniform vec2 dt_dx;
+uniform vec2 externalForce;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 void main() {
@@ -1700,9 +1695,11 @@ void main() {
 	float pressureYP = texture2D(pressureTex, posyp).x;
 	float pressureYN = texture2D(pressureTex, posyn).x;
 
-	gl_FragColor = texture2D(qTex, pos);
-	gl_FragColor.y -= .5 * dt_dx.x * (pressureXP - pressureXN);
-	gl_FragColor.z -= .5 * dt_dx.y * (pressureYP - pressureYN);
+	vec4 q = texture2D(qTex, pos);
+	float rho = q.x;
+	gl_FragColor = q;
+	gl_FragColor.y -= .5 * dt_dx.x * (pressureXP - pressureXN) + dt * rho * externalForce.x;
+	gl_FragColor.z -= .5 * dt_dx.y * (pressureYP - pressureYN) + dt * rho * externalForce.y;
 }
 */}),
 			fragmentPrecision : 'best',
@@ -1717,7 +1714,9 @@ void main() {
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
 uniform vec2 dpos;
+uniform float dt;
 uniform vec2 dt_dx;
+uniform vec2 externalForce;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 void main() {
@@ -1744,10 +1743,12 @@ void main() {
 	float vYP = rho_v_YP.y / rho_v_YP.x;
 	float vYN = rho_v_YN.y / rho_v_YN.x;
 
-	gl_FragColor = texture2D(qTex, pos);
+	vec4 q = texture2D(qTex, pos);
+	gl_FragColor = q;
 	gl_FragColor.w -= .5 * (
 		dt_dx.x * (pressureXP * uXP - pressureXN * uXN)
-		+ dt_dx.y * (pressureYP * vYP - pressureYN * vYN));
+		+ dt_dx.y * (pressureYP * vYP - pressureYN * vYN))
+		+ dt * dot(q.yz, externalForce);
 }
 */}),
 			fragmentPrecision : 'best',
@@ -1814,6 +1815,91 @@ void main() {
 			width : this.nx,
 			height : this.nx
 		});
+	
+	var drawToScreenVertexShader = new GL.VertexShader({
+		code : GL.vertexPrecision + mlstr(function(){/*
+attribute vec2 vertex;
+varying vec2 pos; 
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	pos = vertex;
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+}
+*/})
+	});
+
+	$.each(drawToScreenMethods, function(drawToScreenMethodName, drawToScreenMethodCode) {
+		drawToScreenShader[drawToScreenMethodName] = new GL.ShaderProgram({
+			vertexShader : drawToScreenVertexShader,
+			fragmentCode : mlstr(function(){/*
+#extension GL_OES_standard_derivatives : enable
+varying vec2 pos;
+uniform vec2 dpos;
+uniform vec2 rangeMin;
+uniform vec2 rangeMax;
+uniform float gamma;
+uniform float lastMin, lastMax;
+uniform sampler2D qTex;
+uniform sampler2D pressureTex;
+uniform sampler2D gradientTex;
+*/}) + mlstr(function(){/*
+float drawToScreenMethod() {
+	$drawToScreenMethodCode
+}			
+*/}).replace(/\$drawToScreenMethodCode/g, drawToScreenMethodCode)
++ mlstr(function(){/*
+void main() {
+	float v = (drawToScreenMethod() - lastMin) / (lastMax - lastMin);
+	gl_FragColor = texture2D(gradientTex, vec2(v, .5)); 
+}	
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				qTex : 0,
+				pressureTex : 1,
+				gradientTex : 2
+			}
+		});
+	});
+
+
+	//burgers
+	allShaders.push(burgersComputeCFLShader);
+	allShaders.push(burgersComputeInterfaceVelocityShader);
+	allShaders = allShaders.concat(burgersComputeFluxSlopeShader);	
+	$.each(burgersComputeFluxShader, function(k, fluxShaders) {
+		allShaders = allShaders.concat(fluxShaders);
+	});
+	allShaders.push(burgersUpdateStateShader);
+
+	//riemann /roe
+	allShaders.push(roeComputeCFLShader);
+	allShaders = allShaders.concat(roeComputeRoeValueShader);
+	allShaders = allShaders.concat(roeComputeEigenvalueShader);
+	$.each(roeComputeEigenvectorColumnShader, function(k, evShaders) {
+		allShaders = allShaders.concat(evShaders);
+	});
+	$.each(roeComputeEigenvectorInverseColumnShader, function(k, evInvShaders) {
+		allShaders = allShaders.concat(evInvShaders);
+	});
+	allShaders = allShaders.concat(roeComputeDeltaQTildeShader);
+	allShaders = allShaders.concat(roeComputeFluxSlopeShader);
+	$.each(roeComputeFluxShader, function(k, fluxShaders) {
+		allShaders = allShaders.concat(fluxShaders);
+	});
+	allShaders.push(roeUpdateStateShader);
+
+	//common to both
+	allShaders.push(computePressureShader);
+	allShaders.push(applyPressureToMomentumShader);
+	allShaders.push(applyPressureToWorkShader);
+	allShaders.push(minReduceShader);
+
+	//display
+	$.each(drawToScreenShader, function(k, drawShader) {
+		allShaders.push(drawShader);
+	});
 
 
 	//init hydro after gl
@@ -1867,6 +1953,27 @@ void main() {
 	buildSelect('advect-method', 'advectMethod', advectMethods);
 	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
 
+	$.each([
+		'externalForceX',
+		'externalForceY'
+	], function(i,varName) {
+		$('#'+varName).val(window[varName]);
+		$('#'+varName).change(function() {
+			var v = Number($(this).val());
+			if (v !== v) return;	//NaN
+			window[varName] = v;
+		
+			$.each(allShaders, function(k,shader) {
+				shader
+					.use()
+					.setUniforms({
+						externalForce : [externalForceX, externalForceY]
+					})
+					.useNone();
+			});
+		});
+	});
+	
 	hydro.lastDataMin = Number($('#dataRangeFixedMin').val());
 	hydro.lastDataMax = Number($('#dataRangeFixedMax').val());
 	hydro.updateLastDataRange = false;
@@ -2018,52 +2125,6 @@ void main() {
 		});
 	}
 
-	var drawToScreenVertexShader = new GL.VertexShader({
-		code : GL.vertexPrecision + mlstr(function(){/*
-attribute vec2 vertex;
-varying vec2 pos; 
-uniform mat4 mvMat;
-uniform mat4 projMat;
-void main() {
-	pos = vertex;
-	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
-}
-*/})
-	});
-
-	$.each(drawToScreenMethods, function(drawToScreenMethodName, drawToScreenMethodCode) {
-		drawToScreenShader[drawToScreenMethodName] = new GL.ShaderProgram({
-			vertexShader : drawToScreenVertexShader,
-			fragmentCode : mlstr(function(){/*
-#extension GL_OES_standard_derivatives : enable
-varying vec2 pos;
-uniform vec2 dpos;
-uniform vec2 rangeMin;
-uniform vec2 rangeMax;
-uniform float gamma;
-uniform float lastMin, lastMax;
-uniform sampler2D qTex;
-uniform sampler2D pressureTex;
-uniform sampler2D gradientTex;
-*/}) + mlstr(function(){/*
-float drawToScreenMethod() {
-	$drawToScreenMethodCode
-}			
-*/}).replace(/\$drawToScreenMethodCode/g, drawToScreenMethodCode)
-+ mlstr(function(){/*
-void main() {
-	float v = (drawToScreenMethod() - lastMin) / (lastMax - lastMin);
-	gl_FragColor = texture2D(gradientTex, vec2(v, .5)); 
-}	
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				qTex : 0,
-				pressureTex : 1,
-				gradientTex : 2
-			}
-		});
-	});
 
 	//make grid
 	hydro.update();

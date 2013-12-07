@@ -17,17 +17,15 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 - more implicit options? fixed point?  some Newton/Levenberg Marquardt/BFGS stuff?
 
 2D:
-- constant boundary still buggy
-- hydrostatic pressure still buggy
-	- get Rayleigh-Taylor instability demo working
-- arbitrary boundaries possibly from a boundary buffer
+- custom inflow boundary conditions
 	- Von Karman vortex street demo
 - mouse input for velocity and for boundary painting
 - FBO-based advection or particle simulation for streamline tracing
 - implicit Gauss-Seidel
 
 2D-GPU
-- hydrostatic pressure at all
+- mirror boundary conditions
+	- hydrostatic pressure
 - constant boundary options at all
 - Riemann solver is unstable -- eigenbasis accuracy issues
 - CFL is inaccurate.  something about the reduce kernel, if you have the fragment write out 1's, the float32 texture reader gets back .5

@@ -13,14 +13,18 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does 
 
 var panel;
 var canvas;
-var waveVtxBuf, waveStateBuf;
+
 var xmin = -.5;
 var xmax = .5; 
 var ymin = -.5;
 var ymax = .5;
+
 var useNoise = true;
+var noiseAmplitude = .01;
+
 var useCFL = true;
 var fixedDT = .2;
+
 var mouse;
 
 var externalForceX = 0;
@@ -30,6 +34,8 @@ var boundaryTopConstantValue = 0;
 var boundaryLeftConstantValue = 0;
 var boundaryRightConstantValue = 0;
 var boundaryBottomConstantValue = 0;
+
+var waveVtxBuf, waveStateBuf;
 
 //interface directions
 var dirs = [[1,0], [0,1]];
@@ -1084,8 +1090,8 @@ var HydroState = makeClass({
 				var u = 0;
 				var v = 0;
 				if (useNoise) {
-					u += (Math.random() - .5) * 2 * .01;
-					v += (Math.random() - .5) * 2 * .01;
+					u += (Math.random() - .5) * 2 * noiseAmplitude;
+					v += (Math.random() - .5) * 2 * noiseAmplitude;
 				}
 				var energyKinetic = .5 * (u * u + v * v);
 				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
@@ -1116,8 +1122,8 @@ var HydroState = makeClass({
 				var u = 0; 
 				var v = 0;
 				if (useNoise) {
-					u += (Math.random() - .5) * 2 * .01;
-					v += (Math.random() - .5) * 2 * .01;
+					u += (Math.random() - .5) * 2 * noiseAmplitude;
+					v += (Math.random() - .5) * 2 * noiseAmplitude;
 				}
 				var energyKinetic = .5 * (u * u + v * v);
 				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
@@ -1146,8 +1152,8 @@ var HydroState = makeClass({
 				var u = yInTheMiddle ? .5 : -.5;
 				var v = 0;
 				if (useNoise) {
-					u += (Math.random() - .5) * 2 * .01;
-					v += (Math.random() - .5) * 2 * .01;
+					u += (Math.random() - .5) * 2 * noiseAmplitude;
+					v += (Math.random() - .5) * 2 * noiseAmplitude;
 				}
 				//P = (gamma - 1) rho (eTotal - eKinetic - ePotential)
 				//eTotal = P / ((gamma - 1) rho) + eKinetic + ePotential
@@ -1177,23 +1183,23 @@ var HydroState = makeClass({
 				var x = this.x[0 + xIndex];
 				var y = this.x[1 + xIndex];
 				var yGreaterThanMid = y > ymid;
-				var rho = 1;//yGreaterThanMid ? 2 : 1;
+				var rho = yGreaterThanMid ? 2 : 1;
 				var u = 0;
 				var v = 0;
 				if (useNoise) {
-					u += (Math.random() - .5) * 2 * .01;
-					v += (Math.random() - .5) * 2 * .01;
+					u += (Math.random() - .5) * 2 * noiseAmplitude;
+					v += (Math.random() - .5) * 2 * noiseAmplitude;
 				}
-				//energyPotential = rho g y
-				//eThermal = eTotal - eKinetic - energyPotential
-				//P = (gamma - 1) rho eThermal = (gamma - 1) rho (eTotal - eKinetic - energyPotential)
-				//eTotal = P / ((gamma - 1) rho) + eKinetic + energyPotential
-				var width = x - xmin;
-				var height = y - ymin;
-				var energyPotential = width * externalForceX + height * externalForceY;
+				//ePotential = g y
+				//eThermal = eTotal - eKinetic - ePotential
+				//P = (gamma - 1) rho eThermal = (gamma - 1) rho (eTotal - eKinetic - ePotential)
+				//eTotal = P / ((gamma - 1) rho) + eKinetic + ePotential
+				//...but Bernoulli's equation says
+				//constant = P / rho * gamma / (gamma - 1) + eKinetic + ePotential
+				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
 				var pressure = 2.5 - rho * energyPotential; 
 				var energyKinetic = .5 * (u * u + v * v);
-				var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic + energyPotential;
+				var energyTotal = pressure / rho / (this.gamma - 1) + energyKinetic + energyPotential;
 				this.q[0 + qIndex] = rho;
 				this.q[1 + qIndex] = rho * u;
 				this.q[2 + qIndex] = rho * v;
