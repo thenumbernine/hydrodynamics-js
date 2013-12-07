@@ -149,7 +149,7 @@ var boundaryMethods = {
 		q[nx-2][2] = q[nx-3][2];
 		q[nx-1][2] = q[nx-4][2];
 	},
-	dirichlet : function(nx,q) {
+	constant : function(nx,q) {
 		q[0][0] = 0;
 		q[1][0] = 0;
 		q[nx-2][0] = 0;
@@ -163,7 +163,7 @@ var boundaryMethods = {
 		q[nx-2][2] = 0;
 		q[nx-1][2] = 0;
 	},
-	constant : function(nx,q) {
+	freeflow : function(nx,q) {
 		q[0][0] = q[1][0] = q[2][0];
 		q[nx-1][0] = q[nx-2][0] = q[nx-3][0];
 		q[0][1] = q[1][1] = q[2][1];

@@ -26,6 +26,11 @@ var mouse;
 var externalForceX = 0;
 var externalForceY = 0;
 
+var boundaryTopConstantValue = 0;
+var boundaryLeftConstantValue = 0;
+var boundaryRightConstantValue = 0;
+var boundaryBottomConstantValue = 0;
+
 //interface directions
 var dirs = [[1,0], [0,1]];
 
@@ -286,82 +291,153 @@ var fluxMethods = {
 };
 
 var boundaryMethods = {
-	none : function() {},
-	periodic : function(nx,q) {
-		for (var i = 0; i < nx; ++i) {
-			for (var state = 0; state < 4; ++state) {
-				//top
-				q[state + 4 * (i + nx * 0)] = q[state + 4 * (i + nx * (nx-4))];
-				q[state + 4 * (i + nx * 1)] = q[state + 4 * (i + nx * (nx-3))];
-				q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * 2)];
-				q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * 3)];
-				//left	
-				q[state + 4 * (0 + nx * i)] = q[state + 4 * (nx-4 + nx * i)];
-				q[state + 4 * (1 + nx * i)] = q[state + 4 * (nx-3 + nx * i)];
-				q[state + 4 * (nx-2 + nx * i)] = q[state + 4 * (2 + nx * i)];
-				q[state + 4 * (nx-1 + nx * i)] = q[state + 4 * (3 + nx * i)];
+	none : {top : function() {}, left : function() {}, right : function() {}, bottom : function() {}},
+	periodic : {
+		top : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					//top
+					q[state + 4 * (i + nx * 0)] = q[state + 4 * (i + nx * (nx-4))];
+					q[state + 4 * (i + nx * 1)] = q[state + 4 * (i + nx * (nx-3))];
+				}
+			}
+		},
+		left : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (0 + nx * i)] = q[state + 4 * (nx-4 + nx * i)];
+					q[state + 4 * (1 + nx * i)] = q[state + 4 * (nx-3 + nx * i)];
+				}
+			}
+		},
+		right : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (nx-2 + nx * i)] = q[state + 4 * (2 + nx * i)];
+					q[state + 4 * (nx-1 + nx * i)] = q[state + 4 * (3 + nx * i)];
+				}
+			}
+		},
+		bottom : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * 2)];
+					q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * 3)];
+				}
 			}
 		}
 	},
-	mirror : function(nx,q) {
-		for (var i = 0; i < nx; ++i) {
-			//top
-			q[0 + 4 * (i + nx * (0))] = q[0 + 4 * (i + nx * (3))];
-			q[0 + 4 * (i + nx * (1))] = q[0 + 4 * (i + nx * (2))];
-			q[0 + 4 * (i + nx * (nx-2))] = q[0 + 4 * (i + nx * (nx-3))];
-			q[0 + 4 * (i + nx * (nx-1))] = q[0 + 4 * (i + nx * (nx-4))];
-			q[1 + 4 * (i + nx * (0))] = -q[1 + 4 * (i + nx * (3))];
-			q[1 + 4 * (i + nx * (1))] = -q[1 + 4 * (i + nx * (2))];
-			q[1 + 4 * (i + nx * (nx-2))] = -q[1 + 4 * (i + nx * (nx-3))];
-			q[1 + 4 * (i + nx * (nx-1))] = -q[1 + 4 * (i + nx * (nx-4))];
-			q[2 + 4 * (i + nx * (0))] = -q[2 + 4 * (i + nx * (3))];
-			q[2 + 4 * (i + nx * (1))] = -q[2 + 4 * (i + nx * (2))];
-			q[2 + 4 * (i + nx * (nx-2))] = -q[2 + 4 * (i + nx * (nx-3))];
-			q[2 + 4 * (i + nx * (nx-1))] = -q[2 + 4 * (i + nx * (nx-4))];
-			q[3 + 4 * (i + nx * (0))] = q[3 + 4 * (i + nx * (3))];
-			q[3 + 4 * (i + nx * (1))] = q[3 + 4 * (i + nx * (2))];
-			q[3 + 4 * (i + nx * (nx-2))] = q[3 + 4 * (i + nx * (nx-3))];
-			q[3 + 4 * (i + nx * (nx-1))] = q[3 + 4 * (i + nx * (nx-4))];
-			//left
-			q[0 + 4 * (0 + nx * i)] = q[0 + 4 * (3 + nx * i)];
-			q[0 + 4 * (1 + nx * i)] = q[0 + 4 * (2 + nx * i)];
-			q[0 + 4 * (nx-2 + nx * i)] = q[0 + 4 * (nx-3 + nx * i)];
-			q[0 + 4 * (nx-1 + nx * i)] = q[0 + 4 * (nx-4 + nx * i)];
-			q[1 + 4 * (0 + nx * i)] = -q[1 + 4 * (3 + nx * i)];
-			q[1 + 4 * (1 + nx * i)] = -q[1 + 4 * (2 + nx * i)];
-			q[1 + 4 * (nx-2 + nx * i)] = -q[1 + 4 * (nx-3 + nx * i)];
-			q[1 + 4 * (nx-1 + nx * i)] = -q[1 + 4 * (nx-4 + nx * i)];
-			q[2 + 4 * (0 + nx * i)] = -q[2 + 4 * (3 + nx * i)];
-			q[2 + 4 * (1 + nx * i)] = -q[2 + 4 * (2 + nx * i)];
-			q[2 + 4 * (nx-2 + nx * i)] = -q[2 + 4 * (nx-3 + nx * i)];
-			q[2 + 4 * (nx-1 + nx * i)] = -q[2 + 4 * (nx-4 + nx * i)];
-			q[3 + 4 * (0 + nx * i)] = q[3 + 4 * (3 + nx * i)];
-			q[3 + 4 * (1 + nx * i)] = q[3 + 4 * (2 + nx * i)];
-			q[3 + 4 * (nx-2 + nx * i)] = q[3 + 4 * (nx-3 + nx * i)];
-			q[3 + 4 * (nx-1 + nx * i)] = q[3 + 4 * (nx-4 + nx * i)];
-		}
-	},
-	dirichlet : function(nx,q) {
-		for (var i = 0; i < nx; ++i) {
-			for (var state = 0; state < 4; ++state) {
-				q[state + 4 * (i + nx * (0))] = 0;
-				q[state + 4 * (1 + nx * (1))] = 0;
-				q[state + 4 * (i + nx * (nx-2))] = 0;
-				q[state + 4 * (i + nx * (nx-1))] = 0;
-				q[state + 4 * (0 + nx * i)] = 0;
-				q[state + 4 * (1 + nx * (1))] = 0;
-				q[state + 4 * (nx-2 + nx * i)] = 0;
-				q[state + 4 * (nx-1 + nx * i)] = 0;
+	mirror : {
+		top : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				q[0 + 4 * (i + nx * (0))] = q[0 + 4 * (i + nx * (3))];
+				q[0 + 4 * (i + nx * (1))] = q[0 + 4 * (i + nx * (2))];
+				q[1 + 4 * (i + nx * (0))] = -q[1 + 4 * (i + nx * (3))];
+				q[1 + 4 * (i + nx * (1))] = -q[1 + 4 * (i + nx * (2))];
+				q[2 + 4 * (i + nx * (0))] = -q[2 + 4 * (i + nx * (3))];
+				q[2 + 4 * (i + nx * (1))] = -q[2 + 4 * (i + nx * (2))];
+				q[3 + 4 * (i + nx * (0))] = q[3 + 4 * (i + nx * (3))];
+				q[3 + 4 * (i + nx * (1))] = q[3 + 4 * (i + nx * (2))];
+			}
+		},
+		left : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				q[0 + 4 * (0 + nx * i)] = q[0 + 4 * (3 + nx * i)];
+				q[0 + 4 * (1 + nx * i)] = q[0 + 4 * (2 + nx * i)];
+				q[1 + 4 * (0 + nx * i)] = -q[1 + 4 * (3 + nx * i)];
+				q[1 + 4 * (1 + nx * i)] = -q[1 + 4 * (2 + nx * i)];
+				q[2 + 4 * (0 + nx * i)] = -q[2 + 4 * (3 + nx * i)];
+				q[2 + 4 * (1 + nx * i)] = -q[2 + 4 * (2 + nx * i)];
+				q[3 + 4 * (0 + nx * i)] = q[3 + 4 * (3 + nx * i)];
+				q[3 + 4 * (1 + nx * i)] = q[3 + 4 * (2 + nx * i)];
+			}
+		},
+		right : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				q[0 + 4 * (nx-2 + nx * i)] = q[0 + 4 * (nx-3 + nx * i)];
+				q[0 + 4 * (nx-1 + nx * i)] = q[0 + 4 * (nx-4 + nx * i)];
+				q[1 + 4 * (nx-2 + nx * i)] = -q[1 + 4 * (nx-3 + nx * i)];
+				q[1 + 4 * (nx-1 + nx * i)] = -q[1 + 4 * (nx-4 + nx * i)];
+				q[2 + 4 * (nx-2 + nx * i)] = -q[2 + 4 * (nx-3 + nx * i)];
+				q[2 + 4 * (nx-1 + nx * i)] = -q[2 + 4 * (nx-4 + nx * i)];
+				q[3 + 4 * (nx-2 + nx * i)] = q[3 + 4 * (nx-3 + nx * i)];
+				q[3 + 4 * (nx-1 + nx * i)] = q[3 + 4 * (nx-4 + nx * i)];
+			}
+		},
+		bottom : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				q[0 + 4 * (i + nx * (nx-2))] = q[0 + 4 * (i + nx * (nx-3))];
+				q[0 + 4 * (i + nx * (nx-1))] = q[0 + 4 * (i + nx * (nx-4))];
+				q[1 + 4 * (i + nx * (nx-2))] = -q[1 + 4 * (i + nx * (nx-3))];
+				q[1 + 4 * (i + nx * (nx-1))] = -q[1 + 4 * (i + nx * (nx-4))];
+				q[2 + 4 * (i + nx * (nx-2))] = -q[2 + 4 * (i + nx * (nx-3))];
+				q[2 + 4 * (i + nx * (nx-1))] = -q[2 + 4 * (i + nx * (nx-4))];
+				q[3 + 4 * (i + nx * (nx-2))] = q[3 + 4 * (i + nx * (nx-3))];
+				q[3 + 4 * (i + nx * (nx-1))] = q[3 + 4 * (i + nx * (nx-4))];
 			}
 		}
 	},
-	constant : function(nx,q) {
-		for (var i = 0; i < nx; ++i) {
-			for (var state = 0; state < 4; ++state) {
-				q[state + 4 * (i + nx * (0))] = q[state + 4 * (i + nx * (1))] = q[state + 4 * (i + nx * (2))];
-				q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * (nx-3))];
-				q[state + 4 * (0 + nx * i)] = q[state + 4 * (1 + nx * i)] = q[state + 4 * (2 + nx * i)];
-				q[state + 4 * (nx-1 + nx * i)] = q[state + 4 * (nx-2 + nx * i)] = q[state + 4 * (nx-3 + nx * i)];
+	constant : {
+		top : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (i + nx * (0))] = boundaryTopConstantValue;
+					q[state + 4 * (i + nx * (1))] = boundaryTopConstantValue;
+				}
+			}
+		},
+		left : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (0 + nx * i)] = boundaryLeftConstantValue;
+					q[state + 4 * (1 + nx * i)] = boundaryLeftConstantValue;
+				}
+			}
+		},
+		right : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (nx-2 + nx * i)] = boundaryRightConstantValue;
+					q[state + 4 * (nx-1 + nx * i)] = boundaryRightConstantValue;
+				}
+			}
+		},
+		bottom : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (i + nx * (nx-2))] = boundaryBottomConstantValue;
+					q[state + 4 * (i + nx * (nx-1))] = boundaryBottomConstantValue;
+				}
+			}
+		}
+	},
+	freeflow : {
+		top : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (i + nx * (0))] = q[state + 4 * (i + nx * (1))] = q[state + 4 * (i + nx * (2))];
+				}
+			}
+		},
+		left : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (0 + nx * i)] = q[state + 4 * (1 + nx * i)] = q[state + 4 * (2 + nx * i)];
+				}
+			}
+		},
+		right : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (nx-1 + nx * i)] = q[state + 4 * (nx-2 + nx * i)] = q[state + 4 * (nx-3 + nx * i)];
+				}
+			}
+		},
+		bottom : function(nx,q) {
+			for (var i = 0; i < nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * (nx-3))];
+				}
 			}
 		}
 	}
@@ -489,7 +565,7 @@ var advectMethods = {
 							
 							var rIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 							//apply limiter
-							var phi = this.fluxMethod(this.r[rIndex]);
+							var phi = fluxMethods[this.fluxMethod](this.r[rIndex]);
 							var uiIndex = side + 2 * (i + (this.nx+1) * j);
 							var fluxIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 							var qIndexL = state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
@@ -739,7 +815,7 @@ var advectMethods = {
 								theta = -1;
 							}
 						
-							var phi = this.fluxMethod(this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))]);
+							var phi = fluxMethods[this.fluxMethod](this.rTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))]);
 
 							var epsilon = this.interfaceEigenvalues[state + 4 * (side + 2 * (i + (this.nx+1) * j))] * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
 
@@ -981,10 +1057,13 @@ var HydroState = makeClass({
 		this.nghost = 2;
 
 		//solver configuration
-		this.boundaryMethod = boundaryMethods.mirror;
-		this.fluxMethod = fluxMethods.superbee;
-		this.advectMethod = advectMethods['Riemann / Roe'];
-		this.drawToScreenMethod = drawToScreenMethods.Density;
+		this.boundaryMethodTop = 'mirror';
+		this.boundaryMethodLeft = 'mirror';
+		this.boundaryMethodRight = 'mirror';
+		this.boundaryMethodBottom = 'mirror';
+		this.fluxMethod = 'superbee';
+		this.advectMethod = 'Riemann / Roe';
+		this.drawToScreenMethod = 'Density';
 	},
 	resetSod : function() {
 		var xIndex = 0;
@@ -1115,7 +1194,10 @@ var HydroState = makeClass({
 		}
 	},
 	boundary : function() {
-		this.boundaryMethod(this.nx, this.q);
+		boundaryMethods[this.boundaryMethodTop].top.call(this, this.nx, this.q);
+		boundaryMethods[this.boundaryMethodLeft].left.call(this, this.nx, this.q);
+		boundaryMethods[this.boundaryMethodRight].right.call(this, this.nx, this.q);
+		boundaryMethods[this.boundaryMethodBottom].bottom.call(this, this.nx, this.q);
 	},
 	step : function(dt) {
 		
@@ -1123,7 +1205,7 @@ var HydroState = makeClass({
 		this.boundary();
 	
 		//solve
-		this.advectMethod.advect.call(this, dt);
+		advectMethods[this.advectMethod].advect.call(this, dt);
 			
 		//boundary again
 		this.boundary();
@@ -1194,12 +1276,12 @@ var HydroState = makeClass({
 	},
 	update : function() {
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
-		this.advectMethod.initStep.call(this);
+		advectMethods[this.advectMethod].initStep.call(this);
 		
 		//get timestep
 		var dt;
 		if (useCFL) {
-			dt = this.advectMethod.calcCFLTimestep.call(this);
+			dt = advectMethods[this.advectMethod].calcCFLTimestep.call(this);
 		} else {
 			dt = fixedDT;
 		}
@@ -1247,7 +1329,7 @@ var Hydro = makeClass({
 		this.state.update();
 
 		//update geometry z coordinate
-		var result = this.state.drawToScreenMethod.call(this);
+		var result = drawToScreenMethods[this.state.drawToScreenMethod].call(this);
 		var dataMin = result[0];
 		var dataMax = result[1];
 		
@@ -1287,13 +1369,14 @@ function buildSelect(id, key, map) {
 	for (var k in map) {
 		var option = $('<option>', {text : k});
 		option.appendTo(select);
-		if (hydro.state[key] == map[k]) {
+		if (hydro.state[key] == k) {
 			option.attr('selected', 'true');
 		}
 	}
 	select.change(function() {
-		hydro.state[key] = map[select.val()];
+		hydro.state[key] = select.val();
 	});
+	return select;
 }
 
 var sceneObjects = [];
@@ -1342,7 +1425,26 @@ $(document).ready(function(){
 		});
 	})();
 
-	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
+	$.each([
+		'Top',
+		'Left',
+		'Right',
+		'Bottom'
+	], function(i,sideName) {
+		var selectName = 'boundaryMethod' + sideName;
+		var constantName = 'boundary' + sideName + 'ConstantValue';
+		var select = buildSelect(selectName, selectName, boundaryMethods);
+		var onSelect = function() {
+			if (hydro.state[selectName] == 'constant') {
+				$('#'+constantName).show();
+			} else {
+				$('#'+constantName).hide();
+			}
+		}
+		select.change(onSelect);
+		onSelect();
+	});
+
 	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
 	buildSelect('advect-method', 'advectMethod', advectMethods);
 	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
@@ -1350,8 +1452,12 @@ $(document).ready(function(){
 	$.each([
 		'externalForceX',
 		'externalForceY',
+		'boundaryTopConstantValue',
+		'boundaryLeftConstantValue',
+		'boundaryRightConstantValue',
+		'boundaryBottomConstantValue',
 	], function(i,varName) {
-		window[varName] = Number($('#'+varName).val());
+		$('#'+varName).val(window[varName]);
 		$('#'+varName).change(function() {
 			var v = Number($(this).val());
 			if (v !== v) return;	//NaN

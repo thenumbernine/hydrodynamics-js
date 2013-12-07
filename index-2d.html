@@ -64,8 +64,23 @@ a:active {
 				<br>
 				Size:
 				<select id='gridsize'></select><br>
-				Boundary:
-				<select id='boundary'></select><br>
+				Boundary:<br>
+				<span style='padding-left:25px'>Top: </span>
+				<select id='boundaryMethodTop'></select>
+				<input id='boundaryTopConstantValue'/>
+				<br>
+				Left: 
+				<select id='boundaryMethodLeft'></select>
+				<input id='boundaryLeftConstantValue'/>
+				<br>
+				<span style='padding-left:50px'>Right: </span>
+				<select id='boundaryMethodRight'></select>
+				<input id='boundaryRightConstantValue'/>
+				<br>
+				<span style='padding-left:25px'>Bottom: </span>
+				<select id='boundaryMethodBottom'></select>
+				<input id='boundaryBottomConstantValue'/>
+				<br>
 				Flux Limiter:
 				<select id='flux-limiter'></select><br>
 				Advect:
@@ -77,8 +92,8 @@ a:active {
 				<br>
 
 				External Force:<br>
-				<input id='externalForceX' value='0'/><br>
-				<input id='externalForceY' value='0'/><br>
+				<input id='externalForceX'/><br>
+				<input id='externalForceY'/><br>
 
 				<br>
 				Range:<br>

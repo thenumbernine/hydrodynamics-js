@@ -121,12 +121,12 @@ var boundaryMethods = {
 		//TODO set all lookup texture wraps to REPEAT_MIRROR 
 		//or better yet, construct a boundary texture, and instead of "mirror boundary" just change that tex to have solid left and bottom values
 	},
-	dirichlet : function() {
+	constant : function() {
 		//TODO set all lookup texture wraps to ... zero?
 	},
 	*/
-	constant : function(nx,q) {
-		//TODO set all lookup texture wraps to ... CLAMP
+	freeflow : function(nx,q) {
+		//set all lookup texture wraps to ... CLAMP
 		$.each([
 			this.qTex,
 			this.nextQTex,
