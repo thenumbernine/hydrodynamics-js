@@ -112,11 +112,17 @@ var boundaryMethods = {
 			tex.setWrap({s : gl.REPEAT, t : gl.REPEAT});
 		});
 	},
-	/*
 	mirror : function(nx,q) {
-		//TODO set all lookup texture wraps to REPEAT_MIRROR 
-		//or better yet, construct a boundary texture, and instead of "mirror boundary" just change that tex to have solid left and bottom values
+		/*
+		//set all lookup texture wraps to MIRRORED_REPEAT
+		//TODO and have lookups of velocity that go out of bounds come back negative ...
+		$.each(this.allFloatTexs, function(i, tex) {
+			tex.bind();
+			tex.setWrap({s : gl.MIRRORED_REPEAT, t : gl.MIRRORED_REPEAT});
+		});
+		*/
 	},
+	/*
 	constant : function() {
 		//TODO set all lookup texture wraps to ... zero?
 	},
