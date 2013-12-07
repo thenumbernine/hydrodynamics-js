@@ -293,7 +293,7 @@ var fluxMethods = {
 var boundaryMethods = {
 	none : {top : function() {}, left : function() {}, right : function() {}, bottom : function() {}},
 	periodic : {
-		top : function(nx,q) {
+		bottom : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				for (var state = 0; state < 4; ++state) {
 					//top
@@ -318,7 +318,7 @@ var boundaryMethods = {
 				}
 			}
 		},
-		bottom : function(nx,q) {
+		top : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				for (var state = 0; state < 4; ++state) {
 					q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * 2)];
@@ -328,7 +328,7 @@ var boundaryMethods = {
 		}
 	},
 	mirror : {
-		top : function(nx,q) {
+		bottom : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				q[0 + 4 * (i + nx * (0))] = q[0 + 4 * (i + nx * (3))];
 				q[0 + 4 * (i + nx * (1))] = q[0 + 4 * (i + nx * (2))];
@@ -364,7 +364,7 @@ var boundaryMethods = {
 				q[3 + 4 * (nx-1 + nx * i)] = q[3 + 4 * (nx-4 + nx * i)];
 			}
 		},
-		bottom : function(nx,q) {
+		top : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				q[0 + 4 * (i + nx * (nx-2))] = q[0 + 4 * (i + nx * (nx-3))];
 				q[0 + 4 * (i + nx * (nx-1))] = q[0 + 4 * (i + nx * (nx-4))];
@@ -378,7 +378,7 @@ var boundaryMethods = {
 		}
 	},
 	constant : {
-		top : function(nx,q) {
+		bottom : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				for (var state = 0; state <= 2; ++state) {
 					q[state + 4 * (i + nx * (0))] = q[state + 4 * (i + nx * (1))] = q[state + 4 * (i + nx * (2))];
@@ -408,7 +408,7 @@ var boundaryMethods = {
 				}
 			}
 		},
-		bottom : function(nx,q) {
+		top : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				for (var state = 0; state <= 2; ++state) {
 					q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * (nx-3))];
@@ -420,7 +420,7 @@ var boundaryMethods = {
 		}
 	},
 	freeflow : {
-		top : function(nx,q) {
+		bottom : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				for (var state = 0; state < 4; ++state) {
 					q[state + 4 * (i + nx * (0))] = q[state + 4 * (i + nx * (1))] = q[state + 4 * (i + nx * (2))];
@@ -441,7 +441,7 @@ var boundaryMethods = {
 				}
 			}
 		},
-		bottom : function(nx,q) {
+		top : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
 				for (var state = 0; state < 4; ++state) {
 					q[state + 4 * (i + nx * (nx-1))] = q[state + 4 * (i + nx * (nx-2))] = q[state + 4 * (i + nx * (nx-3))];
