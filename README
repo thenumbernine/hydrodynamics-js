@@ -35,6 +35,7 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 
 
 all:
+- Roe solvers are not supposed to have flux limiters directly applied to them, but I'm doing this, and seeing oscillations.  I should fix it.
 - swappable equations of state
 	- MHD
 	- ADM

@@ -60,19 +60,19 @@ a:active {
 				Size:
 				<select id='gridsize'></select><br>
 				Boundary:
-				<select id='boundary'></select><br>
+				<select id='boundaryMethod'></select><br>
 				Flux Limiter:
-				<select id='flux-limiter'></select><br>
+				<select id='fluxMethod'></select><br>
 				Advect:
-				<select id='advect-method'></select><br>
+				<select id='advectMethod'></select><br>
 				Integrator:
-				<select id='integration-method'></select><br>
+				<select id='integrationMethod'></select><br>
 		
 				<br>
 				Timestep:<br>
-				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based
+				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep'/>CFL-based
 					<input id='timeStepCFL' value='.5'/><br>
-				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
+				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep' checked='checked'/>Fixed
 					<input id='timeStepValue' value='1'/><br>
 				<br>
 
@@ -94,6 +94,12 @@ a:active {
 			<b>IE Users:</b><br>
 			Sorry guys, IE doesn't plan to support WebGL.<br>
 			Consider using a more <a href='http://www.w3schools.com/browsers/browsers_stats.asp'>standard compliant</a> browser.<br>
+			<br>
+			<center>
+				<a href='finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'>
+					<img src='finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'></img>
+				</a><br>
+			</center>
 		</div>
 	</body>
 </html>

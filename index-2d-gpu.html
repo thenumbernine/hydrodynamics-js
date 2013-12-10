@@ -71,8 +71,10 @@ a:active {
 				<select id='boundary'></select><br>
 				Flux Limiter:
 				<select id='flux-limiter'></select><br>
+				<!--
 				Advect:
 				<select id='advect-method'></select><br>
+				-->
 				Display:
 				<select id='draw-to-screen-method'></select><br>
 				Color Scheme:
@@ -96,9 +98,11 @@ a:active {
 				<br>
 				
 				Timestep:<br>
+				<!--
 				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep'/>CFL-based
 					<input id='timeStepCFL' value='.5'/><br>
 				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep' checked='checked'/>Fixed
+				-->
 					<input id='timeStepValue' value='.00025'/><br>
 				<br>
 			
@@ -120,6 +124,12 @@ a:active {
 			<b>IE Users:</b><br>
 			Sorry guys, IE doesn't plan to support WebGL.<br>
 			Consider using a more <a href='http://www.w3schools.com/browsers/browsers_stats.asp'>standard compliant</a> browser.<br>
+			<br>
+			<center>
+				<a href='finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'>
+					<img src='finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'></img>
+				</a><br>
+			</center>
 		</div>
 	</body>
 </html>

@@ -4,6 +4,9 @@ http://www.mpia.de/homes/dullemon/lectures/fluiddynamics/
 http://www.cfdbooks.com/cfdcodes.html
 "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro
 http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does not
+
+lots of accuracy issues with the GPU version ... or bugs I'm not finding
+in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding 
 */
 
 var panel;
@@ -28,7 +31,7 @@ var externalForceY = 0;
 var fbo;
 var FloatTexture2D;
 
-var quadVtxBuf, quadObj;
+var quadObj, lineObj;
 		
 var allShaders = [];
 
@@ -72,7 +75,7 @@ var coordNames = ['x', 'y'];
 var drawToScreenMethods = {
 	Density : 'return texture2D(qTex, pos).x;',
 	Velocity : 'vec4 q = texture2D(qTex, pos); return length(q.yz) / q.x;',
-	Energy : 'return texture2D(qTex, pos).w;',
+	Energy : 'vec4 q = texture2D(qTex, pos); return q.w / q.x;',
 	//P = (gamma - 1) rho (eTotal - eKinetic)
 	Pressure : 'return texture2D(pressureTex, pos).x;',
 	//Curl : 'vec4 q = texture2D(qTex, pos); return (dFdy(q.y) * (rangeMax.x - rangeMin.x) * dpos.x - dFdx(q.z) * (rangeMax.y - rangeMin.y) * dpos.y) / q.w;'
@@ -111,6 +114,111 @@ var boundaryMethods = {
 			tex.bind();
 			tex.setWrap({s : gl.REPEAT, t : gl.REPEAT});
 		});
+
+	/* hmm, using lines for copying isn't going so well ...	
+	 * another fix could be get arbitrary boundaries working in 2D then bump it up to 2D-GPU
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+		fbo.check();
+		quadObj.draw({
+			shader : copyShader,
+			texs : [this.qTex]
+		});
+		var nx = this.nx;
+		//left
+		this.drawLine({
+			vtxs : [
+				.5/nx, 0,
+				.5/nx, 1
+			],
+			texCoords : [
+				(nx-5+.5)/nx, 0,
+				(nx-5+.5)/nx, 1
+			],
+			tex : [this.qTex]
+		});
+		this.drawLine({
+			vtxs : [
+				1.5/nx, 0,
+				1.5/nx, 1
+			],
+			texCoords : [
+				(nx-4+.5)/nx, 0,
+				(nx-4+.5)/nx, 1
+			],
+			tex : [this.qTex]
+		});	
+		//right
+		this.drawLine({
+			vtxs : [
+				(nx-3+.5)/nx, 0,
+				(nx-3+.5)/nx, 1
+			],
+			texCoords : [
+				2.5/nx, 0,
+				2.5/nx, 1
+			],
+			tex : [this.qTex]
+		});
+		this.drawLine({
+			vtxs : [
+				(nx-2+.5)/nx, 0,
+				(nx-2+.5)/nx, 1
+			],
+			texCoords : [
+				3.5/nx, 0,
+				3.5/nx, 1
+			],
+			tex : [this.qTex]
+		});
+		//bottom
+		this.drawLine({
+			vtxs : [
+				0, .5/nx,
+				1, .5/nx
+			],
+			texCoords : [
+				0, (nx-5+.5)/nx,
+				1, (nx-5+.5)/nx
+			],
+			tex : [this.qTex]
+		});
+		this.drawLine({
+			vtxs : [
+				0, 1.5/nx,
+				1, 1.5/nx
+			],
+			texCoords : [
+				0, (nx-4+.5)/nx,
+				1, (nx-4+.5)/nx
+			],
+			tex : [this.qTex]
+		});	
+		//top
+		this.drawLine({
+			vtxs : [
+				0, (nx-3+.5)/nx,
+				1, (nx-3+.5)/nx
+			],
+			texCoords : [
+				0, 2.5/nx,
+				1, 2.5/nx
+			],
+			tex : [this.qTex]
+		});
+		this.drawLine({
+			vtxs : [
+				0, (nx-2+.5)/nx,
+				1, (nx-2+.5)/nx
+			],
+			texCoords : [
+				0, 3.5/nx,
+				1, 3.5/nx
+			],
+			tex : [this.qTex]
+		});
+	
+		this.swapQTexs();
+	*/
 	},
 	mirror : function(nx,q) {
 		/*
@@ -146,11 +254,17 @@ var advectMethods = {
 			fbo.check();
 			quadObj.draw({
 				shader : burgersComputeCFLShader,
+				uniforms : {
+					dpos : [1/this.nx, 1/this.nx],
+					rangeMin : [xmin, ymin],
+					rangeMax : [xmax, ymax],
+					externalForce : [externalForceX, externalForceY],
+					gamma : this.gamma
+				},
 				texs : [this.qTex]
 			});
 		
-			var result = this.reduceToDetermineCFL();
-			return result;
+			return this.reduceToDetermineCFL();
 		},	
 		advect : function(dt) {			
 			var dx = (xmax - xmin) / this.nx;
@@ -162,6 +276,9 @@ var advectMethods = {
 			//get velocity at interfaces from state
 			quadObj.draw({
 				shader : burgersComputeInterfaceVelocityShader,
+				uniforms : {
+					dpos : [1/this.nx, 1/this.nx]
+				},
 				texs : [this.qTex]
 			});
 
@@ -170,6 +287,9 @@ var advectMethods = {
 				fbo.check();
 				quadObj.draw({
 					shader : burgersComputeFluxSlopeShader[side],
+					uniforms : {
+						dpos : [1/this.nx, 1/this.nx]
+					},
 					texs : [
 						this.qTex, 
 						this.uiTex
@@ -184,7 +304,11 @@ var advectMethods = {
 				quadObj.draw({
 					shader : burgersComputeFluxShader[this.fluxMethod][side],
 					uniforms : {
+						dpos : [1/this.nx, 1/this.nx],
 						dt_dx : dt / dxi[side]
+					},
+					uniforms : {
+						dpos : [1/this.nx, 1/this.nx],
 					},
 					texs : [
 						this.qTex,
@@ -200,6 +324,7 @@ var advectMethods = {
 			quadObj.draw({
 				shader : burgersUpdateStateShader,
 				uniforms : {
+					dpos : [1/this.nx, 1/this.nx],
 					dt_dx : [
 						dt / dx,
 						dt / dy
@@ -257,9 +382,7 @@ var advectMethods = {
 				shader : roeComputeCFLShader,
 				texs : [this.eigenvalueTex[0], this.eigenvalueTex[1]]
 			});
-		
-			var result = this.reduceToDetermineCFL();
-			return result;		
+			return this.reduceToDetermineCFL();
 		},
 		advect : function(dt) {
 			var dx = (xmax - xmin) / this.nx;
@@ -582,6 +705,13 @@ var HydroState = makeClass({
 		//compute pressure
 		quadObj.draw({
 			shader : computePressureShader,
+			uniforms : {
+				dpos : [1/this.nx, 1/this.nx],
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax],
+				externalForce : [externalForceX, externalForceY],
+				gamma : this.gamma
+			},
 			texs : [this.qTex]
 		});
 		
@@ -591,8 +721,10 @@ var HydroState = makeClass({
 		quadObj.draw({
 			shader : applyPressureToMomentumShader,
 			uniforms : {
+				dpos : [1/this.nx, 1/this.nx],
 				dt : dt,
-				dt_dx : [dt / dx, dt / dy]
+				dx : [dx, dy],
+				externalForce : [externalForceX, externalForceY]
 			},
 			texs : [this.qTex, this.pressureTex]
 		});
@@ -604,8 +736,10 @@ var HydroState = makeClass({
 		quadObj.draw({
 			shader : applyPressureToWorkShader,
 			uniforms : {
+				dpos : [1/this.nx, 1/this.nx],
 				dt : dt,
-				dt_dx : [dt / dx, dt / dy]
+				dx : [dx, dy],
+				externalForce : [externalForceX, externalForceY]
 			},
 			texs : [this.qTex, this.pressureTex]
 		});
@@ -628,7 +762,7 @@ var HydroState = makeClass({
 		} else {
 			dt = fixedDT;
 		}
-window.lastDT = dt;
+
 		//do the update
 		this.step(dt);
 			
@@ -644,21 +778,33 @@ window.lastDT = dt;
 
 	//reduce to determine CFL
 	reduceToDetermineCFL : function() {
+
 		var size = this.nx;
 		while (size > 1) {
+			//console.log(getFloatTexData({srcTex:this.cflReduceTex})); fbo.bind();
+			//console.log('reducing...')
+			
 			size /= 2;
+			if (size !== Math.floor(size)) throw 'got a npo2 size '+this.nx;
 			gl.viewport(0, 0, size, size);
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextCFLReduceTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
 				shader : minReduceShader,
+				uniforms : {
+					texsize : [this.nx, this.nx], 
+					viewsize : [size, size]
+				},
 				texs : [this.cflReduceTex]
 			});
 			
 			var tmp = this.cflReduceTex;
 			this.cflReduceTex = this.nextCFLReduceTex;
 			this.nextCFLReduceTex = tmp;
+			
 		}
+		//console.log('done reducing!')	
+		//console.log(getFloatTexData({srcTex:this.cflReduceTex})); fbo.bind();
 	
 		//now that the viewport is 1x1, run the encode shader on it
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, encodeTempTex.obj, 0);
@@ -671,14 +817,25 @@ window.lastDT = dt;
 		var cflUint8Result = new Uint8Array(4);
 		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cflUint8Result);
 		var cflFloat32Result = new Float32Array(cflUint8Result.buffer);
-
 		gl.viewport(0, 0, this.nx, this.nx);
-
 		var result = cflFloat32Result[0] * this.cfl;
-		result *= .5;	//when I write out 1's in the minReduce, I read .5's back here ... hmm ...
+		//throw 'here';
 		return result;
-	}
+	},
 
+	/*
+	args:
+		vtxs
+		texCoords
+		texs
+	*/
+	drawLine : function(args) {
+		lineObj.attrs.vertex.data.set(args.vtxs);
+		lineObj.attrs.vertex.updateData();
+		lineObj.attrs.texCoord.data.set(args.texCoords);
+		lineObj.attrs.texCoord.updateData();
+		lineObj.draw(args);
+	}
 });
 
 
@@ -725,8 +882,8 @@ function update() {
 				eigenvectors[row] = [];
 				eigenvectorInverses[row] = [];
 				for (var column = 0; column < 4; ++column) {
-					eigenvectors[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorColumnTex[side][column], encodeTempTex, row);
-					eigenvectorInverses[row][column] = getFloatTexData(fbo, hydro.state.eigenvectorInverseColumnTex[side][column], encodeTempTex, row);
+					eigenvectors[row][column] = getFloatTexData({srcTex:hydro.state.eigenvectorColumnTex[side][column], channel:row});
+					eigenvectorInverses[row][column] = getFloatTexData({srcTex:hydro.state.eigenvectorInverseColumnTex[side][column], channel:row});
 				}
 			}
 		
@@ -807,7 +964,19 @@ function buildSelect(id, key, map) {
 	});
 }
 
-function getFloatTexData(fbo, srcTex, destTex, channel) {
+/*
+args:
+	fbo : fbo (default window.fbo)
+	srcTex : srcTex
+	destTex : destTex - should be RGBA / UNSIGNED_BYTE (default window.encodeTempTex)
+	channel : channel (default 0)
+*/
+function getFloatTexData(args) {//fbo, srcTex, destTex, channel) {
+	var fbo = args.fbo === undefined ? window.fbo : args.fbo;
+	var srcTex = args.srcTex;
+	var destTex = args.destTex === undefined ? window.encodeTempTex : args.destTex;
+	var channel = args.channel === undefined ? 0 : args.channel;
+
 	var destUint8Array = new Uint8Array(destTex.width * destTex.height * 4);
 	fbo.setColorAttachmentTex2D(0, destTex);
 	fbo.draw({
@@ -870,6 +1039,49 @@ $(document).ready(function(){
 		}
 	});
 
+	lineObj = new GL.SceneObject({
+		mode : gl.LINES,
+		attrs : {
+			vertex : new GL.ArrayBuffer({
+				dim : 2,
+				data : [0, 0, 1, 1],
+				usage : gl.DYNAMIC_DRAW,
+				keep : true
+			}),
+			texCoord : new GL.ArrayBuffer({
+				dim : 2,
+				data : [0, 0, 1, 1],
+				usage : gl.DYNAMIC_DRAW,
+				keep : true
+			})
+		},
+		shader : new GL.ShaderProgram({
+			vertexCode : mlstr(function(){/*
+attribute vec2 vertex;
+attribute vec2 texCoord;
+varying vec2 pos;
+void main() {
+	pos = texCoord; 
+	gl_Position = vec4(vertex * 2. - 1., 0., 1.);
+}
+*/}),
+			vertexPrecision : 'best',
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform sampler2D tex;
+void main() {
+	gl_FragColor = texture2D(tex, pos);
+}
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				tex : 0
+			}
+		}),
+		parent : null,
+		static : true
+	});
+
 	quadObj = new GL.SceneObject({
 		mode : gl.TRIANGLE_STRIP,
 		attrs : {
@@ -926,7 +1138,7 @@ void main() {
 	float energyPotential = dot(gridPos - rangeMin, externalForce);
 	float energyThermal = 1.;
 	float energyTotal = energyKinetic + energyThermal + energyPotential;
-	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
+	gl_FragColor = vec4(rho, rho * vel.x, rho * vel.y, rho * energyTotal);
 }		
 */}),
 			fragmentPrecision : 'best',
@@ -1034,13 +1246,13 @@ void main() {
 	float energyPotential = dot(gridPos - rangeMin, externalForce);
 	float energyThermal = energyTotal - energyKinetic - energyPotential;
 	float speedOfSound = sqrt(gamma * (gamma - 1.) * energyThermal);
-	vec2 dxi = (rangeMax - rangeMin) * dpos;
-	vec2 cfl = vec2(
-		dxi.x / (speedOfSound + abs(vel.x)),
-		dxi.y / (speedOfSound + abs(vel.y)));
-	gl_FragColor = vec4(min(cfl.x, cfl.y), 0., 0., 0.);
+	vec2 dx = (rangeMax - rangeMin) * dpos;
+	float cflx = dx.x / (speedOfSound + abs(vel.x));
+	float cfly = dx.y / (speedOfSound + abs(vel.y));
+	float cfl = min(cflx, cfly);
+	gl_FragColor = vec4(cfl, 0., 0., 0.);
 }
-*/}),	
+*/}),
 			fragmentPrecision : 'best',
 			uniforms : {
 				qTex : 0,
@@ -1062,7 +1274,7 @@ void main() {
 	gl_FragColor = vec4(
 		.5 * (q.y / q.x + qxPrev.y / qxPrev.x),
 		.5 * (q.z / q.x + qyPrev.z / qyPrev.x),
-		0., 1.);
+		0., 0.);
 }		
 */}),
 			fragmentPrecision : 'best',
@@ -1130,12 +1342,15 @@ void main() {
 	sidestep[$side] = dpos[$side];
 	
 	float ui = texture2D(uiTex, pos)[$side];
-	float uigz = step(0., ui);
 
 	vec4 qPrev = texture2D(qTex, pos - sidestep);
 	vec4 q = texture2D(qTex, pos);
 
-	gl_FragColor = ui * mix(q, qPrev, uigz);
+	if (ui >= 0.) {
+		gl_FragColor = ui * qPrev;
+	} else {
+		gl_FragColor = ui * q;
+	}
 	
 	vec4 r = texture2D(rTex, pos);
 	vec4 phi = fluxMethod(r);
@@ -1194,17 +1409,19 @@ uniform vec2 rangeMax;
 uniform sampler2D eigenvalueXTex;
 uniform sampler2D eigenvalueYTex;
 void main() {
-	vec4 eigenvalueX = texture2D(eigenvalueXTex, pos);
-	vec4 eigenvalueY = texture2D(eigenvalueYTex, pos);
+	vec4 eigenvalueXN = texture2D(eigenvalueXTex, pos);
+	vec4 eigenvalueXP = texture2D(eigenvalueXTex, pos + vec2(dpos.x, 0.));
+	float maxLambdaXN = max(0., max(max(eigenvalueXN.x, eigenvalueXN.y), max(eigenvalueXN.z, eigenvalueXN.w)));
+	float minLambdaXP = min(0., min(min(eigenvalueXP.x, eigenvalueXP.y), min(eigenvalueXP.z, eigenvalueXP.w)));
 	
-	float minLambdaX = min(0., min(min(eigenvalueX.x, eigenvalueX.y), min(eigenvalueX.z, eigenvalueX.w)));
-	float maxLambdaX = max(0., max(max(eigenvalueX.x, eigenvalueX.y), max(eigenvalueX.z, eigenvalueX.w)));
-	float minLambdaY = min(0., min(min(eigenvalueY.x, eigenvalueY.y), min(eigenvalueY.z, eigenvalueY.w)));
-	float maxLambdaY = max(0., max(max(eigenvalueY.x, eigenvalueY.y), max(eigenvalueY.z, eigenvalueY.w)));
+	vec4 eigenvalueYN = texture2D(eigenvalueYTex, pos);
+	vec4 eigenvalueYP = texture2D(eigenvalueYTex, pos + vec2(0., dpos.y));
+	float maxLambdaYN = max(0., max(max(eigenvalueYN.x, eigenvalueYN.y), max(eigenvalueYN.z, eigenvalueYN.w)));
+	float minLambdaYP = min(0., min(min(eigenvalueYP.x, eigenvalueYP.y), min(eigenvalueYP.z, eigenvalueYP.w)));
 	
 	vec2 dxi = (rangeMax - rangeMin) * dpos;
 	gl_FragColor = vec4(
-		min( dxi.x / (maxLambdaX - minLambdaX), dxi.y / (maxLambdaY - minLambdaY)),
+		min( dxi.x / (maxLambdaXN - minLambdaXP), dxi.y / (maxLambdaYN - minLambdaYP)),
 		0., 0., 0.);
 }
 */}),
@@ -1678,29 +1895,29 @@ void main() {
 varying vec2 pos;
 uniform vec2 dpos;
 uniform float dt;
-uniform vec2 dt_dx;
+uniform vec2 dx;
 uniform vec2 externalForce;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 void main() {
-	vec2 dx = vec2(dpos.x, 0.);
-	vec2 dy = vec2(0., dpos.y);
+	vec2 dposx = vec2(dpos.x, 0.);
+	vec2 dposy = vec2(0., dpos.y);
 	
-	vec2 posxp = pos + dx;
-	vec2 posxn = pos - dx;
-	vec2 posyp = pos + dy;
-	vec2 posyn = pos - dy;
+	vec2 posxp = pos + dposx;
+	vec2 posxn = pos - dposx;
+	vec2 posyp = pos + dposy;
+	vec2 posyn = pos - dposy;
 
 	float pressureXP = texture2D(pressureTex, posxp).x;
 	float pressureXN = texture2D(pressureTex, posxn).x;
 	float pressureYP = texture2D(pressureTex, posyp).x;
 	float pressureYN = texture2D(pressureTex, posyn).x;
+	vec2 pressureGrad = vec2(pressureXP - pressureXN, pressureYP - pressureYN) / (2. * dx);
 
 	vec4 q = texture2D(qTex, pos);
 	float rho = q.x;
 	gl_FragColor = q;
-	gl_FragColor.y -= .5 * dt_dx.x * (pressureXP - pressureXN) + dt * rho * externalForce.x;
-	gl_FragColor.z -= .5 * dt_dx.y * (pressureYP - pressureYN) + dt * rho * externalForce.y;
+	gl_FragColor.yz -= dt * (pressureGrad + rho * externalForce);
 }
 */}),
 			fragmentPrecision : 'best',
@@ -1716,18 +1933,18 @@ void main() {
 varying vec2 pos;
 uniform vec2 dpos;
 uniform float dt;
-uniform vec2 dt_dx;
+uniform vec2 dx;
 uniform vec2 externalForce;
 uniform sampler2D qTex;
 uniform sampler2D pressureTex;
 void main() {
-	vec2 dx = vec2(dpos.x, 0.);
-	vec2 dy = vec2(0., dpos.y);
+	vec2 dposx = vec2(dpos.x, 0.);
+	vec2 dposy = vec2(0., dpos.y);
 	
-	vec2 posxp = pos + dx;
-	vec2 posxn = pos - dx;
-	vec2 posyp = pos + dy;
-	vec2 posyn = pos - dy;
+	vec2 posxp = pos + dposx;
+	vec2 posxn = pos - dposx;
+	vec2 posyp = pos + dposy;
+	vec2 posyn = pos - dposy;
 
 	float pressureXP = texture2D(pressureTex, posxp).x;
 	float pressureXN = texture2D(pressureTex, posxn).x;
@@ -1743,13 +1960,14 @@ void main() {
 	float uXN = rho_u_XN.y / rho_u_XN.x;
 	float vYP = rho_v_YP.y / rho_v_YP.x;
 	float vYN = rho_v_YN.y / rho_v_YN.x;
+	
+	vec2 pressureTimesVelocityGrad = vec2(
+		pressureXP * uXP - pressureXN * uXN, 
+		pressureYP * vYP - pressureYN * vYN) / (2. * dx);
 
 	vec4 q = texture2D(qTex, pos);
 	gl_FragColor = q;
-	gl_FragColor.w -= .5 * (
-		dt_dx.x * (pressureXP * uXP - pressureXN * uXN)
-		+ dt_dx.y * (pressureYP * vYP - pressureYN * vYN))
-		+ dt * dot(q.yz, externalForce);
+	gl_FragColor.w -= dt * (pressureTimesVelocityGrad.x + pressureTimesVelocityGrad.y + dot(q.yz, externalForce));
 }
 */}),
 			fragmentPrecision : 'best',
@@ -1794,16 +2012,20 @@ void main() {
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
 varying vec2 pos;
-uniform vec2 dpos;
+uniform vec2 texsize;
+uniform vec2 viewsize;
 uniform sampler2D srcTex;
 void main() {
-	vec4 srcA = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(.5, .5));
-	vec4 srcB = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(1.5, .5));
-	vec4 srcC = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(.5, 1.5));
-	vec4 srcD = texture2D(srcTex, 2. * (pos - .5) + dpos * vec2(1.5, 1.5));
-	gl_FragColor = vec4(
-		min(min(srcA.x, srcB.x), min(srcC.x, srcD.x)),
-		0., 0., 0.);
+	vec2 intPos = pos * viewsize - .5;
+	
+	float a = texture2D(srcTex, (intPos * 2. + .5) / texsize).x;
+	float b = texture2D(srcTex, (intPos * 2. + vec2(1., 0.) + .5) / texsize).x;
+	float c = texture2D(srcTex, (intPos * 2. + vec2(0., 1.) + .5) / texsize).x;
+	float d = texture2D(srcTex, (intPos * 2. + vec2(1., 1.) + .5) / texsize).x;
+	float e = min(a,b);
+	float f = min(c,d);
+	float g = min(e,f);
+	gl_FragColor = vec4(g, 0., 0., 0.);
 }
 */}),
 			fragmentPrecision : 'best',
@@ -2126,10 +2348,6 @@ void main() {
 		});
 	}
 
-
-	//make grid
-	hydro.update();
-	
 	var zoomFactor = .0003;	// upon mousewheel
 	var dragging = false;
 	mouse = new Mouse3D({
@@ -2191,7 +2409,7 @@ void main() {
 	var coords = [];
 	var maxErr = [];
 	for (var channel = 0; channel < 4; ++channel) {
-		coords[channel] = getFloatTexData(fbo, tmpTex, encodeTempTex, channel);
+		coords[channel] = getFloatTexData({srcTex:tmpTex, channel:channel});
 		maxErr[channel] = 0;
 	}
 	for (var j = 0; j < nx; ++j) {

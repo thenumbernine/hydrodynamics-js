@@ -13,7 +13,7 @@ var xmax = 100;
 var ymin = -10;
 var ymax = 50;
 var gridstep = 10;
-var useCFL = true;
+var useCFL = false;
 var fixedDT = .2;
 var gaussSeidelIterations = 20;
 
@@ -380,7 +380,7 @@ var integrationMethods = {
 	//until then, Gauss-Seidel
 	'Backward Euler + Gauss Seidel' : {
 		initOldQ : function() {
-			if (this.oldQ == undefined) {
+			if (this.oldQ === undefined) {
 				this.oldQ = [];
 				for (var i = 0; i < this.nx; ++i) {
 					this.oldQ[i] = [0, 0, 0];
@@ -393,9 +393,9 @@ var integrationMethods = {
 			}
 		},
 		initPressure : function() {
-			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
 		},
 		applyMomentumDiffusion : function(dt) {
+			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
 			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 				for (var i = 0; i < this.nx; ++i) {
 					var u = this.q[i][1] / this.q[i][0];
@@ -411,6 +411,7 @@ var integrationMethods = {
 			}
 		},
 		applyWorkDiffusion : function(dt) {
+			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
 			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 				for (var i = 0; i < this.nx; ++i) {
 					var u = this.q[i][1] / this.q[i][0];
@@ -672,7 +673,7 @@ var HydroState = makeClass({
 		this.boundaryMethod = 'mirror';
 		this.fluxMethod = 'superbee';
 		this.advectMethod = 'Riemann / Roe';
-		this.integrationMethod = 'Forward Euler';
+		this.integrationMethod = 'Backward Euler + Gauss Seidel';
 	},
 	resetSod : function() {
 		for (var i = 0; i < this.nx; ++i) {
@@ -738,6 +739,7 @@ var HydroState = makeClass({
 		} else {
 			dt = fixedDT;
 		}
+window.lastDT = dt;
 
 		//do the update
 		this.step(dt);
@@ -859,10 +861,10 @@ $(document).ready(function(){
 		});
 	})();
 	
-	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
-	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
-	buildSelect('advect-method', 'advectMethod', advectMethods);
-	buildSelect('integration-method', 'integrationMethod', integrationMethods);
+	buildSelect('boundaryMethod', 'boundaryMethod', boundaryMethods);
+	buildSelect('fluxMethod', 'fluxMethod', fluxMethods);
+	buildSelect('advectMethod', 'advectMethod', advectMethods);
+	buildSelect('integrationMethod', 'integrationMethod', integrationMethods);
 
 	$('#timeStepCFLBased').change(function() {
 		if (!$(this).is(':checked')) return;
