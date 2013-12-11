@@ -828,7 +828,7 @@ var HydroState = makeClass({
 		//swap
 		var tmp = this.qTex;
 		this.qTex = this.nextQTex;
-		this.nextQTex = this.qTex;
+		this.nextQTex = tmp; 
 	},
 
 	//reduce to determine CFL
