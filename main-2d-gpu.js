@@ -446,7 +446,7 @@ var advectMethods = {
 			}
 
 			//update state
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratcTex.obj, 0);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
 				shader : roeUpdateStateShader,
