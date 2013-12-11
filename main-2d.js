@@ -810,13 +810,35 @@ var integrationMethods = {
 				for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
 					for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
 						for (var side = 0; side < 2; ++side) {
+							var indexL2 = i - 2 * dirs[side][0] + this.nx * (j - 2 * dirs[side][1]);
+							var indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+							var indexR1 = i + this.nx * j;
+							var indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]); 
+							
+							var solidL2 = this.solid[indexL2];
+							var solidL1 = this.solid[indexL1];
+							var solidR1 = this.solid[indexR1];
+							var solidR2 = this.solid[indexR2];
+							
 							var interfaceIndexL = side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1]));
 							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
 							var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+							
 							for (var state = 0; state < 4; ++state) {
+								
+								var interfaceDeltaQTildeL = this.interfaceDeltaQTilde[state + 4 * interfaceIndexL];
 								var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
+								var interfaceDeltaQTildeR = this.interfaceDeltaQTilde[state + 4 * interfaceIndexR];
+
+								//TODO is this right? 
+								if (solidL2) {
+									interfaceDeltaQTildeL = interfaceDeltaQTilde;
+								}
+								if (solidR2) {
+									interfaceDeltaQTildeR = interfaceDeltaQTilde;
+								}
+
 								if (Math.abs(interfaceDeltaQTilde) > 0) {
-									//TODO I'll bet boundaries are important here ...
 									if (this.interfaceEigenvalues[state + 4 * interfaceIndex] > 0) {
 										this.rTilde[state + 4 * interfaceIndex] = 
 											this.interfaceDeltaQTilde[state + 4 * interfaceIndexL]
