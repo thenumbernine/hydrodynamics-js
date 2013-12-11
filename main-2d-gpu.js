@@ -552,8 +552,6 @@ var HydroState = makeClass({
 		
 		this.allFloatTexs.push(this.solidTex = new FloatTexture2D(this.nx, this.nx));
 
-		this.resetSod();
-		
 		//p_i,j: pressure
 		this.pressureTex = new FloatTexture2D(this.nx, this.nx);
 		this.allFloatTexs.push(this.pressureTex);
@@ -635,14 +633,28 @@ var HydroState = makeClass({
 			this.allFloatTexs.push(this.rTildeTex[side] = new FloatTexture2D(this.nx, this.nx)); 
 		}
 
-		//number of ghost cells
-		this.nghost = 2;
-
 		//solver configuration
 		this.boundaryMethod = 'periodic';
 		this.fluxMethod = 'superbee';
 		this.advectMethod = 'Burgers';
 		this.drawToScreenMethod = 'Density';
+	
+		//initialize all textures to zero by default
+		//...except the noise tex, which isn't added to the 'allFloatTexs' list
+		gl.viewport(0, 0, this.nx, this.nx);
+		$.each(this.allFloatTexs, function(i,tex) {
+			fbo.setColorAttachmentTex2D(0, tex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : solidShader
+					});
+				}
+			});
+		});
+	
+		//initial conditions
+		this.resetSod();
 	},
 	resetSod : function() {
 		var thiz = this;
@@ -844,6 +856,7 @@ var HydroState = makeClass({
 			size /= 2;
 			if (size !== Math.floor(size)) throw 'got a npo2 size '+this.nx;
 			gl.viewport(0, 0, size, size);
+			//TODO use this.scratchTex ... but swapping it with cflReduceTex afterwards seems to make timesteps explode
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextCFLReduceTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
@@ -1219,9 +1232,9 @@ void main() {
 	vec2 delta = gridPos - center;
 	float distSq = dot(delta, delta);
 	if (distSq < .1 * .1) {
-		gl_FragColor = vec4(1., 1., 1., 1.);
+		gl_FragColor = vec4(1.);
 	} else {
-		gl_FragColor = vec4(0., 0., 0., 0.);
+		gl_FragColor = vec4(0.);
 	}
 }		
 */}),
@@ -1352,14 +1365,14 @@ uniform vec2 dpos;
 uniform sampler2D qTex;
 uniform sampler2D solidTex;
 void main() {
-	vec2 dx = vec2(dpos.x, 0.);
-	vec2 dy = vec2(0., dpos.y);
+	vec2 dposx = vec2(dpos.x, 0.);
+	vec2 dposy = vec2(0., dpos.y);
 	vec4 qR = texture2D(qTex, pos);
-	vec4 qXL = texture2D(qTex, pos - dx);
-	vec4 qYL = texture2D(qTex, pos - dy);
+	vec4 qXL = texture2D(qTex, pos - dposx);
+	vec4 qYL = texture2D(qTex, pos - dposy);
 	float solidR = texture2D(solidTex, pos).x;
-	float solidXL = texture2D(solidTex, pos - dx).x;
-	float solidYL = texture2D(solidTex, pos - dy).x;
+	float solidXL = texture2D(solidTex, pos - dposx).x;
+	float solidYL = texture2D(solidTex, pos - dposy).x;
 	float uR = qR.y / qR.x;
 	float vR = qR.z / qR.x;
 	float uL = qXL.y / qXL.x;
@@ -1524,15 +1537,18 @@ uniform sampler2D fluxXTex;
 uniform sampler2D fluxYTex;
 void main() {
 	float solid = texture2D(solidTex, pos).x;
-	if (solid > .5) discard;
-	vec4 q = texture2D(qTex, pos);
-	vec4 fluxXL = texture2D(fluxXTex, pos);
-	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(dpos.x, 0.));
-	vec4 fluxYL = texture2D(fluxYTex, pos);
-	vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., dpos.y));
-	gl_FragColor = q 
-		- dt_dx.x * (fluxXR - fluxXL)
-		- dt_dx.y * (fluxYR - fluxYL);
+	if (solid > .5) {
+		gl_FragColor = vec4(0.);
+	} else {
+		vec4 q = texture2D(qTex, pos);
+		vec4 fluxXL = texture2D(fluxXTex, pos);
+		vec4 fluxXR = texture2D(fluxXTex, pos + vec2(dpos.x, 0.));
+		vec4 fluxYL = texture2D(fluxYTex, pos);
+		vec4 fluxYR = texture2D(fluxYTex, pos + vec2(0., dpos.y));
+		gl_FragColor = q 
+			- dt_dx.x * (fluxXR - fluxXL)
+			- dt_dx.y * (fluxYR - fluxYL);
+	}
 }		
 */}),
 			fragmentPrecision : 'best',
@@ -2021,17 +2037,20 @@ uniform sampler2D qTex;
 uniform sampler2D solidTex;
 void main() {
 	float solid = texture2D(solidTex, pos).x;
-	if (solid > .5) discard;
-	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	vec4 q = texture2D(qTex, pos);
-	float rho = q.x;
-	vec2 vel = q.yz / rho;
-	float energyTotal = q.w / rho;
-	float energyKinetic = .5 * dot(vel, vel);
-	float energyPotential = dot(gridPos - rangeMin, externalForce);
-	float energyThermal = energyTotal - energyKinetic - energyPotential;
-	gl_FragColor = vec4(0.);
-	gl_FragColor.x = (gamma - 1.) * rho * energyThermal;
+	if (solid > .5) {
+		gl_FragColor = vec4(0.);
+	} else {
+		vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
+		vec4 q = texture2D(qTex, pos);
+		float rho = q.x;
+		vec2 vel = q.yz / rho;
+		float energyTotal = q.w / rho;
+		float energyKinetic = .5 * dot(vel, vel);
+		float energyPotential = dot(gridPos - rangeMin, externalForce);
+		float energyThermal = energyTotal - energyKinetic - energyPotential;
+		gl_FragColor = vec4(0.);
+		gl_FragColor.x = (gamma - 1.) * rho * energyThermal;
+	}
 }
 */}),
 			fragmentPrecision : 'best',
@@ -2054,37 +2073,39 @@ uniform sampler2D solidTex;
 uniform sampler2D pressureTex;
 void main() {
 	float solid = texture2D(solidTex, pos).x;
-	if (solid > .5) discard;
-	
-	vec2 dposx = vec2(dpos.x, 0.);
-	vec2 dposy = vec2(0., dpos.y);
-	
-	vec2 posXL = pos - dposx;
-	vec2 posXR = pos + dposx;
-	vec2 posYL = pos - dposy;
-	vec2 posYR = pos + dposy;
+	if (solid > .5) {
+		gl_FragColor = vec4(0.);
+	} else {	
+		vec2 dposx = vec2(dpos.x, 0.);
+		vec2 dposy = vec2(0., dpos.y);
+		
+		vec2 posXL = pos - dposx;
+		vec2 posXR = pos + dposx;
+		vec2 posYL = pos - dposy;
+		vec2 posYR = pos + dposy;
 
-	float solidXL = texture2D(solidTex, posXL).x;
-	float solidXR = texture2D(solidTex, posXR).x;
-	float solidYL = texture2D(solidTex, posYL).x;
-	float solidYR = texture2D(solidTex, posYR).x;
+		float solidXL = texture2D(solidTex, posXL).x;
+		float solidXR = texture2D(solidTex, posXR).x;
+		float solidYL = texture2D(solidTex, posYL).x;
+		float solidYR = texture2D(solidTex, posYR).x;
 
-	float pressureC = texture2D(pressureTex, pos).x;
-	float pressureXL = texture2D(pressureTex, posXL).x;
-	if (solidXL > .5) pressureXL = pressureC;
-	float pressureXR = texture2D(pressureTex, posXR).x;
-	if (solidXR > .5) pressureXR = pressureC;
-	float pressureYL = texture2D(pressureTex, posYL).x;
-	if (solidYL > .5) pressureYL = pressureC;
-	float pressureYR = texture2D(pressureTex, posYR).x;
-	if (solidYR > .5) pressureYR = pressureC; 
-	
-	vec2 pressureGrad = vec2(pressureXR - pressureXL, pressureYR - pressureYL) / (2. * dx);
+		float pressureC = texture2D(pressureTex, pos).x;
+		float pressureXL = texture2D(pressureTex, posXL).x;
+		if (solidXL > .5) pressureXL = pressureC;
+		float pressureXR = texture2D(pressureTex, posXR).x;
+		if (solidXR > .5) pressureXR = pressureC;
+		float pressureYL = texture2D(pressureTex, posYL).x;
+		if (solidYL > .5) pressureYL = pressureC;
+		float pressureYR = texture2D(pressureTex, posYR).x;
+		if (solidYR > .5) pressureYR = pressureC; 
+		
+		vec2 pressureGrad = vec2(pressureXR - pressureXL, pressureYR - pressureYL) / (2. * dx);
 
-	vec4 q = texture2D(qTex, pos);
-	float rho = q.x;
-	gl_FragColor = q;
-	gl_FragColor.yz -= dt * (pressureGrad + rho * externalForce);
+		vec4 q = texture2D(qTex, pos);
+		float rho = q.x;
+		gl_FragColor = q;
+		gl_FragColor.yz -= dt * (pressureGrad + rho * externalForce);
+	}
 }
 */}),
 			fragmentPrecision : 'best',
@@ -2108,54 +2129,56 @@ uniform sampler2D solidTex;
 uniform sampler2D pressureTex;
 void main() {
 	float solid = texture2D(solidTex, pos).x;
-	if (solid > .5) discard;
-	
-	vec2 dposx = vec2(dpos.x, 0.);
-	vec2 dposy = vec2(0., dpos.y);
-	
-	vec2 posXR = pos + dposx;
-	vec2 posXL = pos - dposx;
-	vec2 posYR = pos + dposy;
-	vec2 posYL = pos - dposy;
+	if (solid > .5) {
+		gl_FragColor = vec4(0.);
+	} else {
+		vec2 dposx = vec2(dpos.x, 0.);
+		vec2 dposy = vec2(0., dpos.y);
+		
+		vec2 posXR = pos + dposx;
+		vec2 posXL = pos - dposx;
+		vec2 posYR = pos + dposy;
+		vec2 posYL = pos - dposy;
 
-	float solidXL = texture2D(solidTex, posXL).x;
-	float solidXR = texture2D(solidTex, posXR).x;
-	float solidYL = texture2D(solidTex, posYL).x;
-	float solidYR = texture2D(solidTex, posYR).x;
+		float solidXL = texture2D(solidTex, posXL).x;
+		float solidXR = texture2D(solidTex, posXR).x;
+		float solidYL = texture2D(solidTex, posYL).x;
+		float solidYR = texture2D(solidTex, posYR).x;
 
-	float pressureC = texture2D(pressureTex, pos).x;
-	float pressureXL = texture2D(pressureTex, posXL).x;
-	if (solidXL > .5) pressureXL = pressureC;
-	float pressureXR = texture2D(pressureTex, posXR).x;
-	if (solidXR > .5) pressureXR = pressureC;
-	float pressureYL = texture2D(pressureTex, posYL).x;
-	if (solidYL > .5) pressureYL = pressureC;
-	float pressureYR = texture2D(pressureTex, posYR).x;
-	if (solidYR > .5) pressureYR = pressureC; 
+		float pressureC = texture2D(pressureTex, pos).x;
+		float pressureXL = texture2D(pressureTex, posXL).x;
+		if (solidXL > .5) pressureXL = pressureC;
+		float pressureXR = texture2D(pressureTex, posXR).x;
+		if (solidXR > .5) pressureXR = pressureC;
+		float pressureYL = texture2D(pressureTex, posYL).x;
+		if (solidYL > .5) pressureYL = pressureC;
+		float pressureYR = texture2D(pressureTex, posYR).x;
+		if (solidYR > .5) pressureYR = pressureC; 
 
-	vec3 rho_C = texture2D(qTex, pos).xyz;
-	vec2 rho_u_XR = texture2D(qTex, posXR).xy;
-	vec2 rho_u_XL = texture2D(qTex, posXL).xy;
-	vec2 rho_v_YR = texture2D(qTex, posYR).xz;
-	vec2 rho_v_YL = texture2D(qTex, posYL).xz;
+		vec3 rho_C = texture2D(qTex, pos).xyz;
+		vec2 rho_u_XR = texture2D(qTex, posXR).xy;
+		vec2 rho_u_XL = texture2D(qTex, posXL).xy;
+		vec2 rho_v_YR = texture2D(qTex, posYR).xz;
+		vec2 rho_v_YL = texture2D(qTex, posYL).xz;
 
-	vec2 uvC = rho_C.yz / rho_C.x;
-	float uXR = rho_u_XR.y / rho_u_XR.x;
-	if (solidXR > .5) uXR = -uvC.x;
-	float uXL = rho_u_XL.y / rho_u_XL.x;
-	if (solidXL > .5) uXL = -uvC.x;
-	float vYR = rho_v_YR.y / rho_v_YR.x;
-	if (solidYR > .5) vYR = -uvC.y;
-	float vYL = rho_v_YL.y / rho_v_YL.x;
-	if (solidYL > .5) vYL = -uvC.y;
-	
-	vec2 pressureTimesVelocityGrad = vec2(
-		pressureXR * uXR - pressureXL * uXL, 
-		pressureYR * vYR - pressureYL * vYL) / (2. * dx);
+		vec2 uvC = rho_C.yz / rho_C.x;
+		float uXR = rho_u_XR.y / rho_u_XR.x;
+		if (solidXR > .5) uXR = -uvC.x;
+		float uXL = rho_u_XL.y / rho_u_XL.x;
+		if (solidXL > .5) uXL = -uvC.x;
+		float vYR = rho_v_YR.y / rho_v_YR.x;
+		if (solidYR > .5) vYR = -uvC.y;
+		float vYL = rho_v_YL.y / rho_v_YL.x;
+		if (solidYL > .5) vYL = -uvC.y;
+		
+		vec2 pressureTimesVelocityGrad = vec2(
+			pressureXR * uXR - pressureXL * uXL, 
+			pressureYR * vYR - pressureYL * vYL) / (2. * dx);
 
-	vec4 q = texture2D(qTex, pos);
-	gl_FragColor = q;
-	gl_FragColor.w -= dt * (pressureTimesVelocityGrad.x + pressureTimesVelocityGrad.y + dot(q.yz, externalForce));
+		vec4 q = texture2D(qTex, pos);
+		gl_FragColor = q;
+		gl_FragColor.w -= dt * (pressureTimesVelocityGrad.x + pressureTimesVelocityGrad.y + dot(q.yz, externalForce));
+	}
 }
 */}),
 			fragmentPrecision : 'best',
