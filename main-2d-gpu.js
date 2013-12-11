@@ -44,6 +44,7 @@ var copyShader;
 var minReduceShader;
 
 var resetSodShader;
+var resetSodCylinderSolidShader;
 var resetWaveShader;
 var resetKelvinHemholtzShader;
 
@@ -279,7 +280,7 @@ var advectMethods = {
 				uniforms : {
 					dpos : [1/this.nx, 1/this.nx]
 				},
-				texs : [this.qTex]
+				texs : [this.qTex, this.solidTex]
 			});
 
 			for (var side = 0; side < 2; ++side) {
@@ -292,6 +293,7 @@ var advectMethods = {
 					},
 					texs : [
 						this.qTex, 
+						this.solidTex,
 						this.uiTex
 					]
 				});
@@ -312,6 +314,7 @@ var advectMethods = {
 					},
 					texs : [
 						this.qTex,
+						this.solidTex,
 						this.uiTex,
 						this.rTex[side]
 					]
@@ -332,6 +335,7 @@ var advectMethods = {
 				},
 				texs : [
 					this.qTex, 
+					this.solidTex,
 					this.fluxTex[0], 
 					this.fluxTex[1]
 				]
@@ -454,6 +458,7 @@ var advectMethods = {
 				},
 				texs : [
 					this.qTex, 
+					this.solidTex,
 					this.fluxTex[0], 
 					this.fluxTex[1]
 				]
@@ -542,6 +547,8 @@ var HydroState = makeClass({
 		this.allFloatTexs.push(this.qTex);
 		this.nextQTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
 		this.allFloatTexs.push(this.nextQTex);
+
+		this.allFloatTexs.push(this.solidTex = new FloatTexture2D(this.nx, this.nx));
 
 		this.resetSod();
 		
@@ -637,10 +644,10 @@ var HydroState = makeClass({
 	},
 	resetSod : function() {
 		var thiz = this;
+		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
 			callback : function() {
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				quadObj.draw({
 					shader : resetSodShader,
 					uniforms : {
@@ -650,13 +657,45 @@ var HydroState = makeClass({
 				});
 			}
 		});
+		fbo.setColorAttachmentTex2D(0, this.solidTex);
+		fbo.draw({
+			callback : function() {
+				quadObj.draw({
+					shader : solidShader
+				});
+			}
+		});
 	},
-	resetWave : function() {
+	resetSodCylinder : function() {
 		var thiz = this;
+		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
 			callback : function() {
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
+				quadObj.draw({
+					shader : resetSodShader,
+					uniforms : {
+						noiseAmplitude : useNoise ? noiseAmplitude : 0
+					},
+					texs : [thiz.noiseTex]
+				});
+			}
+		});
+		fbo.setColorAttachmentTex2D(0, this.solidTex);
+		fbo.draw({
+			callback : function() {
+				quadObj.draw({
+					shader : resetSodCylinderSolidShader
+				});
+			}
+		});
+	},
+	resetWave : function() {
+		var thiz = this;
+		gl.viewport(0, 0, this.nx, this.nx);
+		fbo.setColorAttachmentTex2D(0, this.qTex);
+		fbo.draw({
+			callback : function() {
 				quadObj.draw({
 					shader : resetWaveShader,
 					uniforms : {
@@ -666,20 +705,36 @@ var HydroState = makeClass({
 				});
 			}
 		});
+		fbo.setColorAttachmentTex2D(0, this.solidTex);
+		fbo.draw({
+			callback : function() {
+				quadObj.draw({
+					shader : resetSodCylinderSolidShader
+				});
+			}
+		});
 	},
 	//http://www.astro.princeton.edu/~jstone/Athena/tests/kh/kh.html
 	resetKelvinHemholtz : function() {
 		var thiz = this;
+		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
 			callback : function() {
-				gl.viewport(0, 0, thiz.nx, thiz.nx);
 				quadObj.draw({
 					shader : resetKelvinHemholtzShader,
 					uniforms : {
 						noiseAmplitude : useNoise ? noiseAmplitude : 0
 					},
 					texs : [thiz.noiseTex]
+				});
+			}
+		});
+		fbo.setColorAttachmentTex2D(0, this.solidTex);
+		fbo.draw({
+			callback : function() {
+				quadObj.draw({
+					shader : resetSodCylinderSolidShader
 				});
 			}
 		});
@@ -712,7 +767,7 @@ var HydroState = makeClass({
 				externalForce : [externalForceX, externalForceY],
 				gamma : this.gamma
 			},
-			texs : [this.qTex]
+			texs : [this.qTex, this.solidTex]
 		});
 		
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
@@ -726,7 +781,7 @@ var HydroState = makeClass({
 				dx : [dx, dy],
 				externalForce : [externalForceX, externalForceY]
 			},
-			texs : [this.qTex, this.pressureTex]
+			texs : [this.qTex, this.solidTex, this.pressureTex]
 		});
 		this.swapQTexs();
 
@@ -741,7 +796,7 @@ var HydroState = makeClass({
 				dx : [dx, dy],
 				externalForce : [externalForceX, externalForceY]
 			},
-			texs : [this.qTex, this.pressureTex]
+			texs : [this.qTex, this.solidTex, this.pressureTex]
 		});
 		this.swapQTexs();
 
@@ -1149,6 +1204,32 @@ void main() {
 			}
 		});
 
+		resetSodCylinderSolidShader = new GL.ShaderProgram({
+			vertexShader : kernelVertexShader,
+			fragmentCode : mlstr(function(){/*
+varying vec2 pos;
+uniform sampler2D randomTex;
+uniform vec2 rangeMin; 
+uniform vec2 rangeMax; 
+void main() {
+	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
+	vec2 center = .3 * rangeMin + .7 * rangeMax;
+	vec2 delta = gridPos - center;
+	float distSq = dot(delta, delta);
+	if (distSq < .1 * .1) {
+		gl_FragColor = vec4(1., 1., 1., 1.);
+	} else {
+		gl_FragColor = vec4(0., 0., 0., 0.);
+	}
+}		
+*/}),
+			fragmentPrecision : 'best',
+			uniforms : {
+				rangeMin : [xmin, ymin],
+				rangeMax : [xmax, ymax]
+			}
+		});
+
 		resetWaveShader = new GL.ShaderProgram({
 			vertexShader : kernelVertexShader,
 			fragmentCode : mlstr(function(){/*
@@ -1267,19 +1348,34 @@ void main() {
 varying vec2 pos;
 uniform vec2 dpos;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 void main() {
-	vec4 q = texture2D(qTex, pos);
-	vec4 qxPrev = texture2D(qTex, pos - vec2(dpos.x, 0.));
-	vec4 qyPrev = texture2D(qTex, pos - vec2(0., dpos.y));
+	vec2 dx = vec2(dpos.x, 0.);
+	vec2 dy = vec2(0., dpos.y);
+	vec4 qR = texture2D(qTex, pos);
+	vec4 qXL = texture2D(qTex, pos - dx);
+	vec4 qYL = texture2D(qTex, pos - dy);
+	float solidR = texture2D(solidTex, pos).x;
+	float solidXL = texture2D(solidTex, pos - dx).x;
+	float solidYL = texture2D(solidTex, pos - dy).x;
+	float uR = qR.y / qR.x;
+	float vR = qR.z / qR.x;
+	float uL = qXL.y / qXL.x;
+	float vL = qYL.z / qYL.x;
+	if (solidXL > .5 && solidR <= .5) uL = -uR;
+	if (solidR > .5 && solidXL <= .5) uR = -uL;
+	if (solidYL > .5 && solidR <= .5) vL = -vR;
+	if (solidR > .5 && solidYL <= .5) vR = -vL;
 	gl_FragColor = vec4(
-		.5 * (q.y / q.x + qxPrev.y / qxPrev.x),
-		.5 * (q.z / q.x + qyPrev.z / qyPrev.x),
+		.5 * (uR + uL),
+		.5 * (vR + vL),
 		0., 0.);
 }		
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0
+				qTex : 0,
+				solidTex : 1
 			}
 		});
 
@@ -1290,31 +1386,60 @@ void main() {
 varying vec2 pos;
 uniform vec2 dpos;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 uniform sampler2D uiTex;
 void main() {
 	vec2 sidestep = vec2(0.);
 	sidestep[$side] = dpos[$side];
-	
-	vec4 qNext = texture2D(qTex, pos + sidestep);
-	vec4 q = texture2D(qTex, pos);
-	vec4 qPrev = texture2D(qTex, pos - sidestep);
-	vec4 qPrev2 = texture2D(qTex, pos - 2.*sidestep);
+
+	vec2 posL2 = pos - 2.*sidestep;
+	vec2 posL1 = pos - sidestep;
+	vec2 posR1 = pos;
+	vec2 posR2 = pos + sidestep;
+
+	float solidL2 = texture2D(solidTex, posL2).x;
+	float solidL1 = texture2D(solidTex, posL1).x;
+	float solidR1 = texture2D(solidTex, posR1).x;
+	float solidR2 = texture2D(solidTex, posR2).x;
+
+	vec4 qL2 = texture2D(qTex, posL2);
+	vec4 qL1 = texture2D(qTex, posL1);
+	vec4 qR1 = texture2D(qTex, posR1);
+	vec4 qR2 = texture2D(qTex, posR2);
+
+	if (solidL2 > .5) {
+		qL2 = qL1;
+		qL2[$side+1] = -qL2[$side+1];
+	}
+	if (solidR2 > .5) {
+		qR2 = qR1;
+		qR2[$side+1] = -qR2[$side+1];
+	}
+	if (solidL1 > .5) {
+		qL1 = qL1;
+		qL1[$side+1] = -qL1[$side+1];
+	}
+	if (solidR1 > .5) {
+		qR1 = qR1;
+		qR1[$side+1] = -qR1[$side+1];
+	}
 	
 	//dq = q_i,j - q_{{i,j}-dirs[side]}
-	vec4 dq = q - qPrev; 
+	vec4 dq = qR1 - qL1; 
 	
 	vec4 s = sign(dq);
 	s *= s;
 	
 	float ui = texture2D(uiTex, pos)[$side];
 	float uigz = step(0., ui); 
-	gl_FragColor = s * mix(qNext - q, qPrev - qPrev2, uigz) / dq;
+	gl_FragColor = s * mix(qR2 - qR1, qL1 - qL2, uigz) / dq;
 }
 */}).replace(/\$side/g, i),
 				fragmentPrecision : 'best',
 				uniforms : {
 					qTex : 0,
-					uiTex : 1
+					solidTex : 1,
+					uiTex : 2
 				}
 			});
 		});
@@ -1334,6 +1459,7 @@ varying vec2 pos;
 uniform vec2 dpos;
 uniform float dt_dx;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 uniform sampler2D uiTex;
 uniform sampler2D rTex;
 
@@ -1341,28 +1467,44 @@ void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
 	
+	vec2 posL = pos - sidestep;
+	vec2 posR = pos;
+
 	float ui = texture2D(uiTex, pos)[$side];
 
-	vec4 qPrev = texture2D(qTex, pos - sidestep);
-	vec4 q = texture2D(qTex, pos);
+	vec4 qL = texture2D(qTex, posL);
+	vec4 qR = texture2D(qTex, posR);
+
+	float solidL = texture2D(solidTex, posL).x;
+	float solidR = texture2D(solidTex, posR).x;
+
+	if (solidL > .5 && solidR <= .5) {
+		qL = qR;
+		qL[$side+1] = -qL[$side+1];
+	}
+	if (solidR > .5 && solidL <= .5) {
+		qR = qL;
+		qR[$side+1] = -qR[$side+1];
+	}
 
 	if (ui >= 0.) {
-		gl_FragColor = ui * qPrev;
+		gl_FragColor = ui * qL;
 	} else {
-		gl_FragColor = ui * q;
+		gl_FragColor = ui * qR;
 	}
 	
 	vec4 r = texture2D(rTex, pos);
 	vec4 phi = fluxMethod(r);
-	vec4 delta = phi * (q - qPrev);
+	vec4 delta = phi * (qR - qL);
 	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
 }			
 */}).replace(/\$side/g, i),
 					fragmentPrecision : 'best',
 					uniforms : {
 						qTex : 0,
-						uiTex : 1,
-						rTex : 2
+						solidTex : 1,
+						uiTex : 2,
+						rTex : 3
 					}
 				});
 			});
@@ -1375,9 +1517,12 @@ varying vec2 pos;
 uniform vec2 dpos;
 uniform vec2 dt_dx;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 uniform sampler2D fluxXTex;
 uniform sampler2D fluxYTex;
 void main() {
+	float solid = texture2D(solidTex, pos).x;
+	if (solid > .5) discard;
 	vec4 q = texture2D(qTex, pos);
 	vec4 fluxXL = texture2D(fluxXTex, pos);
 	vec4 fluxXR = texture2D(fluxXTex, pos + vec2(dpos.x, 0.));
@@ -1391,8 +1536,9 @@ void main() {
 			fragmentPrecision : 'best',
 			uniforms : {
 				qTex : 0,
-				fluxXTex : 1,
-				fluxYTex : 2
+				solidTex : 1,
+				fluxXTex : 2,
+				fluxYTex : 3
 			}
 		});
 
@@ -1870,7 +2016,10 @@ uniform vec2 rangeMax;
 uniform vec2 externalForce;
 uniform float gamma;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 void main() {
+	float solid = texture2D(solidTex, pos).x;
+	if (solid > .5) discard;
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	vec4 q = texture2D(qTex, pos);
 	float rho = q.x;
@@ -1885,7 +2034,8 @@ void main() {
 */}),
 			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0
+				qTex : 0,
+				solidTex : 1
 			}
 		});
 
@@ -1898,21 +2048,36 @@ uniform float dt;
 uniform vec2 dx;
 uniform vec2 externalForce;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 uniform sampler2D pressureTex;
 void main() {
+	float solid = texture2D(solidTex, pos).x;
+	if (solid > .5) discard;
+	
 	vec2 dposx = vec2(dpos.x, 0.);
 	vec2 dposy = vec2(0., dpos.y);
 	
-	vec2 posxp = pos + dposx;
-	vec2 posxn = pos - dposx;
-	vec2 posyp = pos + dposy;
-	vec2 posyn = pos - dposy;
+	vec2 posXL = pos - dposx;
+	vec2 posXR = pos + dposx;
+	vec2 posYL = pos - dposy;
+	vec2 posYR = pos + dposy;
 
-	float pressureXP = texture2D(pressureTex, posxp).x;
-	float pressureXN = texture2D(pressureTex, posxn).x;
-	float pressureYP = texture2D(pressureTex, posyp).x;
-	float pressureYN = texture2D(pressureTex, posyn).x;
-	vec2 pressureGrad = vec2(pressureXP - pressureXN, pressureYP - pressureYN) / (2. * dx);
+	float solidXL = texture2D(solidTex, posXL).x;
+	float solidXR = texture2D(solidTex, posXR).x;
+	float solidYL = texture2D(solidTex, posYL).x;
+	float solidYR = texture2D(solidTex, posYR).x;
+
+	float pressureC = texture2D(pressureTex, pos).x;
+	float pressureXL = texture2D(pressureTex, posXL).x;
+	if (solidXL > .5) pressureXL = pressureC;
+	float pressureXR = texture2D(pressureTex, posXR).x;
+	if (solidXR > .5) pressureXR = pressureC;
+	float pressureYL = texture2D(pressureTex, posYL).x;
+	if (solidYL > .5) pressureYL = pressureC;
+	float pressureYR = texture2D(pressureTex, posYR).x;
+	if (solidYR > .5) pressureYR = pressureC; 
+	
+	vec2 pressureGrad = vec2(pressureXR - pressureXL, pressureYR - pressureYL) / (2. * dx);
 
 	vec4 q = texture2D(qTex, pos);
 	float rho = q.x;
@@ -1923,7 +2088,8 @@ void main() {
 			fragmentPrecision : 'best',
 			uniforms : {
 				qTex : 0,
-				pressureTex : 1
+				solidTex : 1,
+				pressureTex : 2
 			}
 		});
 		
@@ -1936,34 +2102,54 @@ uniform float dt;
 uniform vec2 dx;
 uniform vec2 externalForce;
 uniform sampler2D qTex;
+uniform sampler2D solidTex;
 uniform sampler2D pressureTex;
 void main() {
+	float solid = texture2D(solidTex, pos).x;
+	if (solid > .5) discard;
+	
 	vec2 dposx = vec2(dpos.x, 0.);
 	vec2 dposy = vec2(0., dpos.y);
 	
-	vec2 posxp = pos + dposx;
-	vec2 posxn = pos - dposx;
-	vec2 posyp = pos + dposy;
-	vec2 posyn = pos - dposy;
+	vec2 posXR = pos + dposx;
+	vec2 posXL = pos - dposx;
+	vec2 posYR = pos + dposy;
+	vec2 posYL = pos - dposy;
 
-	float pressureXP = texture2D(pressureTex, posxp).x;
-	float pressureXN = texture2D(pressureTex, posxn).x;
-	float pressureYP = texture2D(pressureTex, posyp).x;
-	float pressureYN = texture2D(pressureTex, posyn).x;
+	float solidXL = texture2D(solidTex, posXL).x;
+	float solidXR = texture2D(solidTex, posXR).x;
+	float solidYL = texture2D(solidTex, posYL).x;
+	float solidYR = texture2D(solidTex, posYR).x;
 
-	vec2 rho_u_XP = texture2D(qTex, posxp).xy;
-	vec2 rho_u_XN = texture2D(qTex, posxn).xy;
-	vec2 rho_v_YP = texture2D(qTex, posyp).xz;
-	vec2 rho_v_YN = texture2D(qTex, posyn).xz;
+	float pressureC = texture2D(pressureTex, pos).x;
+	float pressureXL = texture2D(pressureTex, posXL).x;
+	if (solidXL > .5) pressureXL = pressureC;
+	float pressureXR = texture2D(pressureTex, posXR).x;
+	if (solidXR > .5) pressureXR = pressureC;
+	float pressureYL = texture2D(pressureTex, posYL).x;
+	if (solidYL > .5) pressureYL = pressureC;
+	float pressureYR = texture2D(pressureTex, posYR).x;
+	if (solidYR > .5) pressureYR = pressureC; 
 
-	float uXP = rho_u_XP.y / rho_u_XP.x;
-	float uXN = rho_u_XN.y / rho_u_XN.x;
-	float vYP = rho_v_YP.y / rho_v_YP.x;
-	float vYN = rho_v_YN.y / rho_v_YN.x;
+	vec3 rho_C = texture2D(qTex, pos).xyz;
+	vec2 rho_u_XR = texture2D(qTex, posXR).xy;
+	vec2 rho_u_XL = texture2D(qTex, posXL).xy;
+	vec2 rho_v_YR = texture2D(qTex, posYR).xz;
+	vec2 rho_v_YL = texture2D(qTex, posYL).xz;
+
+	vec2 uvC = rho_C.yz / rho_C.x;
+	float uXR = rho_u_XR.y / rho_u_XR.x;
+	if (solidXR > .5) uXR = -uvC.x;
+	float uXL = rho_u_XL.y / rho_u_XL.x;
+	if (solidXL > .5) uXL = -uvC.x;
+	float vYR = rho_v_YR.y / rho_v_YR.x;
+	if (solidYR > .5) vYR = -uvC.y;
+	float vYL = rho_v_YL.y / rho_v_YL.x;
+	if (solidYL > .5) vYL = -uvC.y;
 	
 	vec2 pressureTimesVelocityGrad = vec2(
-		pressureXP * uXP - pressureXN * uXN, 
-		pressureYP * vYP - pressureYN * vYN) / (2. * dx);
+		pressureXR * uXR - pressureXL * uXL, 
+		pressureYR * vYR - pressureYL * vYL) / (2. * dx);
 
 	vec4 q = texture2D(qTex, pos);
 	gl_FragColor = q;
@@ -1973,7 +2159,8 @@ void main() {
 			fragmentPrecision : 'best',
 			uniforms : {
 				qTex : 0,
-				pressureTex : 1
+				solidTex : 1,
+				pressureTex : 2
 			}
 		});
 
@@ -2141,11 +2328,12 @@ void main() {
 		}
 	});
 
-	$('#reset-sod').click(function(){ hydro.state.resetSod(); });
-	$('#reset-wave').click(function(){ hydro.state.resetWave(); });
-	$('#reset-kelvin-hemholtz').click(function(){ hydro.state.resetKelvinHemholtz(); });
+	$('#resetSod').click(function(){ hydro.state.resetSod(); });
+	$('#resetSodCylinder').click(function(){ hydro.state.resetSodCylinder(); });
+	$('#resetWave').click(function(){ hydro.state.resetWave(); });
+	$('#resetKelvinHemholtz').click(function(){ hydro.state.resetKelvinHemholtz(); });
 
-	$('#use-noise').change(function() {
+	$('#useNoise').change(function() {
 		useNoise = $(this).is(':checked');
 	});
 
@@ -2171,10 +2359,10 @@ void main() {
 		});
 	})();
 
-	buildSelect('boundary', 'boundaryMethod', boundaryMethods);
-	buildSelect('flux-limiter', 'fluxMethod', fluxMethods);
-	buildSelect('advect-method', 'advectMethod', advectMethods);
-	buildSelect('draw-to-screen-method', 'drawToScreenMethod', drawToScreenMethods);
+	buildSelect('boundaryMethod', 'boundaryMethod', boundaryMethods);
+	buildSelect('fluxMethod', 'fluxMethod', fluxMethods);
+	buildSelect('advectMethod', 'advectMethod', advectMethods);
+	buildSelect('drawToScreenMethod', 'drawToScreenMethod', drawToScreenMethods);
 
 	$.each([
 		'externalForceX',
@@ -2282,13 +2470,13 @@ void main() {
 	for (var k in colorSchemes) {
 		(function(){
 			var v = colorSchemes[k];
-			$('#color-scheme').append($('<option>', {
+			$('#colorScheme').append($('<option>', {
 				value : k,
 				text : k
 			}));
 		})();
 	}
-	$('#color-scheme').change(function() {
+	$('#colorScheme').change(function() {
 		var k = $(this).val();
 		currentColorScheme = colorSchemes[k];
 	});

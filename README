@@ -28,7 +28,8 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 	- hydrostatic pressure
 - constant boundary options at all
 - Riemann solver is unstable -- eigenbasis accuracy issues
-- CFL is inaccurate.  something about the reduce kernel, if you have the fragment write out 1's, the float32 texture reader gets back .5
+- Riemann solver arbitrary boundaries
+- CFL is inaccurate.  looks like the speed of sound isn't dying down like it is in the CPU version.
 - implicit Jacobi
 
 2D unstructured? 3D? 3D-GPU? 3D-unstructured? 3D-GPU-unstructured?
