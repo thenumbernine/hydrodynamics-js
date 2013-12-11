@@ -1626,8 +1626,8 @@ var HydroState = makeClass({
 		
 				//insert a cylinder
 				// ... with staggered rectangular boundaries
-				var cx = .3 * xmin + .7 * xmax;
-				var cy = .3 * xmin + .7 * xmax;
+				var cx = .35 * xmin + .65 * xmax;
+				var cy = .35 * ymin + .65 * ymax;
 				var dx = x - cx;
 				var dy = y - cy;
 				var rSq = dx * dx + dy * dy;

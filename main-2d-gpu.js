@@ -709,7 +709,7 @@ var HydroState = makeClass({
 		fbo.draw({
 			callback : function() {
 				quadObj.draw({
-					shader : resetSodCylinderSolidShader
+					shader : solidShader
 				});
 			}
 		});
@@ -734,7 +734,7 @@ var HydroState = makeClass({
 		fbo.draw({
 			callback : function() {
 				quadObj.draw({
-					shader : resetSodCylinderSolidShader
+					shader : solidShader
 				});
 			}
 		});
@@ -1213,7 +1213,7 @@ uniform vec2 rangeMin;
 uniform vec2 rangeMax; 
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	vec2 center = .3 * rangeMin + .7 * rangeMax;
+	vec2 center = .35 * rangeMin + .65 * rangeMax;
 	vec2 delta = gridPos - center;
 	float distSq = dot(delta, delta);
 	if (distSq < .1 * .1) {
