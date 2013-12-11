@@ -21,7 +21,7 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 	- Von Karman vortex street demo
 - mouse input for velocity and for boundary painting
 - FBO-based advection or particle simulation for streamline tracing
-- implicit Gauss-Seidel
+- implicit Gauss-Seidel ... and then add arbitrary boundaries to it
 
 2D-GPU
 - mirror boundary conditions
@@ -35,7 +35,8 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 
 
 all:
-- Roe solvers are not supposed to have flux limiters directly applied to them, but I'm doing this, and seeing oscillations.  I should fix it.
+- Roe solvers are not supposed to have flux limiters directly applied to them (but rather slope limiters?), but I'm doing this, and seeing oscillations.  I should fix it.
+- slope limiters (and two neighbors over) correctly working with arbitrary boundaries
 - swappable equations of state
 	- MHD
 	- ADM
