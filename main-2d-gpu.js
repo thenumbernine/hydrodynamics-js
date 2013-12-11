@@ -118,7 +118,7 @@ var boundaryMethods = {
 
 	/* hmm, using lines for copying isn't going so well ...	
 	 * another fix could be get arbitrary boundaries working in 2D then bump it up to 2D-GPU
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		quadObj.draw({
 			shader : copyShader,
@@ -218,7 +218,7 @@ var boundaryMethods = {
 			tex : [this.qTex]
 		});
 	
-		this.swapQTexs();
+		this.swapTexs('scratchTex', 'qTex');
 	*/
 	},
 	mirror : function(nx,q) {
@@ -322,7 +322,7 @@ var advectMethods = {
 			}
 
 			//update state
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
 				shader : burgersUpdateStateShader,
@@ -340,7 +340,7 @@ var advectMethods = {
 					this.fluxTex[1]
 				]
 			});
-			this.swapQTexs();
+			this.swapTexs('scratchTex', 'qTex');
 		}
 	},
 	'Riemann / Roe' : {
@@ -446,7 +446,7 @@ var advectMethods = {
 			}
 
 			//update state
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratcTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
 				shader : roeUpdateStateShader,
@@ -463,7 +463,7 @@ var advectMethods = {
 					this.fluxTex[1]
 				]
 			});
-			this.swapQTexs();
+			this.swapTexs('scratchTex', 'qTex');
 		}
 	}
 };
@@ -531,6 +531,10 @@ var HydroState = makeClass({
 
 		this.allFloatTexs = [];
 
+
+		//scratch target used for any double-buffered operations
+		this.allFloatTexs.push(this.scratchTex = new FloatTexture2D(this.nx, this.nx));
+
 		//I'm skipping on x_i,j
 		//Instead just use the uniforms xmin, xmax, ymin, ymax
 
@@ -545,9 +549,7 @@ var HydroState = makeClass({
 		//q_i,j,3: work: rho * e
 		this.qTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
 		this.allFloatTexs.push(this.qTex);
-		this.nextQTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
-		this.allFloatTexs.push(this.nextQTex);
-
+		
 		this.allFloatTexs.push(this.solidTex = new FloatTexture2D(this.nx, this.nx));
 
 		this.resetSod();
@@ -770,7 +772,7 @@ var HydroState = makeClass({
 			texs : [this.qTex, this.solidTex]
 		});
 		
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		//apply momentum diffusion
 		quadObj.draw({
@@ -783,9 +785,9 @@ var HydroState = makeClass({
 			},
 			texs : [this.qTex, this.solidTex, this.pressureTex]
 		});
-		this.swapQTexs();
+		this.swapTexs('scratchTex', 'qTex');
 
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextQTex.obj, 0);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		//apply work diffusion
 		quadObj.draw({
@@ -798,7 +800,7 @@ var HydroState = makeClass({
 			},
 			texs : [this.qTex, this.solidTex, this.pressureTex]
 		});
-		this.swapQTexs();
+		this.swapTexs('scratchTex', 'qTex');
 
 		//last boundary update
 		this.boundary();
@@ -824,11 +826,11 @@ var HydroState = makeClass({
 		fbo.unbind();
 	},
 
-	swapQTexs : function() {
+	swapTexs : function(texFieldA, texFieldB) {
 		//swap
-		var tmp = this.qTex;
-		this.qTex = this.nextQTex;
-		this.nextQTex = tmp; 
+		var tmp = this[texFieldA];
+		this[texFieldA] = this[texFieldB];
+		this[texFieldB] = tmp; 
 	},
 
 	//reduce to determine CFL
