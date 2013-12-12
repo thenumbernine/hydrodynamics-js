@@ -37,8 +37,6 @@ var allShaders = [];
 
 var drawToScreenShader = {};
 
-var kernelVertexShader;
-
 var solidShader;
 var copyShader;
 var minReduceShader;
@@ -70,6 +68,67 @@ var roeUpdateStateShader;
 var encodeTempTex;
 var encodeShader = [];	//[channel]
 
+GL.oninit.push(function() {
+	KernelShader = makeClass({
+		super : GL.ShaderProgram,
+		init : function(args) {
+			
+			var varyingCodePrefix = 'varying vec2 pos;\n';
+
+			var fragmentCodePrefix = '';
+			var uniforms = {};
+			if (args.uniforms !== undefined) {
+				$.each(args.uniforms, function(uniformName, uniformType) {
+					if ($.isArray(uniformType)) {
+						//save initial value
+						uniforms[uniformName] = uniformType[1];
+						uniformType = uniformType[0];
+					}
+					fragmentCodePrefix += 'uniform '+uniformType+' '+uniformName+';\n';
+				});
+			}
+			if (args.texs !== undefined) {
+				for (var i = 0; i < args.texs.length; ++i) {
+					var v = args.texs[i];
+					var name, vartype;
+					if (typeof(v) == 'string') {
+						name = v;
+						vartype = 'sampler2D';
+					} else {
+						name = v[0];
+						vartype = v[1];
+					}
+					fragmentCodePrefix += 'uniform '+vartype+' '+name+';\n';
+					uniforms[name] = i;
+				}
+			}
+
+
+			if (!KernelShader.prototype.kernelVertexShader) {
+				KernelShader.prototype.kernelVertexShader = new GL.VertexShader({
+					code : 
+						GL.vertexPrecision + 
+						varyingCodePrefix +
+						mlstr(function(){/*
+attribute vec2 vertex;
+attribute vec2 texCoord;
+void main() {
+	pos = texCoord; 
+	gl_Position = vec4(vertex, 0., 1.);
+}
+*/})
+				});	
+			}
+
+			args.vertexShader = KernelShader.prototype.kernelVertexShader;
+			args.fragmentCode = GL.fragmentPrecision + varyingCodePrefix + fragmentCodePrefix + args.code;
+			delete args.code;
+			args.uniforms = uniforms;	
+			KernelShader.super.call(this, args);
+		}
+	});
+});
+
 //coordinate names
 var coordNames = ['x', 'y'];
 
@@ -88,7 +147,7 @@ var fluxMethods = {
 	'Lax-Wendroff' : 'return vec4(1.);',
 	'Beam-Warming' : 'return r;',
 	'Fromm' : 'return .5 * (1. + r);',
-/*
+
 	//Wikipedia
 	//CHARM : function(r) { return Math.max(0, r*(3*r+1)/((r+1)*(r+1)) ); },
 	//HCUS : function(r) { return Math.max(0, 1.5 * (r + Math.abs(r)) / (r + 2) ); },
@@ -102,134 +161,129 @@ var fluxMethods = {
 	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
 	//'van Albada 1' : function(r) { return (r * r + r) / (r * r + 1); },
 	//'van Albada 2' : function(r) { return 2 * r / (r * r + 1); },
-*/	
+	
 	'van Leer' : 'return (r + abs(r)) / (1. + abs(r));', 
 	'monotonized central' : 'return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
 	superbee : 'return max(vec4(0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));'
+	
+	//'Barth-Jespersen' : function(r) {.5 * (r + 1) * Math.min(1, 4*r/(r+1), 4/(r+1)); }
 };
 
-var boundaryMethods = {
-	periodic : function() {
-		//set all lookup texture wraps to REPEAT
-		$.each(this.allFloatTexs, function(i, tex) {
-			tex.bind();
-			tex.setWrap({s : gl.REPEAT, t : gl.REPEAT});
-		});
+//'this' is HydroState
+function drawBoundaries(color) {
+	var nx = this.nx;
+	//left
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			.5/nx, 0,
+			.5/nx, 1
+		]
+	});
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			1.5/nx, 0,
+			1.5/nx, 1
+		]
+	});	
+	//right
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			(nx-1.5)/nx, 0,
+			(nx-1.5)/nx, 1
+		]
+	});
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			(nx-.5)/nx, 0,
+			(nx-.5)/nx, 1
+		]
+	});
+	//bottom
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			0, .5/nx,
+			1, .5/nx
+		]
+	});
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			0, 1.5/nx,
+			1, 1.5/nx
+		]
+	});	
+	//top
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			0, (nx-1.5)/nx,
+			1, (nx-1.5)/nx
+		]
+	});
+	this.drawLine({
+		shader : solidShader,
+		uniforms : {
+			color : color
+		},
+		vtxs : [
+			0, (nx-.5)/nx,
+			1, (nx-.5)/nx
+		]
+	});
+}
 
-	/* hmm, using lines for copying isn't going so well ...	
-	 * another fix could be get arbitrary boundaries working in 2D then bump it up to 2D-GPU
+var boundaryMethods = {
+	//currently an error with this -- either from pixels being left, or a scratch tex bug in general,
+	// but the lower-right corner diverges and explodes shortly after switching boundaries on and then off again
+	//...and the problem goes away when the drawBoundaries goes away
+	periodic : function() {
+		//clear borders
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		quadObj.draw({
 			shader : copyShader,
-			texs : [this.qTex]
+			texs : [this.solidTex]
 		});
-		var nx = this.nx;
-		//left
-		this.drawLine({
-			vtxs : [
-				.5/nx, 0,
-				.5/nx, 1
-			],
-			texCoords : [
-				(nx-5+.5)/nx, 0,
-				(nx-5+.5)/nx, 1
-			],
-			tex : [this.qTex]
-		});
-		this.drawLine({
-			vtxs : [
-				1.5/nx, 0,
-				1.5/nx, 1
-			],
-			texCoords : [
-				(nx-4+.5)/nx, 0,
-				(nx-4+.5)/nx, 1
-			],
-			tex : [this.qTex]
-		});	
-		//right
-		this.drawLine({
-			vtxs : [
-				(nx-3+.5)/nx, 0,
-				(nx-3+.5)/nx, 1
-			],
-			texCoords : [
-				2.5/nx, 0,
-				2.5/nx, 1
-			],
-			tex : [this.qTex]
-		});
-		this.drawLine({
-			vtxs : [
-				(nx-2+.5)/nx, 0,
-				(nx-2+.5)/nx, 1
-			],
-			texCoords : [
-				3.5/nx, 0,
-				3.5/nx, 1
-			],
-			tex : [this.qTex]
-		});
-		//bottom
-		this.drawLine({
-			vtxs : [
-				0, .5/nx,
-				1, .5/nx
-			],
-			texCoords : [
-				0, (nx-5+.5)/nx,
-				1, (nx-5+.5)/nx
-			],
-			tex : [this.qTex]
-		});
-		this.drawLine({
-			vtxs : [
-				0, 1.5/nx,
-				1, 1.5/nx
-			],
-			texCoords : [
-				0, (nx-4+.5)/nx,
-				1, (nx-4+.5)/nx
-			],
-			tex : [this.qTex]
-		});	
-		//top
-		this.drawLine({
-			vtxs : [
-				0, (nx-3+.5)/nx,
-				1, (nx-3+.5)/nx
-			],
-			texCoords : [
-				0, 2.5/nx,
-				1, 2.5/nx
-			],
-			tex : [this.qTex]
-		});
-		this.drawLine({
-			vtxs : [
-				0, (nx-2+.5)/nx,
-				1, (nx-2+.5)/nx
-			],
-			texCoords : [
-				0, 3.5/nx,
-				1, 3.5/nx
-			],
-			tex : [this.qTex]
-		});
-	
-		this.swapTexs('scratchTex', 'qTex');
-	*/
+		drawBoundaries.call(this, [0,0,0,0]);
+		this.swapTexs('scratchTex', 'solidTex');
 	},
 	mirror : function(nx,q) {
-		/*
-		//set all lookup texture wraps to MIRRORED_REPEAT
-		//TODO and have lookups of velocity that go out of bounds come back negative ...
-		$.each(this.allFloatTexs, function(i, tex) {
-			tex.bind();
-			tex.setWrap({s : gl.MIRRORED_REPEAT, t : gl.MIRRORED_REPEAT});
+		//set borders
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
+		fbo.check();
+		quadObj.draw({
+			shader : copyShader,
+			texs : [this.solidTex]
 		});
-		*/
+drawBoundaries.call(this, [0,0,0,0]);
+		//drawBoundaries.call(this, [1,1,1,1]);
+		this.swapTexs('scratchTex', 'solidTex');
 	},
 	/*
 	constant : function() {
@@ -896,13 +950,17 @@ var HydroState = makeClass({
 	/*
 	args:
 		vtxs
-		texCoords
-		texs
+		texCoords (optional)
+		everything else is forwarded to SceneObject.draw
 	*/
 	drawLine : function(args) {
+		for (var i = 0; i < args.vtxs.length; ++i) {
+			args.vtxs[i] *= 2;
+			args.vtxs[i] -= 1;
+		}
 		lineObj.attrs.vertex.data.set(args.vtxs);
 		lineObj.attrs.vertex.updateData();
-		lineObj.attrs.texCoord.data.set(args.texCoords);
+		if (args.texCoords !== undefined) lineObj.attrs.texCoord.data.set(args.texCoords);
 		lineObj.attrs.texCoord.updateData();
 		lineObj.draw(args);
 	}
@@ -1125,29 +1183,6 @@ $(document).ready(function(){
 				keep : true
 			})
 		},
-		shader : new GL.ShaderProgram({
-			vertexCode : mlstr(function(){/*
-attribute vec2 vertex;
-attribute vec2 texCoord;
-varying vec2 pos;
-void main() {
-	pos = texCoord; 
-	gl_Position = vec4(vertex * 2. - 1., 0., 1.);
-}
-*/}),
-			vertexPrecision : 'best',
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D tex;
-void main() {
-	gl_FragColor = texture2D(tex, pos);
-}
-*/}),
-			fragmentPrecision : 'best',
-			uniforms : {
-				tex : 0
-			}
-		}),
 		parent : null,
 		static : true
 	});
@@ -1170,27 +1205,8 @@ void main() {
 
 	//init shaders before init hydro (so it can call the resetSod or whatever)
 	
-		kernelVertexShader = new GL.VertexShader({
-			code : GL.vertexPrecision + mlstr(function(){/*
-attribute vec2 vertex;
-attribute vec2 texCoord;
-varying vec2 pos;
-void main() {
-	pos = texCoord; 
-	gl_Position = vec4(vertex, 0., 1.);
-}
-*/})
-		});
-
-		resetSodShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
-uniform vec2 externalForce;
-uniform float noiseAmplitude;
+		resetSodShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	//I would use dpos functions, but it's only for initialization...
@@ -1211,21 +1227,17 @@ void main() {
 	gl_FragColor = vec4(rho, rho * vel.x, rho * vel.y, rho * energyTotal);
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				randomTex : 0,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
+				rangeMin : ['vec2', [xmin, ymin]],
+				rangeMax : ['vec2', [xmax, ymax]],
+				externalForce : 'vec2',
+				noiseAmplitude : 'float'
+			},
+			texs : ['randomTex']
 		});
 
-		resetSodCylinderSolidShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
+		resetSodCylinderSolidShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	vec2 center = .35 * rangeMin + .65 * rangeMax;
@@ -1238,22 +1250,15 @@ void main() {
 	}
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
+				rangeMin : ['vec2', [xmin, ymin]],
+				rangeMax : ['vec2', [xmax, ymax]],
+			},
+			texs : ['randomTex']
 		});
 
-		resetWaveShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
-uniform vec2 externalForce;
-uniform float noiseAmplitude;
+		resetWaveShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	float dg = .2 * (rangeMax.x - rangeMin.x);
@@ -1270,24 +1275,17 @@ void main() {
 	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				randomTex : 0,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
+				rangeMin : ['vec2', [xmin, ymin]],
+				rangeMax : ['vec2', [xmax, ymax]],
+				externalForce : 'vec2',
+				noiseAmplitude : 'float'
+			},
+			texs : ['randomTex']
 		});
 
-		resetKelvinHemholtzShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform sampler2D randomTex;
-uniform vec2 rangeMin; 
-uniform vec2 rangeMax; 
-uniform float noiseAmplitude;
-uniform vec2 externalForce;
-uniform float gamma;
+		resetKelvinHemholtzShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	float rho = 1.;
@@ -1313,25 +1311,19 @@ void main() {
 	gl_FragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				randomTex : 0,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
+				rangeMin : ['vec2', [xmin, ymin]],
+				rangeMax : ['vec2', [xmax, ymax]],
+				externalForce : 'vec2',
+				noiseAmplitude : 'float',
+				gamma : 'float'
+			},
+			texs : ['randomTex']
 			//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
 		});
 
-		burgersComputeCFLShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform vec2 rangeMin;
-uniform vec2 rangeMax; 
-uniform vec2 externalForce;
-uniform float gamma;
-uniform sampler2D qTex;
+		burgersComputeCFLShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	vec4 q = texture2D(qTex, pos);
@@ -1349,21 +1341,18 @@ void main() {
 	gl_FragColor = vec4(cfl, 0., 0., 0.);
 }
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
+				rangeMin : ['vec2', [xmin, ymin]],
+				rangeMax : ['vec2', [xmax, ymax]],
+				dpos : 'vec2',
+				externalForce : 'vec2',
+				gamma : 'float'
+			},
+			texs : ['qTex']
 		});
 
-		burgersComputeInterfaceVelocityShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
+		burgersComputeInterfaceVelocityShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 dposx = vec2(dpos.x, 0.);
 	vec2 dposy = vec2(0., dpos.y);
@@ -1387,22 +1376,15 @@ void main() {
 		0., 0.);
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0,
-				solidTex : 1
-			}
+				dpos : 'vec2'
+			},
+			texs : ['qTex', 'solidTex']
 		});
 
 		$.each(coordNames, function(i, coordName) {
-			burgersComputeFluxSlopeShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
-uniform sampler2D uiTex;
+			burgersComputeFluxSlopeShader[i] = new KernelShader({
+				code : mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0.);
 	sidestep[$side] = dpos[$side];
@@ -1450,34 +1432,23 @@ void main() {
 	gl_FragColor = s * mix(qR2 - qR1, qL1 - qL2, uigz) / dq;
 }
 */}).replace(/\$side/g, i),
-				fragmentPrecision : 'best',
 				uniforms : {
-					qTex : 0,
-					solidTex : 1,
-					uiTex : 2
-				}
+					dpos : 'vec2'
+				},
+				texs : ['qTex', 'solidTex', 'uiTex']
 			});
 		});
 
 		$.each(fluxMethods, function(methodName,fluxMethodCode) {
 			burgersComputeFluxShader[methodName] = [];
 			$.each(coordNames, function(i, coordName) {
-				burgersComputeFluxShader[methodName][i] = new GL.ShaderProgram({
-					vertexShader : kernelVertexShader,
-					fragmentCode : mlstr(function(){/*
+				burgersComputeFluxShader[methodName][i] = new KernelShader({
+					code : mlstr(function(){/*
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
 }			
 */}).replace(/\$fluxMethodCode/g, fluxMethodCode)
 + mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform float dt_dx;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
-uniform sampler2D uiTex;
-uniform sampler2D rTex;
-
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
@@ -1514,27 +1485,17 @@ void main() {
 	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
 }			
 */}).replace(/\$side/g, i),
-					fragmentPrecision : 'best',
 					uniforms : {
-						qTex : 0,
-						solidTex : 1,
-						uiTex : 2,
-						rTex : 3
-					}
+						dpos : 'vec2',
+						dt_dx : 'float'
+					},
+					texs : ['qTex', 'solidTex', 'uiTex', 'rTex']
 				});
 			});
 		});
 
-		burgersUpdateStateShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform vec2 dt_dx;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
-uniform sampler2D fluxXTex;
-uniform sampler2D fluxYTex;
+		burgersUpdateStateShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
@@ -1551,27 +1512,18 @@ void main() {
 	}
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0,
-				solidTex : 1,
-				fluxXTex : 2,
-				fluxYTex : 3
-			}
+				dpos : 'vec2',
+				dt_dx : 'vec2'
+			},
+			texs : ['qTex', 'solidTex', 'fluxXTex', 'fluxYTex']
 		});
 
 
 		//used for Riemann
 
-		roeComputeCFLShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform vec2 rangeMin;
-uniform vec2 rangeMax;
-uniform sampler2D eigenvalueXTex;
-uniform sampler2D eigenvalueYTex;
+		roeComputeCFLShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec4 eigenvalueXN = texture2D(eigenvalueXTex, pos);
 	vec4 eigenvalueXP = texture2D(eigenvalueXTex, pos + vec2(dpos.x, 0.));
@@ -1589,26 +1541,17 @@ void main() {
 		0., 0., 0.);
 }
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				eigenvalueXTex : 0,
-				eigenvalueYTex : 1,
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax]
-			}
+				dpos : 'vec2',
+				rangeMin : ['vec2', [xmin, ymin]],
+				rangeMax : ['vec2', [xmax, ymax]]
+			},
+			texs : ['eigenvalueXTex', 'eigenvalueYTex']
 		});
 
 		$.each(coordNames, function(i,coordName) {
-			roeComputeRoeValueShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform vec2 rangeMin;
-uniform vec2 rangeMax;
-uniform vec2 externalForce;
-uniform float gamma;
-uniform sampler2D qTex;
+			roeComputeRoeValueShader[i] = new KernelShader({
+				code : mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0.);
 	sidestep[$side] = dpos[$side];
@@ -1654,21 +1597,20 @@ void main() {
 		speedOfSound);
 }
 */}).replace(/\$side/g, i),
-				fragmentPrecision : 'best',
 				uniforms : {
-					qTex : 0
-				}
+					dpos : 'vec2',
+					rangeMin : 'vec2',
+					rangeMax : 'vec2',
+					externalForce : 'vec2',
+					gamma : 'float'
+				},
+				texs : ['qTex']
 			});
 		});
 
 		$.each(coordNames, function(i,coordName) {	
-			roeComputeEigenvalueShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform float gamma;
-uniform sampler2D qTex;
-uniform sampler2D roeValueTex;
+			roeComputeEigenvalueShader[i] = new KernelShader({
+				code : mlstr(function(){/*
 void main() {
 	vec4 roeValues = texture2D(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
@@ -1691,11 +1633,10 @@ void main() {
 		velocityN + speedOfSound);
 }
 */}).replace(/\$side/g, i),
-				fragmentPrecision : 'best',
 				uniforms : {
-					qTex : 0,
-					roeValueTex : 1
-				}
+					gamma : 'float'
+				},
+				texs : ['qTex', 'roeValueTex']
 			});
 		});
 
@@ -1737,13 +1678,8 @@ void main() {
 		$.each(coordNames, function(i,coordName) {	
 			roeComputeEigenvectorColumnShader[i] = [];
 			$.each(roeComputeEigenvectorColumnCode, function(j,code) {
-				roeComputeEigenvectorColumnShader[i][j] = new GL.ShaderProgram({
-					vertexShader : kernelVertexShader,
-					fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform float gamma;
-uniform sampler2D qTex;
-uniform sampler2D roeValueTex;
+				roeComputeEigenvectorColumnShader[i][j] = new KernelShader({
+					code : mlstr(function(){/*
 void main() {
 	vec4 roeValues = texture2D(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
@@ -1760,11 +1696,10 @@ void main() {
 	
 	
 */}).replace(/\$side/g, i) + code + '\n}',
-					fragmentPrecision : 'best',
 					uniforms : {
-						qTex : 0,
-						roeValueTex : 1
-					}
+						gamma : 'float'
+					},
+					texs : ['qTex', 'roeValueTex']
 				});
 			});
 		});
@@ -1808,13 +1743,8 @@ void main() {
 		$.each(coordNames, function(i,coordName) {	
 			roeComputeEigenvectorInverseColumnShader[i] = [];
 			$.each(roeComputeEigenvectorInverseColumnCode, function(j,code) {
-				roeComputeEigenvectorInverseColumnShader[i][j] = new GL.ShaderProgram({
-					vertexShader : kernelVertexShader,
-					fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform float gamma;
-uniform sampler2D qTex;
-uniform sampler2D roeValueTex;
+				roeComputeEigenvectorInverseColumnShader[i][j] = new KernelShader({
+					code : mlstr(function(){/*
 void main() {
 	vec4 roeValues = texture2D(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
@@ -1830,26 +1760,17 @@ void main() {
 	float velocitySq = dot(velocity, velocity);
 	
 */}).replace(/\$side/g, i) + code + '\n}',
-					fragmentPrecision : 'best',
 					uniforms : {
-						qTex : 0,
-						roeValueTex : 1
-					}
+						gamma : 'float'
+					},
+					texs : ['qTex', 'roeValueTex']
 				});
 			});
 		});
 
 		$.each(coordNames, function(i, coordName) {
-			roeComputeDeltaQTildeShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform sampler2D qTex;
-uniform sampler2D eigenvectorInverseCol0Tex;
-uniform sampler2D eigenvectorInverseCol1Tex;
-uniform sampler2D eigenvectorInverseCol2Tex;
-uniform sampler2D eigenvectorInverseCol3Tex;
+			roeComputeDeltaQTildeShader[i] = new KernelShader({
+				code : mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
@@ -1871,25 +1792,22 @@ void main() {
 	gl_FragColor = eigenvectorInverse * dq;
 }
 */}).replace(/\$side/g, i),
-				fragmentPrecision : 'best',
 				uniforms : {
-					qTex : 0,
-					eigenvectorInverseCol0Tex : 1,
-					eigenvectorInverseCol1Tex : 2,
-					eigenvectorInverseCol2Tex : 3,
-					eigenvectorInverseCol3Tex : 4
-				}
+					dpos : 'vec2'
+				},
+				texs : [
+					'qTex',
+					'eigenvectorInverseCol0Tex',
+					'eigenvectorInverseCol1Tex',
+					'eigenvectorInverseCol2Tex',
+					'eigenvectorInverseCol3Tex'
+				]
 			});
 		});	
 
 		$.each(coordNames, function(i,coordName) {
-			roeComputeFluxSlopeShader[i] = new GL.ShaderProgram({
-				vertexShader : kernelVertexShader,
-				fragmentCode : (mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform sampler2D dqTildeTex;
-uniform sampler2D eigenvalueTex;
+			roeComputeFluxSlopeShader[i] = new KernelShader({
+				code : (mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0.);
 	sidestep[$side] = dpos[$side];
@@ -1911,43 +1829,23 @@ void main() {
 */}).replace(/\$j/g, j);
 	}).join('')
 + '}').replace(/\$side/g, i),			
-				
-				fragmentPrecision : 'best',
 				uniforms : {
-					dqTildeTex : 0,
-					eigenvalueTex : 1
-				}
+					dpos : 'vec2'
+				},
+				texs : ['dqTildeTex', 'eigenvalueTex']
 			});
 		});
 
 		$.each(fluxMethods, function(methodName,fluxMethodCode) {
 			roeComputeFluxShader[methodName] = [];
 			$.each(coordNames, function(i,coordName) {
-				roeComputeFluxShader[methodName][i] = new GL.ShaderProgram({
-					vertexShader : kernelVertexShader,
-					fragmentCode : mlstr(function(){/*
+				roeComputeFluxShader[methodName][i] = new KernelShader({
+					code : mlstr(function(){/*
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
 }			
 */}).replace(/\$fluxMethodCode/g, fluxMethodCode)
 + mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform float dt_dx;
-
-uniform sampler2D qTex;
-uniform sampler2D dqTildeTex;
-uniform sampler2D rTildeTex;
-uniform sampler2D eigenvalueTex;
-uniform sampler2D eigenvectorInverseCol0Tex;
-uniform sampler2D eigenvectorInverseCol1Tex;
-uniform sampler2D eigenvectorInverseCol2Tex;
-uniform sampler2D eigenvectorInverseCol3Tex;
-uniform sampler2D eigenvectorCol0Tex;
-uniform sampler2D eigenvectorCol1Tex;
-uniform sampler2D eigenvectorCol2Tex;
-uniform sampler2D eigenvectorCol3Tex;
-
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
@@ -1998,21 +1896,24 @@ void main() {
 	gl_FragColor = fluxAvg + eigenvectorMat * fluxTilde;
 }
 */}).replace(/\$side/g, i),
-					fragmentPrecision : 'best',
 					uniforms : {
-						qTex : 0,
-						dqTildeTex : 1,
-						rTildeTex : 2,
-						eigenvalueTex : 3,
-						eigenvectorInverseCol0Tex : 4,
-						eigenvectorInverseCol1Tex : 5,
-						eigenvectorInverseCol2Tex : 6,
-						eigenvectorInverseCol3Tex : 7,
-						eigenvectorCol0Tex : 8,
-						eigenvectorCol1Tex : 9,
-						eigenvectorCol2Tex : 10,
-						eigenvectorCol3Tex : 11
-					}
+						dpos : 'vec2',
+						dt_dx : 'float'
+					},
+					texs : [
+						'qTex',
+						'dqTildeTex',
+						'rTildeTex',
+						'eigenvalueTex',
+						'eigenvectorInverseCol0Tex',
+						'eigenvectorInverseCol1Tex',
+						'eigenvectorInverseCol2Tex',
+						'eigenvectorInverseCol3Tex',
+						'eigenvectorCol0Tex',
+						'eigenvectorCol1Tex',
+						'eigenvectorCol2Tex',
+						'eigenvectorCol3Tex',
+					]
 				});
 			});
 		});
@@ -2024,17 +1925,8 @@ void main() {
 		//pressure shaders
 		
 
-		computePressureShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform vec2 rangeMin;
-uniform vec2 rangeMax;
-uniform vec2 externalForce;
-uniform float gamma;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
+		computePressureShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
@@ -2053,24 +1945,18 @@ void main() {
 	}
 }
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0,
-				solidTex : 1
-			}
+				dpos : 'vec2',
+				rangeMin : 'vec2',
+				rangeMax : 'vec2',
+				externalForce : 'vec2',
+				gamma : 'float'
+			},
+			texs : ['qTex', 'solidTex']
 		});
 
-		applyPressureToMomentumShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform float dt;
-uniform vec2 dx;
-uniform vec2 externalForce;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
-uniform sampler2D pressureTex;
+		applyPressureToMomentumShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
@@ -2108,25 +1994,17 @@ void main() {
 	}
 }
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0,
-				solidTex : 1,
-				pressureTex : 2
-			}
+				dpos : 'vec2',
+				dt : 'float',
+				dx : 'vec2',
+				externalForce : 'vec2',
+			},
+			texs : ['qTex', 'solidTex', 'pressureTex']
 		});
 		
-		applyPressureToWorkShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
-uniform float dt;
-uniform vec2 dx;
-uniform vec2 externalForce;
-uniform sampler2D qTex;
-uniform sampler2D solidTex;
-uniform sampler2D pressureTex;
+		applyPressureToWorkShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
@@ -2181,52 +2059,40 @@ void main() {
 	}
 }
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				qTex : 0,
-				solidTex : 1,
-				pressureTex : 2
-			}
+				dpos : 'vec2',
+				dt : 'float',
+				dx : 'vec2',
+				externalForce : 'vec2'
+			},
+			texs : ['qTex', 'solidTex', 'pressureTex']
 		});
 
-		solidShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-uniform vec4 color;
+		solidShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	gl_FragColor = color;
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				color : [0,0,0,0]
+				color : ['vec4', [0,0,0,0]]
 			}
 		});
 
-		copyShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 offset;
-uniform sampler2D srcTex;
+		copyShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	gl_FragColor = texture2D(srcTex, pos + offset);
 }		
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				srcTex : 0,
-				offset : [0,0]
-			}
+				offset : ['vec2', [0,0]]
+			},
+			texs : ['srcTex']
 		});
 
-		minReduceShader = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 texsize;
-uniform vec2 viewsize;
-uniform sampler2D srcTex;
+		minReduceShader = new KernelShader({
+			code : mlstr(function(){/*
 void main() {
 	vec2 intPos = pos * viewsize - .5;
 	
@@ -2240,10 +2106,11 @@ void main() {
 	gl_FragColor = vec4(g, 0., 0., 0.);
 }
 */}),
-			fragmentPrecision : 'best',
 			uniforms : {
-				srcTex : 0
-			}
+				texsize : 'vec2',
+				viewsize : 'vec2'
+			},
+			texs : ['srcTex']
 		});
 
 		fbo = new GL.Framebuffer({
@@ -2508,10 +2375,8 @@ void main() {
 
 	//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
 	for (var channel = 0; channel < 4; ++channel) {
-		encodeShader[channel] = new GL.ShaderProgram({
-			vertexShader : kernelVertexShader,
-			fragmentPrecision : 'best',
-			fragmentCode : mlstr(function(){/*
+		encodeShader[channel] = new KernelShader({
+			code : mlstr(function(){/*
 float shift_right(float v, float amt) {
 	v = floor(v) + 0.5;
 	return floor(v / exp2(amt));
@@ -2551,13 +2416,12 @@ vec4 encode_float(float val) {
 	return vec4(byte4, byte3, byte2, byte1);
 }
 
-uniform sampler2D tex;
-varying vec2 pos;
 void main() {
 	vec4 data = texture2D(tex, pos);
 	gl_FragColor = encode_float(data[$channel]);
 }
-*/}).replace(/\$channel/g, channel)
+*/}).replace(/\$channel/g, channel),
+			texs : ['tex']
 		});
 	}
 
@@ -2590,21 +2454,17 @@ void main() {
 
 
 	//check ...	
-	var checkCoordAccuracyShader = new GL.ShaderProgram({
-		vertexShader : kernelVertexShader,
-		fragmentPrecision : 'best',
-		fragmentCode : mlstr(function(){/*
-varying vec2 pos;
-uniform vec2 dpos;
+	var checkCoordAccuracyShader = new KernelShader({
+		code : mlstr(function(){/*
 void main() {
 	gl_FragColor = vec4(gl_FragCoord.xy*dpos, dpos);
 }
 */}),
 		uniforms : {
-			dpos : [
+			dpos : ['vec2', [
 				1/hydro.state.nx,
 				1/hydro.state.nx
-			]
+			]]
 		}
 	});
 
