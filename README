@@ -30,6 +30,8 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 - Riemann solver is unstable -- eigenbasis accuracy issues
 - Riemann solver arbitrary boundaries
 - CFL is inaccurate.  looks like the speed of sound isn't dying down like it is in the CPU version.
+- - new 'scratch texture' lone texture used for double-buffer targets is causing CFL to die even faster than usual . . . hmm . . . 
+- - - once CFL is implemented, enable hydrostatic force in the UI
 - implicit Jacobi
 
 2D unstructured? 3D? 3D-GPU? 3D-unstructured? 3D-GPU-unstructured?
