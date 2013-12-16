@@ -264,6 +264,7 @@ var boundaryMethods = {
 	//...and the problem goes away when the drawBoundaries goes away
 	periodic : function() {
 		//clear borders
+		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		quadObj.draw({
@@ -271,10 +272,12 @@ var boundaryMethods = {
 			texs : [this.solidTex]
 		});
 		drawBoundaries.call(this, [0,0,0,0]);
+		fbo.unbind();
 		this.swapTexs('scratchTex', 'solidTex');
 	},
 	mirror : function(nx,q) {
 		//set borders
+		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		quadObj.draw({
@@ -283,6 +286,7 @@ var boundaryMethods = {
 		});
 drawBoundaries.call(this, [0,0,0,0]);
 		//drawBoundaries.call(this, [1,1,1,1]);
+		fbo.unbind();
 		this.swapTexs('scratchTex', 'solidTex');
 	},
 	/*
@@ -305,6 +309,7 @@ var advectMethods = {
 		initStep : function() {
 		},
 		calcCFLTimestep : function() {
+			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.cflReduceTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
@@ -318,7 +323,7 @@ var advectMethods = {
 				},
 				texs : [this.qTex]
 			});
-		
+			fbo.unbind();	
 			return this.reduceToDetermineCFL();
 		},	
 		advect : function(dt) {			
@@ -326,6 +331,7 @@ var advectMethods = {
 			var dy = (ymax - ymin) / this.nx;
 			var dxi = [dx, dy];
 			
+			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.uiTex.obj, 0);
 			fbo.check();
 			//get velocity at interfaces from state
@@ -336,8 +342,9 @@ var advectMethods = {
 				},
 				texs : [this.qTex, this.solidTex]
 			});
-
+			fbo.unbind();
 			for (var side = 0; side < 2; ++side) {
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.rTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
@@ -351,10 +358,12 @@ var advectMethods = {
 						this.uiTex
 					]
 				});
+				fbo.unbind();
 			}
 
 			//construct flux:
 			for (var side = 0; side < 2; ++side) {
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fluxTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
@@ -373,9 +382,11 @@ var advectMethods = {
 						this.rTex[side]
 					]
 				});
+				fbo.unbind();
 			}
 
 			//update state
+			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
@@ -394,52 +405,63 @@ var advectMethods = {
 					this.fluxTex[1]
 				]
 			});
+			fbo.unbind();
 			this.swapTexs('scratchTex', 'qTex');
 		}
 	},
 	'Riemann / Roe' : {
 		initStep : function() {
 			for (var side = 0; side < 2; ++side) {
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.roeValueTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
 					shader : roeComputeRoeValueShader[side],
 					texs : [this.qTex]
 				});
+				fbo.unbind();
 			
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvalueTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
 					shader : roeComputeEigenvalueShader[side],
 					texs : [this.qTex, this.roeValueTex[side]]
 				});
+				fbo.unbind();
 
 				for (var column = 0; column < 4; ++column) {
+					fbo.bind();
 					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvectorColumnTex[side][column].obj, 0);
 					fbo.check();
 					quadObj.draw({
 						shader : roeComputeEigenvectorColumnShader[side][column],
 						texs : [this.qTex, this.roeValueTex[side]]
 					});
+					fbo.unbind();
 				}
 
 				for (var column = 0; column < 4; ++column) {
+					fbo.bind();
 					gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvectorInverseColumnTex[side][column].obj, 0);
 					fbo.check();
 					quadObj.draw({
 						shader : roeComputeEigenvectorInverseColumnShader[side][column],
 						texs : [this.qTex, this.roeValueTex[side]]
 					});
+					fbo.unbind();
 				}
 			}
 		},
 		calcCFLTimestep : function() {
+			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.cflReduceTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
 				shader : roeComputeCFLShader,
 				texs : [this.eigenvalueTex[0], this.eigenvalueTex[1]]
 			});
+			fbo.unbind();
 			return this.reduceToDetermineCFL();
 		},
 		advect : function(dt) {
@@ -448,6 +470,7 @@ var advectMethods = {
 			var dxi = [dx, dy];
 			
 			for (var side = 0; side < 2; ++side) {
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dqTildeTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
@@ -460,9 +483,11 @@ var advectMethods = {
 						this.eigenvectorInverseColumnTex[side][3]
 					]
 				});
+				fbo.unbind();
 			}
 
 			for (var side = 0; side < 2; ++side) {
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.rTildeTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
@@ -472,9 +497,11 @@ var advectMethods = {
 						this.eigenvalueTex[side]
 					]
 				});
+				fbo.unbind();
 			}
 	
 			for (var side = 0; side < 2; ++side) {
+				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fluxTex[side].obj, 0);
 				fbo.check();
 				quadObj.draw({
@@ -497,9 +524,11 @@ var advectMethods = {
 						this.eigenvectorColumnTex[side][3]
 					]
 				});
+				fbo.unbind();
 			}
 
 			//update state
+			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 			fbo.check();
 			quadObj.draw({
@@ -517,6 +546,7 @@ var advectMethods = {
 					this.fluxTex[1]
 				]
 			});
+			fbo.unbind();
 			this.swapTexs('scratchTex', 'qTex');
 		}
 	}
@@ -823,6 +853,7 @@ var HydroState = makeClass({
 		//boundary again
 		this.boundary();
 
+		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pressureTex.obj, 0);
 		fbo.check();
 		//compute pressure
@@ -837,7 +868,9 @@ var HydroState = makeClass({
 			},
 			texs : [this.qTex, this.solidTex]
 		});
-		
+		fbo.unbind();
+
+		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		//apply momentum diffusion
@@ -851,8 +884,10 @@ var HydroState = makeClass({
 			},
 			texs : [this.qTex, this.solidTex, this.pressureTex]
 		});
+		fbo.unbind();
 		this.swapTexs('scratchTex', 'qTex');
 
+		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 		fbo.check();
 		//apply work diffusion
@@ -866,6 +901,7 @@ var HydroState = makeClass({
 			},
 			texs : [this.qTex, this.solidTex, this.pressureTex]
 		});
+		fbo.unbind();
 		this.swapTexs('scratchTex', 'qTex');
 
 		//last boundary update
@@ -873,7 +909,7 @@ var HydroState = makeClass({
 	},
 	update : function() {
 		gl.viewport(0, 0, this.nx, this.nx);
-		fbo.bind();
+		//fbo.bind();
 			
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
 		advectMethods[this.advectMethod].initStep.call(this);
@@ -885,11 +921,11 @@ var HydroState = makeClass({
 		} else {
 			dt = fixedDT;
 		}
-
+window.lastDT = dt;
 		//do the update
 		this.step(dt);
 			
-		fbo.unbind();
+		//fbo.unbind();
 	},
 
 	swapTexs : function(texFieldA, texFieldB) {
@@ -901,7 +937,6 @@ var HydroState = makeClass({
 
 	//reduce to determine CFL
 	reduceToDetermineCFL : function() {
-
 		var size = this.nx;
 		while (size > 1) {
 			//console.log(getFloatTexData({srcTex:this.cflReduceTex})); fbo.bind();
@@ -910,9 +945,11 @@ var HydroState = makeClass({
 			size /= 2;
 			if (size !== Math.floor(size)) throw 'got a npo2 size '+this.nx;
 			gl.viewport(0, 0, size, size);
-			//TODO use this.scratchTex ... but swapping it with cflReduceTex afterwards seems to make timesteps explode
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.nextCFLReduceTex.obj, 0);
+			
+			fbo.bind();
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 			fbo.check();
+			gl.clear(gl.COLOR_BUFFER_BIT);
 			quadObj.draw({
 				shader : minReduceShader,
 				uniforms : {
@@ -921,18 +958,16 @@ var HydroState = makeClass({
 				},
 				texs : [this.cflReduceTex]
 			});
-			
-			var tmp = this.cflReduceTex;
-			this.cflReduceTex = this.nextCFLReduceTex;
-			this.nextCFLReduceTex = tmp;
-			
+			fbo.unbind();
+
+			this.swapTexs('scratchTex', 'cflReduceTex');
 		}
-		//console.log('done reducing!')	
-		//console.log(getFloatTexData({srcTex:this.cflReduceTex})); fbo.bind();
-	
+		
 		//now that the viewport is 1x1, run the encode shader on it
+		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, encodeTempTex.obj, 0);
 		fbo.check();
+		gl.viewport(0, 0, encodeTempTex.width, encodeTempTex.height);
 		quadObj.draw({
 			shader : encodeShader[0],
 			texs : [this.cflReduceTex]
@@ -940,10 +975,12 @@ var HydroState = makeClass({
 
 		var cflUint8Result = new Uint8Array(4);
 		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cflUint8Result);
+		
+		fbo.unbind();
+		
 		var cflFloat32Result = new Float32Array(cflUint8Result.buffer);
 		gl.viewport(0, 0, this.nx, this.nx);
 		var result = cflFloat32Result[0] * this.cfl;
-		//throw 'here';
 		return result;
 	},
 
