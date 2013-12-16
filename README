@@ -6,7 +6,7 @@ Almost got a Roe solver, or I do but I know I still have to iron some kinks out 
 
 sources: 
 the "Hydrodynamics II" book found online here: http://www.mpia-hd.mpg.de/homes/dullemon/lectures/hydrodynamicsII/ 
-cfd codes: (haven't used these yet, but I want to) http://www.cfdbooks.com/cfdcodes.html 
+http://www.cfdbooks.com/cfdcodes.html 
 "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro
 http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 
@@ -44,3 +44,7 @@ all:
 	- ADM
 	- elastic solids?
 - AMR
+
+Hyperbolic Navier-Stokes:
+http://deepblue.lib.umich.edu/bitstream/handle/2027.42/76470/AIAA-1991-239-186.pdf
+http://aam.mathematik.uni-freiburg.de/IAM/Research/projectskr/motor/cnse.html
