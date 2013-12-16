@@ -20,7 +20,7 @@ var ymax = .5;
 var useNoise = true;
 var noiseAmplitude = .01;
 
-var useCFL = false;
+var useCFL = true;
 var fixedDT = .00025;
 
 var mouse;
@@ -284,8 +284,8 @@ var boundaryMethods = {
 			shader : copyShader,
 			texs : [this.solidTex]
 		});
-drawBoundaries.call(this, [0,0,0,0]);
-		//drawBoundaries.call(this, [1,1,1,1]);
+//drawBoundaries.call(this, [0,0,0,0]);
+		drawBoundaries.call(this, [1,1,1,1]);
 		fbo.unbind();
 		this.swapTexs('scratchTex', 'solidTex');
 	},
@@ -321,7 +321,7 @@ var advectMethods = {
 					externalForce : [externalForceX, externalForceY],
 					gamma : this.gamma
 				},
-				texs : [this.qTex]
+				texs : [this.qTex, this.solidTex]
 			});
 			fbo.unbind();	
 			return this.reduceToDetermineCFL();
@@ -1362,20 +1362,26 @@ void main() {
 		burgersComputeCFLShader = new KernelShader({
 			code : mlstr(function(){/*
 void main() {
-	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
-	vec4 q = texture2D(qTex, pos);
-	float rho = q.x;
-	vec2 vel = q.yz / rho;
-	float energyTotal = q.w / rho;
-	float energyKinetic = .5 * dot(vel, vel);
-	float energyPotential = dot(gridPos - rangeMin, externalForce);
-	float energyThermal = energyTotal - energyKinetic - energyPotential;
-	float speedOfSound = sqrt(gamma * (gamma - 1.) * energyThermal);
-	vec2 dx = (rangeMax - rangeMin) * dpos;
-	float cflx = dx.x / (speedOfSound + abs(vel.x));
-	float cfly = dx.y / (speedOfSound + abs(vel.y));
-	float cfl = min(cflx, cfly);
-	gl_FragColor = vec4(cfl, 0., 0., 0.);
+	float solid = texture2D(solidTex, pos).x;
+	if (solid > .5) {
+		//min? assign the max.
+		gl_FragColor = vec4(1.);
+	} else {
+		vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
+		vec4 q = texture2D(qTex, pos);
+		float rho = q.x;
+		vec2 vel = q.yz / rho;
+		float energyTotal = q.w / rho;
+		float energyKinetic = .5 * dot(vel, vel);
+		float energyPotential = dot(gridPos - rangeMin, externalForce);
+		float energyThermal = energyTotal - energyKinetic - energyPotential;
+		float speedOfSound = sqrt(gamma * (gamma - 1.) * energyThermal);
+		vec2 dx = (rangeMax - rangeMin) * dpos;
+		float cflx = dx.x / (speedOfSound + abs(vel.x));
+		float cfly = dx.y / (speedOfSound + abs(vel.y));
+		float cfl = min(cflx, cfly);
+		gl_FragColor = vec4(cfl, 0., 0., 0.);
+	}
 }
 */}),
 			uniforms : {
@@ -1385,7 +1391,7 @@ void main() {
 				externalForce : 'vec2',
 				gamma : 'float'
 			},
-			texs : ['qTex']
+			texs : ['qTex', 'solidTex']
 		});
 
 		burgersComputeInterfaceVelocityShader = new KernelShader({
@@ -1519,6 +1525,16 @@ void main() {
 	vec4 r = texture2D(rTex, pos);
 	vec4 phi = fluxMethod(r);
 	vec4 delta = phi * (qR - qL);
+	
+	//compact:
+	//gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
+
+	//written out:
+	if (ui >= 0.) {
+		gl_FragColor = ui * qL;
+	} else {
+		gl_FragColor = ui * qR;
+	}
 	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
 }			
 */}).replace(/\$side/g, i),
