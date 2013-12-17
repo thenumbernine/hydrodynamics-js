@@ -726,17 +726,16 @@ var HydroState = makeClass({
 		//initialize all textures to zero by default
 		//...except the noise tex, which isn't added to the 'allFloatTexs' list
 		gl.viewport(0, 0, this.nx, this.nx);
+		fbo.bind();
 		$.each(this.allFloatTexs, function(i,tex) {
 			fbo.setColorAttachmentTex2D(0, tex);
-			fbo.draw({
-				callback : function() {
-					quadObj.draw({
-						shader : solidShader
-					});
-				}
+			fbo.check();
+			quadObj.draw({
+				shader : solidShader
 			});
 		});
-	
+		fbo.unbind();
+
 		//initial conditions
 		this.resetSod();
 	},
