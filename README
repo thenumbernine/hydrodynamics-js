@@ -15,9 +15,11 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 	TODO
 
 1D:
+- finish 'Backward Euler + Gauss-Seidel' & 'Riemann / Roe'
 - more implicit options? fixed point?  some Newton/Levenberg Marquardt/BFGS stuff?
 
 2D:
+- remove pressure source from Roe version
 - custom inflow boundary conditions
 	- Von Karman vortex street demo
 - mouse input for velocity and for boundary painting
@@ -25,6 +27,9 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 - implicit Gauss-Seidel ... and then add arbitrary boundaries to it
 
 2D-GPU
+- remove pressure source from Roe version
+- GPU accuracy issues compared to CPU
+	- check out source:hvidtfeldts.net/WebGL-DP/webgl.html
 - mirror boundary conditions
 	- then enable hydrostatic pressure
 - constant boundary options at all

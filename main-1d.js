@@ -149,27 +149,6 @@ var boundaryMethods = {
 //'this' is HydroState
 var integrationMethods = {
 	'Forward Euler' : {
-		initPressure : function() {
-			for (var i = 0; i < this.nx; ++i) {
-				var u = this.q[i][1] / this.q[i][0];
-				var energyTotal = this.q[i][2] / this.q[i][0];
-				var energyKinematic = .5 * u * u;
-				var energyThermal = energyTotal - energyKinematic;
-				this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
-			}
-		},
-		applyMomentumDiffusion : function(dt) {
-			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				this.q[i][1] -= dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
-			}
-		},
-		applyWorkDiffusion : function(dt) {
-			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				var u_inext = this.q[i+1][1] / this.q[i+1][0];
-				var u_iprev = this.q[i-1][1] / this.q[i-1][0];
-				this.q[i][2] -= dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
-			}
-		},
 		advect : {
 			Burgers : function(dt) {
 				assert(this.x.length == this.nx);
@@ -220,6 +199,32 @@ var integrationMethods = {
 						this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
 					}
 				}			
+			
+				// only needed for Burgers	
+				
+				//boundary again
+				this.boundary();
+
+				//compute pressure
+				for (var i = 0; i < this.nx; ++i) {
+					var u = this.q[i][1] / this.q[i][0];
+					var energyTotal = this.q[i][2] / this.q[i][0];
+					var energyKinematic = .5 * u * u;
+					var energyThermal = energyTotal - energyKinematic;
+					this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
+				}
+
+				//apply momentum diffusion = pressure
+				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+					this.q[i][1] -= dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
+				}
+
+				//apply work diffusion = momentum
+				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+					var u_inext = this.q[i+1][1] / this.q[i+1][0];
+					var u_iprev = this.q[i-1][1] / this.q[i-1][0];
+					this.q[i][2] -= dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
+				}
 			},
 			
 			/*
@@ -352,63 +357,17 @@ var integrationMethods = {
 	//TODO 3x3 block tridiagonal thomas algorithm
 	//until then, Gauss-Seidel
 	'Backward Euler + Gauss Seidel' : {
-		initOldQ : function() {
-			if (this.oldQ === undefined) {
-				this.oldQ = [];
-				for (var i = 0; i < this.nx; ++i) {
-					this.oldQ[i] = [0, 0, 0];
-				}
-			}
-			for (var i = 0; i < this.nx; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					this.oldQ[i][j] = this.q[i][j];
-				}
-			}
-		},
-		initPressure : function() {
-		},
-		applyMomentumDiffusion : function(dt) {
-			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
-			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
-				for (var i = 0; i < this.nx; ++i) {
-					var u = this.q[i][1] / this.q[i][0];
-					var energyTotal = this.q[i][2] / this.q[i][0];
-					var energyKinematic = .5 * u * u;
-					var energyThermal = energyTotal - energyKinematic;
-					this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
-				}
-				
-				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-					this.q[i][1] = this.oldQ[i][1] - dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
-				}
-			}
-		},
-		applyWorkDiffusion : function(dt) {
-			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
-			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
-				for (var i = 0; i < this.nx; ++i) {
-					var u = this.q[i][1] / this.q[i][0];
-					var energyTotal = this.q[i][2] / this.q[i][0];
-					var energyKinematic = .5 * u * u;
-					var energyThermal = energyTotal - energyKinematic;
-					this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
-				}
-				
-				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-					var u_inext = this.q[i+1][1] / this.q[i+1][0];
-					var u_iprev = this.q[i-1][1] / this.q[i-1][0];
-					this.q[i][2] = this.oldQ[i][2] - dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
-				}
-			}
-		},
 		advect : {
 			//Linearizing our relationship between current and next timesteps.
 			//Treating the flux limiter and the interface velocity as constants when I could consider them in terms of q's. 
 			//I get timesteps of .7, when .3 or so is what the max CFL timestep for explicit was giving me,
 			// but still see a lot more oscillations in the system.
 			Burgers : function(dt) {
-				integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
-			
+				for (var i = 0; i < this.nx; ++i) {
+					for (var j = 0; j < 3; ++j) {
+						this.oldQ[i][j] = this.q[i][j];
+					}
+				}
 				for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 					//get velocity at interfaces from state
 					for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
@@ -467,6 +426,53 @@ var integrationMethods = {
 						}
 					}
 				}	
+			
+				// only needed for Burgers	
+				
+				//boundary again
+				this.boundary();
+
+				//apply momentum diffusion = pressure
+				for (var i = 0; i < this.nx; ++i) {
+					for (var j = 0; j < 3; ++j) {
+						this.oldQ[i][j] = this.q[i][j];
+					}
+				}
+				for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
+					for (var i = 0; i < this.nx; ++i) {
+						var u = this.q[i][1] / this.q[i][0];
+						var energyTotal = this.q[i][2] / this.q[i][0];
+						var energyKinematic = .5 * u * u;
+						var energyThermal = energyTotal - energyKinematic;
+						this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
+					}
+					
+					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+						this.q[i][1] = this.oldQ[i][1] - dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
+					}
+				}
+
+				//apply work diffusion = momentum
+				for (var i = 0; i < this.nx; ++i) {
+					for (var j = 0; j < 3; ++j) {
+						this.oldQ[i][j] = this.q[i][j];
+					}
+				}
+				for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
+					for (var i = 0; i < this.nx; ++i) {
+						var u = this.q[i][1] / this.q[i][0];
+						var energyTotal = this.q[i][2] / this.q[i][0];
+						var energyKinematic = .5 * u * u;
+						var energyThermal = energyTotal - energyKinematic;
+						this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
+					}
+					
+					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+						var u_inext = this.q[i+1][1] / this.q[i+1][0];
+						var u_iprev = this.q[i-1][1] / this.q[i-1][0];
+						this.q[i][2] = this.oldQ[i][2] - dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
+					}
+				}
 			},
 			'Riemann / Roe' : function(dt) {
 				//TODO
@@ -639,6 +645,13 @@ var HydroState = makeClass({
 			this.interfaceDeltaQTilde[i] = [0,0,0];
 		}
 
+	
+		//used for Backward Euler + Gauss Seidel
+		this.oldQ = [];
+		for (var i = 0; i < this.nx; ++i) {
+			this.oldQ[i] = [0, 0, 0];
+		}
+		
 		//number of ghost cells
 		this.nghost = 2;
 
@@ -679,27 +692,11 @@ var HydroState = makeClass({
 		boundaryMethods[this.boundaryMethod](this.nx, this.q);
 	},
 	step : function(dt) {
-		
 		//apply boundary conditions
 		this.boundary();
 	
 		//solve
 		integrationMethods[this.integrationMethod].advect[this.advectMethod].call(this, dt);
-			
-		//boundary again
-		this.boundary();
-
-		//compute pressure
-		integrationMethods[this.integrationMethod].initPressure.call(this);
-	
-		//apply momentum diffusion = pressure
-		integrationMethods[this.integrationMethod].applyMomentumDiffusion.call(this, dt);
-
-		//apply work diffusion = momentum
-		integrationMethods[this.integrationMethod].applyWorkDiffusion.call(this, dt);
-	
-		//last boundary update
-		this.boundary();
 	},
 	update : function() {
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
