@@ -46,8 +46,9 @@ var resetSodCylinderSolidShader;
 var resetWaveShader;
 var resetKelvinHemholtzShader;
 
-var computePressureShader;
-var applyPressureToMomentumShader;
+var burgersComputePressureShader;
+var burgersApplyPressureToMomentumShader;
+var burgersApplyPressureToWorkShader;
 
 var burgersComputeCFLShader;
 var burgersComputeInterfaceVelocityShader;
@@ -407,6 +408,61 @@ var advectMethods = {
 			});
 			fbo.unbind();
 			this.swapTexs('scratchTex', 'qTex');
+		
+			//boundary again
+			this.boundary();
+
+			fbo.bind();
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pressureTex.obj, 0);
+			fbo.check();
+			//compute pressure
+			quadObj.draw({
+				shader : burgersComputePressureShader,
+				uniforms : {
+					dpos : [1/this.nx, 1/this.nx],
+					rangeMin : [xmin, ymin],
+					rangeMax : [xmax, ymax],
+					externalForce : [externalForceX, externalForceY],
+					gamma : this.gamma
+				},
+				texs : [this.qTex, this.solidTex]
+			});
+			fbo.unbind();
+
+			fbo.bind();
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
+			fbo.check();
+			//apply momentum diffusion
+			quadObj.draw({
+				shader : burgersApplyPressureToMomentumShader,
+				uniforms : {
+					dpos : [1/this.nx, 1/this.nx],
+					dt : dt,
+					dx : [dx, dy],
+					externalForce : [externalForceX, externalForceY]
+				},
+				texs : [this.qTex, this.solidTex, this.pressureTex]
+			});
+			fbo.unbind();
+			this.swapTexs('scratchTex', 'qTex');
+
+			fbo.bind();
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
+			fbo.check();
+			//apply work diffusion
+			quadObj.draw({
+				shader : burgersApplyPressureToWorkShader,
+				uniforms : {
+					dpos : [1/this.nx, 1/this.nx],
+					dt : dt,
+					dx : [dx, dy],
+					externalForce : [externalForceX, externalForceY]
+				},
+				texs : [this.qTex, this.solidTex, this.pressureTex]
+			});
+			fbo.unbind();
+			this.swapTexs('scratchTex', 'qTex');	
+		
 		}
 	},
 	'Riemann / Roe' : {
@@ -848,63 +904,6 @@ var HydroState = makeClass({
 
 		//solve
 		advectMethods[this.advectMethod].advect.call(this, dt);
-
-		//boundary again
-		this.boundary();
-
-		fbo.bind();
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pressureTex.obj, 0);
-		fbo.check();
-		//compute pressure
-		quadObj.draw({
-			shader : computePressureShader,
-			uniforms : {
-				dpos : [1/this.nx, 1/this.nx],
-				rangeMin : [xmin, ymin],
-				rangeMax : [xmax, ymax],
-				externalForce : [externalForceX, externalForceY],
-				gamma : this.gamma
-			},
-			texs : [this.qTex, this.solidTex]
-		});
-		fbo.unbind();
-
-		fbo.bind();
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
-		fbo.check();
-		//apply momentum diffusion
-		quadObj.draw({
-			shader : applyPressureToMomentumShader,
-			uniforms : {
-				dpos : [1/this.nx, 1/this.nx],
-				dt : dt,
-				dx : [dx, dy],
-				externalForce : [externalForceX, externalForceY]
-			},
-			texs : [this.qTex, this.solidTex, this.pressureTex]
-		});
-		fbo.unbind();
-		this.swapTexs('scratchTex', 'qTex');
-
-		fbo.bind();
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
-		fbo.check();
-		//apply work diffusion
-		quadObj.draw({
-			shader : applyPressureToWorkShader,
-			uniforms : {
-				dpos : [1/this.nx, 1/this.nx],
-				dt : dt,
-				dx : [dx, dy],
-				externalForce : [externalForceX, externalForceY]
-			},
-			texs : [this.qTex, this.solidTex, this.pressureTex]
-		});
-		fbo.unbind();
-		this.swapTexs('scratchTex', 'qTex');
-
-		//last boundary update
-		this.boundary();
 	},
 	update : function() {
 		gl.viewport(0, 0, this.nx, this.nx);
@@ -1977,7 +1976,7 @@ void main() {
 		//pressure shaders
 		
 
-		computePressureShader = new KernelShader({
+		burgersComputePressureShader = new KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -2007,7 +2006,7 @@ void main() {
 			texs : ['qTex', 'solidTex']
 		});
 
-		applyPressureToMomentumShader = new KernelShader({
+		burgersApplyPressureToMomentumShader = new KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -2055,7 +2054,7 @@ void main() {
 			texs : ['qTex', 'solidTex', 'pressureTex']
 		});
 		
-		applyPressureToWorkShader = new KernelShader({
+		burgersApplyPressureToWorkShader = new KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -2226,6 +2225,9 @@ void main() {
 		allShaders = allShaders.concat(fluxShaders);
 	});
 	allShaders.push(burgersUpdateStateShader);
+	allShaders.push(burgersComputePressureShader);
+	allShaders.push(burgersApplyPressureToMomentumShader);
+	allShaders.push(burgersApplyPressureToWorkShader);
 
 	//riemann /roe
 	allShaders.push(roeComputeCFLShader);
@@ -2245,9 +2247,6 @@ void main() {
 	allShaders.push(roeUpdateStateShader);
 
 	//common to both
-	allShaders.push(computePressureShader);
-	allShaders.push(applyPressureToMomentumShader);
-	allShaders.push(applyPressureToWorkShader);
 	allShaders.push(minReduceShader);
 
 	//display
