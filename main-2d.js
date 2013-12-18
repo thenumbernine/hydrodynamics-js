@@ -225,19 +225,36 @@ var drawToScreenMethods = {
 	},
 	Pressure : function() {
 		var nx = this.state.nx;
-		var pressure = this.state.pressure;
-		var dataMin = pressure[0];
+		var gamma = this.state.gamma;
+		var q = this.state.q;
+		var stateX = this.state.x;
+		var x = stateX[0];
+		var y = stateX[1];
+		var rho = q[0];
+		var u = q[1] / rho;
+		var v = q[2] / rho;
+		var energyTotal = q[3] / rho;
+		var energyKinetic = .5 * (u * u + v * v);
+		var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+		var energyThermal = energyTotal - energyKinetic - energyPotential;
+		var pressure = (gamma - 1) * rho * energyThermal;
+		var dataMin = pressure;
 		var dataMax = dataMin + 1e-9;
 		var lastDataRange = this.lastDataMax - this.lastDataMin;
-		var e = 0;
-		for (var j = 0; j < nx; ++j) {
-			for (var i = 0; i < nx; ++i) {
-				var s = pressure[e];
-				if (s < dataMin) dataMin = s;
-				if (s > dataMax) dataMax = s;
-				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
-				++e;
-			}
+		for (var e = 1; e < nx * nx; ++e) {
+			var x = stateX[0 + 2 * e];
+			var y = stateX[1 + 2 * e];
+			var rho = q[0 + 4 * e];
+			var u = q[1 + 4 * e] / rho;
+			var v = q[2 + 4 * e] / rho;
+			var energyTotal = q[3 + 4 * e] / rho;
+			var energyKinetic = .5 * (u * u + v * v);
+			var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+			var energyThermal = energyTotal - energyKinetic - energyPotential;
+			var s = (gamma - 1) * rho * energyThermal;			
+			if (s < dataMin) dataMin = s;
+			if (s > dataMax) dataMax = s;
+			this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
 		}
 		return [dataMin, dataMax];
 	},
@@ -1444,15 +1461,7 @@ var HydroState = makeClass({
 
 		this.resetSod();
 		
-		//p_i,j: pressure
-		this.pressure = new Float64Array(this.nx * this.nx);
-		var e = 0;
-		for (var j = 0; j < this.nx; ++j) {
-			for (var i = 0; i < this.nx; ++i) {
-				this.pressure[e] = 0; ++e;
-			}
-		}
-
+		
 		//TODO it is tempting to merge r, f, and ui into an edge structure
 		//and associate them with the nodes on either side of them,
 		//but then I would lose out on the 2nd-order contributions to the flux limiter.
@@ -1488,7 +1497,6 @@ var HydroState = makeClass({
 			}
 		}
 		
-	
 		//only used with Burger's eqn advection code
 		//u_{i-1/2},{j-1/2},dim: interface velocity
 		this.ui = new Float64Array((this.nx+1) * (this.nx+1) * 2);
@@ -1498,6 +1506,16 @@ var HydroState = makeClass({
 				for (var side = 0; side < 2; ++side) {
 					this.ui[e] = 0; ++e;
 				}
+			}
+		}
+
+		//only used with Burgers pressure source code
+		//p_i,j: pressure
+		this.pressure = new Float64Array(this.nx * this.nx);
+		var e = 0;
+		for (var j = 0; j < this.nx; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				this.pressure[e] = 0; ++e;
 			}
 		}
 
