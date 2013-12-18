@@ -435,7 +435,213 @@ var boundaryMethods = {
 
 var integrationMethods = {
 	'Forward Euler' : {
-		initPressure : function() {
+		Burgers : function(dt) {
+			//get velocity at interfaces from state
+			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
+				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+					var uiIndex = 2 * (i + (this.nx+1) * j);
+					for (var side = 0; side < 2; ++side) {
+						var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+						var indexR = i + this.nx * j;
+						var qIndexL = 4 * indexL;
+						var qIndexR = 4 * indexR;
+						var solidL = this.solid[indexL];
+						var solidR = this.solid[indexR];
+						var uL = this.q[1+side + qIndexL] / this.q[0 + qIndexL];
+						var uR = this.q[1+side + qIndexR] / this.q[0 + qIndexR];
+						if (solidL && !solidR) {
+							uL = -uR;
+						} else if (solidR && !solidL) {
+							uR = -uL;
+						}
+						this.ui[side + uiIndex] = .5 * (uL + uR);
+					}
+				}
+			}
+			//boundary zero
+			for (var j = 0; j < this.nghost; ++j) {
+				for (var i = 0; i <= this.nx; ++i) {
+					for (var side = 0; side < 2; ++side) {
+						//left boundary, left and top sides, zero vector
+						this.ui[side + 2 * (j + (this.nx+1) * i)] = 0;
+						//right boundary, left and top sides, zero vector
+						this.ui[side + 2 * (this.nx-j + (this.nx+1) * i)] = 0;
+						//top boundary, left and top sides, zero vector
+						this.ui[side + 2 * (i + (this.nx+1) * j)] = 0;
+						//bottom boundary, left and top sides, zero vector
+						this.ui[side + 2 * (i + (this.nx+1) * (this.nx-j))] = 0;
+					}
+				}
+			}
+
+			//compute flux and advect for each state vector
+			for (var state = 0; state < 4; ++state) {	//state
+				//r_{i-1/2},{j-1/2} flux limiter
+				for (var j = this.nghost; j < this.nx+this.nghost-3; ++j) {
+					for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
+						for (var side = 0; side < 2; ++side) {
+							var indexL2 = i - 2*dirs[side][0] + this.nx * (j - 2*dirs[side][1]);
+							var indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+							var indexR1 = i + this.nx * j;
+							var indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
+							
+							var solidL2 = this.solid[indexL2];
+							var solidL1 = this.solid[indexL1];
+							var solidR1 = this.solid[indexR1];
+							var solidR2 = this.solid[indexR2];
+							
+							var qL2 = this.q[state + 4 * indexL2];
+							var qL1 = this.q[state + 4 * indexL1];
+							var qR1 = this.q[state + 4 * indexR1];
+							var qR2 = this.q[state + 4 * indexR2];
+							
+							/*
+							slope limiters and arbitrary boundaries...
+							we have to look two over in any direction
+							if there's a wall two over, what do we do?
+							*/
+							if (solidL2) {
+								qL2 = qL1;
+								if (state == 1+side) qL2 = -qL2;
+							}
+							if (solidR2) {
+								qR2 = qR1;
+								if (state == 1+side) qR2 = -qR2;
+							}
+							if (solidL1) {
+								qL1 = -qR1;
+								if (state == 1+side) qL1 = -qL1;
+							}
+							if (solidR1) {
+								qR1 = -qL1;
+								if (state == 1+side) qR1 = -qR1;
+							}
+
+							//dq = q_i,j - q_{{i,j}-dirs[side]}
+							var dq = qR1 - qL1;
+							if (Math.abs(dq) > 0) {
+								if (this.ui[side + 2 * (i + (this.nx+1) * j)] >= 0) {
+									this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = (qL1 - qL2) / dq;
+								} else {
+									this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = (qR2 - qR1) / dq;
+								}
+							} else {
+								this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
+							}
+						}
+					}
+				}
+			
+				//now for ghost boundaries
+				for (var j = 0; j < this.nghost; ++j) {
+					for (var i = 0; i <= this.nx; ++i) {
+						for (var side = 0; side < 2; ++side) {
+							this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
+							this.r[state + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+							this.r[state + 4 * (side + 2 * (j + (this.nx+1) * i))] = 0;
+							this.r[state + 4 * (side + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+						}
+					}
+				}
+
+
+				var dxi = [];
+				//construct flux:
+				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
+					for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+						var dx = this.x[0 + 2 * (i + this.nx * j)] 
+							- this.x[0 + 2 * (i-dirs[0][0] + this.nx * (j-dirs[0][1]))];
+						var dy = this.x[1 + 2 * (i + this.nx * j)] 
+							- this.x[1 + 2 * (i-dirs[1][0] + this.nx * (j-dirs[1][1]))];
+						dxi[0] = dx;
+						dxi[1] = dy;
+						var volume = dx * dy;
+						//flux calculation 
+						for (var side = 0; side < 2; ++side) {
+							
+							var rIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
+							var uiIndex = side + 2 * (i + (this.nx+1) * j);
+							var fluxIndex = state + 4 * uiIndex;
+							var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+							var indexR = i + this.nx * j;
+							var qIndexL = state + 4 * indexL;
+							var qIndexR = state + 4 * indexR;
+							
+							//apply limiter
+							var phi = fluxMethods[this.fluxMethod](this.r[rIndex]);
+							var ui = this.ui[uiIndex];
+							
+							var solidL = this.solid[indexL];
+							var solidR = this.solid[indexR];
+							
+							
+							var qL = this.q[qIndexL];
+							var qR = this.q[qIndexR];
+							if (solidL && !solidR) {
+								qL = qR;
+								if (state == side+1) qL = -qL;
+							}
+							if (solidR && !solidL) {
+								qR = qL;
+								if (state == side+1) qR = -qR;
+							}
+							if (ui >= 0) {
+								this.flux[fluxIndex] = ui * qL; 
+							} else {
+								this.flux[fluxIndex] = ui * qR; 
+							}
+							var delta = phi * (qR - qL);
+							this.flux[fluxIndex] += delta * .5
+								* Math.abs(ui)
+								* (1 - Math.abs(ui * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
+						}
+					}
+				}
+				
+				//now for ghost boundaries
+				for (var j = 0; j < this.nghost-1; ++j) {
+					for (var i = 0; i <= this.nx; ++i) {
+						for (var side = 0; side < 2; ++side) {
+							this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
+							this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+							this.flux[state + 4 * (side + 2 * (j + (this.nx+1) * i))] = 0;
+							this.flux[state + 4 * (side + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+						}
+					}
+				}
+
+				//update cells
+				var dxi = [];
+				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
+					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+						if (this.solid[i + this.nx * j]) continue;
+
+						var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
+						var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
+						var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
+						
+						var xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
+						var xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
+						var dy = this.xi[xiIndexR] - this.xi[xiIndexL];
+					
+						var volume = dx * dy;
+						dxi[0] = dx;
+						dxi[1] = dy;
+						
+						for (var side = 0; side < 2; ++side) {
+							var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
+							var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
+							var df = this.flux[ifluxR] - this.flux[ifluxL];
+							this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
+						}
+					}
+				}
+			}
+		
+			//boundary again
+			this.boundary();
+
+			//compute pressure
 			var qIndex = 0;
 			var index = 0;
 			for (var j = 0; j < this.nx; ++j) {
@@ -456,8 +662,8 @@ var integrationMethods = {
 					qIndex += 4;
 				}
 			}
-		},
-		applyExternalForce : function(dt) {
+
+			//apply external force
 			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 					var index = i + this.nx * j;
@@ -468,8 +674,8 @@ var integrationMethods = {
 					this.q[2 + qIndex] -= dt * rho * externalForceY;
 				}
 			}
-		},
-		applyMomentumDiffusion : function(dt) {
+
+			//apply momentum diffusion = pressure
 			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 					var index = i + this.nx * j;
@@ -492,8 +698,8 @@ var integrationMethods = {
 					}
 				}
 			}
-		},
-		applyWorkDiffusion : function(dt) {
+
+			//apply work diffusion = momentum
 			var dxi = [];
 			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
@@ -529,28 +735,264 @@ var integrationMethods = {
 					}
 				}
 			}
+	
 		},
-		advect : {
-			Burgers : function(dt) {
+		'Riemann / Roe' : function(dt) {
+			var qLs = [];
+			var qRs = [];
+			for (var j = 1; j < this.nx; ++j) {
+				for (var i = 1; i < this.nx; ++i) {
+					for (var side = 0; side < 2; ++side) {
+						var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+						var indexR = i + this.nx * j;
+						var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
+						var solidL = this.solid[indexL];
+						var solidR = this.solid[indexR];
+						for (var k = 0; k < 4; ++k) {
+							var qL = this.q[k + 4 * indexL];
+							var qR = this.q[k + 4 * indexR];
+							if (solidL && !solidR) {
+								qL = qR;
+								if (k == side+1) qL = -qL;
+							} else if (solidR && !solidL) {
+								qR = qL;
+								if (k == side+1) qR = -qR;
+							}
+							qLs[k] = qL;
+							qRs[k] = qR;
+						}
+						for (var state = 0; state < 4; ++state) {
+							//find state change across interface in the basis of the eigenspace at the interface
+							var sum = 0;
+							for (var k = 0; k < 4; ++k) {
+									//reproject into interface eigenspace
+								sum += this.interfaceEigenvectorsInverse[state + 4 * (k + 4 * interfaceIndex)]
+									//flux difference
+									* (qRs[k] - qLs[k]);
+							}
+							this.interfaceDeltaQTilde[state + 4 * interfaceIndex] = sum;
+						}
+					}
+				}
+			}
+			
+			//boundary zero
+			for (var j = 0; j < this.nghost-1; ++j) {
+				for (var i = 0; i <= this.nx; ++i) {
+					for (var state = 0; state < 4; ++state) {
+						//left boundary, left and top sides, zero vector
+						this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
+						//right boundary, left and top sides, zero vector
+						this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+						//top boundary, left and top sides, zero vector
+						this.interfaceDeltaQTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
+						//bottom boundary, left and top sides, zero vector
+						this.interfaceDeltaQTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+					}
+				}
+			}
+
+			for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
+				for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
+					for (var side = 0; side < 2; ++side) {
+						var indexL2 = i - 2 * dirs[side][0] + this.nx * (j - 2 * dirs[side][1]);
+						var indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+						var indexR1 = i + this.nx * j;
+						var indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]); 
+						
+						var solidL2 = this.solid[indexL2];
+						var solidL1 = this.solid[indexL1];
+						var solidR1 = this.solid[indexR1];
+						var solidR2 = this.solid[indexR2];
+						
+						var interfaceIndexL = side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1]));
+						var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
+						var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+						
+						for (var state = 0; state < 4; ++state) {
+							
+							var interfaceDeltaQTildeL = this.interfaceDeltaQTilde[state + 4 * interfaceIndexL];
+							var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
+							var interfaceDeltaQTildeR = this.interfaceDeltaQTilde[state + 4 * interfaceIndexR];
+
+							//TODO is this right? 
+							if (solidL2) {
+								interfaceDeltaQTildeL = interfaceDeltaQTilde;
+							}
+							if (solidR2) {
+								interfaceDeltaQTildeR = interfaceDeltaQTilde;
+							}
+
+							if (Math.abs(interfaceDeltaQTilde) > 0) {
+								if (this.interfaceEigenvalues[state + 4 * interfaceIndex] > 0) {
+									this.rTilde[state + 4 * interfaceIndex] = 
+										this.interfaceDeltaQTilde[state + 4 * interfaceIndexL]
+										/ interfaceDeltaQTilde;
+								} else {
+									this.rTilde[state + 4 * interfaceIndex] = 
+										this.interfaceDeltaQTilde[state + 4 * interfaceIndexR]
+										/ interfaceDeltaQTilde;
+								}
+							} else {
+								this.rTilde[state + 4 * interfaceIndex] = 0;
+							}
+						}
+					}
+				}
+			}
+	
+			//..and keep the boundary rTilde's zero	
+			for (var j = 0; j < this.nghost; ++j) {
+				for (var i = 0; i <= this.nx; ++i) {
+					for (var state = 0; state < 4; ++state) {
+						//left
+						this.rTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
+						//right
+						this.rTilde[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+						//bottom
+						this.rTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
+						//top
+						this.rTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+					}
+				}
+			}
+		
+			var fluxAvg = [];	//4
+			var fluxTilde = [];	//4
+			var dxi = [];
+			//transform cell q's into cell qTilde's (eigenspace)
+			for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
+				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+					var dx = this.xi[0 + 2 * (i + (this.nx+1) * j)] 
+						- this.xi[0 + 2 * (i-dirs[0][0] + (this.nx+1) * (j-dirs[0][1]))];
+					var dy = this.xi[1 + 2 * (i + (this.nx+1) * j)] 
+						- this.xi[1 + 2 * (i-dirs[1][0] + (this.nx+1) * (j-dirs[1][1]))];
+					var volume = dx * dy;
+					dxi[0] = dx;
+					dxi[1] = dy;
+					for (var side = 0; side < 2; ++side) {
+
+						var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+						var indexR = i + this.nx * j;
+						var solidL = this.solid[indexL];
+						var solidR = this.solid[indexR];
+						var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
+						
+						for (var k = 0; k < 4; ++k) {
+							var qL = this.q[k + 4 * indexL];
+							var qR = this.q[k + 4 * indexR];
+							if (solidL && !solidR) {
+								qL = qR;
+								if (k == side+1) qL = -qL;
+							} else if (solidR && !solidL) {
+								qR = qL;
+								if (k == side+1) qR = -qR;
+							}
+							qLs[k] = qL;
+							qRs[k] = qR;
+						}
+						
+						//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
+						//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
+						for (var state = 0; state < 4; ++state) {
+							var sum = 0;
+							for (var k = 0; k < 4; ++k) {
+								sum += this.interfaceMatrix[state + 4 * (k + 4 * interfaceIndex)]
+									* (qRs[k] + qLs[k]);
+							}
+							fluxAvg[state] = .5 * sum;
+						}
+
+						//calculate flux
+						for (var state = 0; state < 4; ++state) {
+							var theta = 0;
+							var eigenvalue = this.interfaceEigenvalues[state + 4 * interfaceIndex];
+							if (eigenvalue >= 0) {
+								theta = 1;
+							} else {
+								theta = -1;
+							}
+						
+							var phi = fluxMethods[this.fluxMethod](this.rTilde[state + 4 * interfaceIndex]);
+							var epsilon = eigenvalue * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
+							var deltaFluxTilde = eigenvalue * this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
+							fluxTilde[state] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+						}
+					
+						//reproject fluxTilde back into q
+						for (var state = 0; state < 4; ++state) {
+							var sum = 0;
+							for (var k = 0; k < 4; ++k) {
+								sum += fluxTilde[k] * this.interfaceEigenvectors[state + 4 * (k + 4 * interfaceIndex)];
+							}
+							this.flux[state + 4 * interfaceIndex] = fluxAvg[state] + sum;
+						}
+					}
+				}
+			}
+		
+			//zero boundary flux
+			//..and keep the boundary r's zero	
+			for (var j = 0; j < this.nghost-1; ++j) {
+				for (var i = 0; i <= this.nx; ++i) {
+					for (var state = 0; state < 4; ++state) {
+						//left
+						this.flux[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
+						//right
+						this.flux[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
+						//bottom
+						this.flux[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
+						//top
+						this.flux[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
+					}
+				}
+			}
+
+			//update cells
+			for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
+				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+					if (this.solid[i + this.nx * j]) continue;
+					
+					var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
+					var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
+					var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
+					
+					var xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
+					var xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
+					var dy = this.xi[xiIndexR] - this.xi[xiIndexL];
+					
+					var volume = dx * dy;
+					dxi[0] = dx;
+					dxi[1] = dy;
+					
+					for (var side = 0; side < 2; ++side) {
+						var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+						var interfaceIndexL = side + 2 * (i + (this.nx+1) * j);
+						for (var state = 0; state < 4; ++state) {
+							var interfaceFluxIndexR = state + 4 * interfaceIndexR;
+							var interfaceFluxIndexL = state + 4 * interfaceIndexL;
+							var df = this.flux[interfaceFluxIndexR] - this.flux[interfaceFluxIndexL];
+							this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
+						}
+					}
+				}
+			}
+		}
+	},
+	'Backward Euler + Gauss Seidel' : {
+		Burgers : function(dt) {
+			this.oldQ.set(this.q);
+			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 				//get velocity at interfaces from state
 				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
 					for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
 						var uiIndex = 2 * (i + (this.nx+1) * j);
 						for (var side = 0; side < 2; ++side) {
-							var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR = i + this.nx * j;
-							var qIndexL = 4 * indexL;
-							var qIndexR = 4 * indexR;
-							var solidL = this.solid[indexL];
-							var solidR = this.solid[indexR];
-							var uL = this.q[1+side + qIndexL] / this.q[0 + qIndexL];
-							var uR = this.q[1+side + qIndexR] / this.q[0 + qIndexR];
-							if (solidL && !solidR) {
-								uL = -uR;
-							} else if (solidR && !solidL) {
-								uR = -uL;
-							}
-							this.ui[side + uiIndex] = .5 * (uL + uR);
+							var qIndexR = 4 * (i + this.nx * j);
+							var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
+							this.ui[side + uiIndex] = .5 * (
+								this.q[1+side + qIndexR] / this.q[0 + qIndexR] + 
+								this.q[1+side + qIndexL] / this.q[0 + qIndexL]);
 						}
 					}
 				}
@@ -576,50 +1018,19 @@ var integrationMethods = {
 					for (var j = this.nghost; j < this.nx+this.nghost-3; ++j) {
 						for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
 							for (var side = 0; side < 2; ++side) {
-								var indexL2 = i - 2*dirs[side][0] + this.nx * (j - 2*dirs[side][1]);
-								var indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-								var indexR1 = i + this.nx * j;
-								var indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]);
-								
-								var solidL2 = this.solid[indexL2];
-								var solidL1 = this.solid[indexL1];
-								var solidR1 = this.solid[indexR1];
-								var solidR2 = this.solid[indexR2];
-								
-								var qL2 = this.q[state + 4 * indexL2];
-								var qL1 = this.q[state + 4 * indexL1];
-								var qR1 = this.q[state + 4 * indexR1];
-								var qR2 = this.q[state + 4 * indexR2];
-								
-								/*
-								slope limiters and arbitrary boundaries...
-								we have to look two over in any direction
-								if there's a wall two over, what do we do?
-								*/
-								if (solidL2) {
-									qL2 = qL1;
-									if (state == 1+side) qL2 = -qL2;
-								}
-								if (solidR2) {
-									qR2 = qR1;
-									if (state == 1+side) qR2 = -qR2;
-								}
-								if (solidL1) {
-									qL1 = -qR1;
-									if (state == 1+side) qL1 = -qL1;
-								}
-								if (solidR1) {
-									qR1 = -qL1;
-									if (state == 1+side) qR1 = -qR1;
-								}
-
 								//dq = q_i,j - q_{{i,j}-dirs[side]}
-								var dq = qR1 - qL1;
+								var dq = this.q[state + 4 * (i + this.nx * j)]
+									- this.q[state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))];
 								if (Math.abs(dq) > 0) {
 									if (this.ui[side + 2 * (i + (this.nx+1) * j)] >= 0) {
-										this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = (qL1 - qL2) / dq;
+										this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
+											(this.q[state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))]
+												- this.q[state + 4 * (i - 2*dirs[side][0] + this.nx * (j - 2*dirs[side][1]))]) / dq;
 									} else {
-										this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = (qR2 - qR1) / dq;
+										this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
+											(this.q[state + 4 * (i + dirs[side][0] + this.nx * (j + dirs[side][1]))]
+												- this.q[state + 4 * (i + this.nx * j)]) / dq;
+										
 									}
 								} else {
 									this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
@@ -656,40 +1067,21 @@ var integrationMethods = {
 							for (var side = 0; side < 2; ++side) {
 								
 								var rIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
-								var uiIndex = side + 2 * (i + (this.nx+1) * j);
-								var fluxIndex = state + 4 * uiIndex;
-								var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-								var indexR = i + this.nx * j;
-								var qIndexL = state + 4 * indexL;
-								var qIndexR = state + 4 * indexR;
-								
 								//apply limiter
 								var phi = fluxMethods[this.fluxMethod](this.r[rIndex]);
-								var ui = this.ui[uiIndex];
-								
-								var solidL = this.solid[indexL];
-								var solidR = this.solid[indexR];
-								
-								
-								var qL = this.q[qIndexL];
-								var qR = this.q[qIndexR];
-								if (solidL && !solidR) {
-									qL = qR;
-									if (state == side+1) qL = -qL;
-								}
-								if (solidR && !solidL) {
-									qR = qL;
-									if (state == side+1) qR = -qR;
-								}
-								if (ui >= 0) {
-									this.flux[fluxIndex] = ui * qL; 
+								var uiIndex = side + 2 * (i + (this.nx+1) * j);
+								var fluxIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
+								var qIndexL = state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
+								var qIndexR = state + 4 * (i + this.nx * j);
+								if (this.ui[uiIndex] >= 0) {
+									this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexL];
 								} else {
-									this.flux[fluxIndex] = ui * qR; 
+									this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexR];
 								}
-								var delta = phi * (qR - qL);
+								var delta = phi * (this.q[qIndexR] - this.q[qIndexL]);
 								this.flux[fluxIndex] += delta * .5
-									* Math.abs(ui)
-									* (1 - Math.abs(ui * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
+									* Math.abs(this.ui[uiIndex])
+									* (1 - Math.abs(this.ui[uiIndex] * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
 							}
 						}
 					}
@@ -710,8 +1102,7 @@ var integrationMethods = {
 					var dxi = [];
 					for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 						for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-							if (this.solid[i + this.nx * j]) continue;
-
+							
 							var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
 							var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
 							var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
@@ -728,266 +1119,20 @@ var integrationMethods = {
 								var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
 								var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
 								var df = this.flux[ifluxR] - this.flux[ifluxL];
-								this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
-							}
-						}
-					}
-				}
-			},
-			'Riemann / Roe' : function(dt) {
-				var qLs = [];
-				var qRs = [];
-				for (var j = 1; j < this.nx; ++j) {
-					for (var i = 1; i < this.nx; ++i) {
-						for (var side = 0; side < 2; ++side) {
-							var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR = i + this.nx * j;
-							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
-							var solidL = this.solid[indexL];
-							var solidR = this.solid[indexR];
-							for (var k = 0; k < 4; ++k) {
-								var qL = this.q[k + 4 * indexL];
-								var qR = this.q[k + 4 * indexR];
-								if (solidL && !solidR) {
-									qL = qR;
-									if (k == side+1) qL = -qL;
-								} else if (solidR && !solidL) {
-									qR = qL;
-									if (k == side+1) qR = -qR;
-								}
-								qLs[k] = qL;
-								qRs[k] = qR;
-							}
-							for (var state = 0; state < 4; ++state) {
-								//find state change across interface in the basis of the eigenspace at the interface
-								var sum = 0;
-								for (var k = 0; k < 4; ++k) {
-										//reproject into interface eigenspace
-									sum += this.interfaceEigenvectorsInverse[state + 4 * (k + 4 * interfaceIndex)]
-										//flux difference
-										* (qRs[k] - qLs[k]);
-								}
-								this.interfaceDeltaQTilde[state + 4 * interfaceIndex] = sum;
-							}
-						}
-					}
-				}
-				
-				//boundary zero
-				for (var j = 0; j < this.nghost-1; ++j) {
-					for (var i = 0; i <= this.nx; ++i) {
-						for (var state = 0; state < 4; ++state) {
-							//left boundary, left and top sides, zero vector
-							this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
-							//right boundary, left and top sides, zero vector
-							this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-							//top boundary, left and top sides, zero vector
-							this.interfaceDeltaQTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
-							//bottom boundary, left and top sides, zero vector
-							this.interfaceDeltaQTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-						}
-					}
-				}
-
-				for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
-					for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
-						for (var side = 0; side < 2; ++side) {
-							var indexL2 = i - 2 * dirs[side][0] + this.nx * (j - 2 * dirs[side][1]);
-							var indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR1 = i + this.nx * j;
-							var indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]); 
-							
-							var solidL2 = this.solid[indexL2];
-							var solidL1 = this.solid[indexL1];
-							var solidR1 = this.solid[indexR1];
-							var solidR2 = this.solid[indexR2];
-							
-							var interfaceIndexL = side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1]));
-							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
-							var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
-							
-							for (var state = 0; state < 4; ++state) {
-								
-								var interfaceDeltaQTildeL = this.interfaceDeltaQTilde[state + 4 * interfaceIndexL];
-								var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
-								var interfaceDeltaQTildeR = this.interfaceDeltaQTilde[state + 4 * interfaceIndexR];
-
-								//TODO is this right? 
-								if (solidL2) {
-									interfaceDeltaQTildeL = interfaceDeltaQTilde;
-								}
-								if (solidR2) {
-									interfaceDeltaQTildeR = interfaceDeltaQTilde;
-								}
-
-								if (Math.abs(interfaceDeltaQTilde) > 0) {
-									if (this.interfaceEigenvalues[state + 4 * interfaceIndex] > 0) {
-										this.rTilde[state + 4 * interfaceIndex] = 
-											this.interfaceDeltaQTilde[state + 4 * interfaceIndexL]
-											/ interfaceDeltaQTilde;
-									} else {
-										this.rTilde[state + 4 * interfaceIndex] = 
-											this.interfaceDeltaQTilde[state + 4 * interfaceIndexR]
-											/ interfaceDeltaQTilde;
-									}
-								} else {
-									this.rTilde[state + 4 * interfaceIndex] = 0;
-								}
-							}
-						}
-					}
-				}
-		
-				//..and keep the boundary rTilde's zero	
-				for (var j = 0; j < this.nghost; ++j) {
-					for (var i = 0; i <= this.nx; ++i) {
-						for (var state = 0; state < 4; ++state) {
-							//left
-							this.rTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
-							//right
-							this.rTilde[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-							//bottom
-							this.rTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
-							//top
-							this.rTilde[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-						}
-					}
-				}
-			
-				var fluxAvg = [];	//4
-				var fluxTilde = [];	//4
-				var dxi = [];
-				//transform cell q's into cell qTilde's (eigenspace)
-				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-					for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-						var dx = this.xi[0 + 2 * (i + (this.nx+1) * j)] 
-							- this.xi[0 + 2 * (i-dirs[0][0] + (this.nx+1) * (j-dirs[0][1]))];
-						var dy = this.xi[1 + 2 * (i + (this.nx+1) * j)] 
-							- this.xi[1 + 2 * (i-dirs[1][0] + (this.nx+1) * (j-dirs[1][1]))];
-						var volume = dx * dy;
-						dxi[0] = dx;
-						dxi[1] = dy;
-						for (var side = 0; side < 2; ++side) {
-
-							var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR = i + this.nx * j;
-							var solidL = this.solid[indexL];
-							var solidR = this.solid[indexR];
-							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
-							
-							for (var k = 0; k < 4; ++k) {
-								var qL = this.q[k + 4 * indexL];
-								var qR = this.q[k + 4 * indexR];
-								if (solidL && !solidR) {
-									qL = qR;
-									if (k == side+1) qL = -qL;
-								} else if (solidR && !solidL) {
-									qR = qL;
-									if (k == side+1) qR = -qR;
-								}
-								qLs[k] = qL;
-								qRs[k] = qR;
-							}
-							
-							//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
-							//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
-							for (var state = 0; state < 4; ++state) {
-								var sum = 0;
-								for (var k = 0; k < 4; ++k) {
-									sum += this.interfaceMatrix[state + 4 * (k + 4 * interfaceIndex)]
-										* (qRs[k] + qLs[k]);
-								}
-								fluxAvg[state] = .5 * sum;
-							}
-
-							//calculate flux
-							for (var state = 0; state < 4; ++state) {
-								var theta = 0;
-								var eigenvalue = this.interfaceEigenvalues[state + 4 * interfaceIndex];
-								if (eigenvalue >= 0) {
-									theta = 1;
-								} else {
-									theta = -1;
-								}
-							
-								var phi = fluxMethods[this.fluxMethod](this.rTilde[state + 4 * interfaceIndex]);
-								var epsilon = eigenvalue * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
-								var deltaFluxTilde = eigenvalue * this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
-								fluxTilde[state] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
-							}
-						
-							//reproject fluxTilde back into q
-							for (var state = 0; state < 4; ++state) {
-								var sum = 0;
-								for (var k = 0; k < 4; ++k) {
-									sum += fluxTilde[k] * this.interfaceEigenvectors[state + 4 * (k + 4 * interfaceIndex)];
-								}
-								this.flux[state + 4 * interfaceIndex] = fluxAvg[state] + sum;
-							}
-						}
-					}
-				}
-			
-				//zero boundary flux
-				//..and keep the boundary r's zero	
-				for (var j = 0; j < this.nghost-1; ++j) {
-					for (var i = 0; i <= this.nx; ++i) {
-						for (var state = 0; state < 4; ++state) {
-							//left
-							this.flux[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
-							//right
-							this.flux[state + 4 * (0 + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-							//bottom
-							this.flux[state + 4 * (1 + 2 * (i + (this.nx+1) * j))] = 0;
-							//top
-							this.flux[state + 4 * (1 + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-						}
-					}
-				}
-
-				//update cells
-				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
-					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-						if (this.solid[i + this.nx * j]) continue;
-						
-						var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
-						var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
-						var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
-						
-						var xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
-						var xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
-						var dy = this.xi[xiIndexR] - this.xi[xiIndexL];
-						
-						var volume = dx * dy;
-						dxi[0] = dx;
-						dxi[1] = dy;
-						
-						for (var side = 0; side < 2; ++side) {
-							var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
-							var interfaceIndexL = side + 2 * (i + (this.nx+1) * j);
-							for (var state = 0; state < 4; ++state) {
-								var interfaceFluxIndexR = state + 4 * interfaceIndexR;
-								var interfaceFluxIndexL = state + 4 * interfaceIndexL;
-								var df = this.flux[interfaceFluxIndexR] - this.flux[interfaceFluxIndexL];
-								this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
+								this.q[state + 4 * (i + this.nx * j)] = 
+									this.oldQ[state + 4 * (i + this.nx * j)] 
+									- dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
 							}
 						}
 					}
 				}
 			}
-		}
-	},
-	'Backward Euler + Gauss Seidel' : {
-		initOldQ : function() {
-			if (this.oldQ === undefined) {
-				this.oldQ = new Float64Array(this.nx * this.nx * 4);
-			}
+			
+			//boundary again
+			this.boundary();
+
+			//apply external force
 			this.oldQ.set(this.q);
-		},
-		initPressure : function() {
-		},
-		applyExternalForce : function(dt) {
-			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
 			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
@@ -999,9 +1144,9 @@ var integrationMethods = {
 					}
 				}
 			}
-		},
-		applyMomentumDiffusion : function(dt) {
-			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
+
+			//apply momentum diffusion = pressure
+			this.oldQ.set(this.q);
 			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 				var qIndex = 0;
 				var pIndex = 0;
@@ -1035,9 +1180,9 @@ var integrationMethods = {
 					}
 				}
 			}
-		},
-		applyWorkDiffusion : function(dt) {
-			integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
+
+			//apply work diffusion = momentum
+			this.oldQ.set(this.q);
 			var externalForce = [externalForceX, externalForceY];
 			var dxi = [];
 			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
@@ -1077,161 +1222,10 @@ var integrationMethods = {
 					}
 				}		
 			}
+		
 		},
-		advect : {
-			Burgers : function(dt) {
-				integrationMethods['Backward Euler + Gauss Seidel'].initOldQ.call(this);
-				
-				for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
-					//get velocity at interfaces from state
-					for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-						for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-							var uiIndex = 2 * (i + (this.nx+1) * j);
-							for (var side = 0; side < 2; ++side) {
-								var qIndexR = 4 * (i + this.nx * j);
-								var qIndexL = 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
-								this.ui[side + uiIndex] = .5 * (
-									this.q[1+side + qIndexR] / this.q[0 + qIndexR] + 
-									this.q[1+side + qIndexL] / this.q[0 + qIndexL]);
-							}
-						}
-					}
-					//boundary zero
-					for (var j = 0; j < this.nghost; ++j) {
-						for (var i = 0; i <= this.nx; ++i) {
-							for (var side = 0; side < 2; ++side) {
-								//left boundary, left and top sides, zero vector
-								this.ui[side + 2 * (j + (this.nx+1) * i)] = 0;
-								//right boundary, left and top sides, zero vector
-								this.ui[side + 2 * (this.nx-j + (this.nx+1) * i)] = 0;
-								//top boundary, left and top sides, zero vector
-								this.ui[side + 2 * (i + (this.nx+1) * j)] = 0;
-								//bottom boundary, left and top sides, zero vector
-								this.ui[side + 2 * (i + (this.nx+1) * (this.nx-j))] = 0;
-							}
-						}
-					}
-
-					//compute flux and advect for each state vector
-					for (var state = 0; state < 4; ++state) {	//state
-						//r_{i-1/2},{j-1/2} flux limiter
-						for (var j = this.nghost; j < this.nx+this.nghost-3; ++j) {
-							for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
-								for (var side = 0; side < 2; ++side) {
-									//dq = q_i,j - q_{{i,j}-dirs[side]}
-									var dq = this.q[state + 4 * (i + this.nx * j)]
-										- this.q[state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))];
-									if (Math.abs(dq) > 0) {
-										if (this.ui[side + 2 * (i + (this.nx+1) * j)] >= 0) {
-											this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
-												(this.q[state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]))]
-													- this.q[state + 4 * (i - 2*dirs[side][0] + this.nx * (j - 2*dirs[side][1]))]) / dq;
-										} else {
-											this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 
-												(this.q[state + 4 * (i + dirs[side][0] + this.nx * (j + dirs[side][1]))]
-													- this.q[state + 4 * (i + this.nx * j)]) / dq;
-											
-										}
-									} else {
-										this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-									}
-								}
-							}
-						}
-					
-						//now for ghost boundaries
-						for (var j = 0; j < this.nghost; ++j) {
-							for (var i = 0; i <= this.nx; ++i) {
-								for (var side = 0; side < 2; ++side) {
-									this.r[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-									this.r[state + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-									this.r[state + 4 * (side + 2 * (j + (this.nx+1) * i))] = 0;
-									this.r[state + 4 * (side + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-								}
-							}
-						}
-
-
-						var dxi = [];
-						//construct flux:
-						for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-							for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-								var dx = this.x[0 + 2 * (i + this.nx * j)] 
-									- this.x[0 + 2 * (i-dirs[0][0] + this.nx * (j-dirs[0][1]))];
-								var dy = this.x[1 + 2 * (i + this.nx * j)] 
-									- this.x[1 + 2 * (i-dirs[1][0] + this.nx * (j-dirs[1][1]))];
-								dxi[0] = dx;
-								dxi[1] = dy;
-								var volume = dx * dy;
-								//flux calculation 
-								for (var side = 0; side < 2; ++side) {
-									
-									var rIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
-									//apply limiter
-									var phi = fluxMethods[this.fluxMethod](this.r[rIndex]);
-									var uiIndex = side + 2 * (i + (this.nx+1) * j);
-									var fluxIndex = state + 4 * (side + 2 * (i + (this.nx+1) * j));
-									var qIndexL = state + 4 * (i - dirs[side][0] + this.nx * (j - dirs[side][1]));
-									var qIndexR = state + 4 * (i + this.nx * j);
-									if (this.ui[uiIndex] >= 0) {
-										this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexL];
-									} else {
-										this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexR];
-									}
-									var delta = phi * (this.q[qIndexR] - this.q[qIndexL]);
-									this.flux[fluxIndex] += delta * .5
-										* Math.abs(this.ui[uiIndex])
-										* (1 - Math.abs(this.ui[uiIndex] * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
-								}
-							}
-						}
-						
-						//now for ghost boundaries
-						for (var j = 0; j < this.nghost-1; ++j) {
-							for (var i = 0; i <= this.nx; ++i) {
-								for (var side = 0; side < 2; ++side) {
-									this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
-									this.flux[state + 4 * (side + 2 * (i + (this.nx+1) * (this.nx-j)))] = 0;
-									this.flux[state + 4 * (side + 2 * (j + (this.nx+1) * i))] = 0;
-									this.flux[state + 4 * (side + 2 * (this.nx-j + (this.nx+1) * i))] = 0;
-								}
-							}
-						}
-
-						//update cells
-						var dxi = [];
-						for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
-							for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-								
-								var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
-								var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
-								var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
-								
-								var xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
-								var xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
-								var dy = this.xi[xiIndexR] - this.xi[xiIndexL];
-							
-								var volume = dx * dy;
-								dxi[0] = dx;
-								dxi[1] = dy;
-								
-								for (var side = 0; side < 2; ++side) {
-									var ifluxR = state + 4 * (side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])));
-									var ifluxL = state + 4 * (side + 2 * (i + (this.nx+1) * j));
-									var df = this.flux[ifluxR] - this.flux[ifluxL];
-									this.q[state + 4 * (i + this.nx * j)] = 
-										this.oldQ[state + 4 * (i + this.nx * j)] 
-										- dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
-								}
-							}
-						}
-					}
-			
-				}
-			},
-			'Riemann / Roe' : function(dt) {
-				integrationMethods['Forward Euler'].advect['Riemann / Roe'].call(this, dt);
-			}
+		'Riemann / Roe' : function(dt) {
+			integrationMethods['Forward Euler']['Riemann / Roe'].call(this, dt);
 		}
 	}
 };
@@ -1556,6 +1550,10 @@ var HydroState = makeClass({
 			}
 		}
 
+
+		//used for Backward Euler + Gauss-Seidel
+		this.oldQ = new Float64Array(this.nx * this.nx * 4);
+
 		//number of ghost cells
 		this.nghost = 2;
 
@@ -1753,30 +1751,11 @@ var HydroState = makeClass({
 		boundaryMethods[this.boundaryMethodBottom].bottom.call(this, this.nx, this.q);
 	},
 	step : function(dt) {
-		
 		//apply boundary conditions
 		this.boundary();
 	
 		//solve
-		integrationMethods[this.integrationMethod].advect[this.advectMethod].call(this, dt);
-			
-		//boundary again
-		this.boundary();
-
-		//compute pressure
-		integrationMethods[this.integrationMethod].initPressure.call(this);
-
-		//apply external force
-		integrationMethods[this.integrationMethod].applyExternalForce.call(this, dt);
-
-		//apply momentum diffusion = pressure
-		integrationMethods[this.integrationMethod].applyMomentumDiffusion.call(this, dt);
-		
-		//apply work diffusion = momentum
-		integrationMethods[this.integrationMethod].applyWorkDiffusion.call(this, dt);
-	
-		//last boundary update
-		this.boundary();
+		integrationMethods[this.integrationMethod][this.advectMethod].call(this, dt);			
 	},
 	update : function() {
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
