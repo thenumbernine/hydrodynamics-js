@@ -48,50 +48,6 @@ function mat33invert(out, a) {
 	}
 }
 
-/*
-output:
-matrix
-eigenvalues
-eigenvectors
-
-input:
-velocity
-hTotal
-speedOfSound
-*/
-function eulerEquationBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
-	//calculate matrix & eigenvalues & vectors at interface from state at interface
-	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
-	//matrix, listed per column
-	matrix[0][0] = 0;
-	matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
-	matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
-	matrix[1][0] = 1;
-	matrix[1][1] = (3 - gamma) * velocity;
-	matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
-	matrix[2][0] = 0;
-	matrix[2][1] = gamma - 1;
-	matrix[2][2] = gamma * velocity;
-
-	//eigenvalues: min, mid, max
-	eigenvalues[0] = velocity - speedOfSound;
-	eigenvalues[1] = velocity;
-	eigenvalues[2] = velocity + speedOfSound;
-	//min eigenvector
-	eigenvectors[0][0] = 1;
-	eigenvectors[0][1] = velocity - speedOfSound;
-	eigenvectors[0][2] = hTotal - speedOfSound * velocity;
-	//mid eigenvector
-	eigenvectors[1][0] = 1;
-	eigenvectors[1][1] = velocity;
-	eigenvectors[1][2] = .5 * velocity * velocity;
-	//max eigenvector
-	eigenvectors[2][0] = 1;
-	eigenvectors[2][1] = velocity + speedOfSound;
-	eigenvectors[2][2] = hTotal + speedOfSound * velocity;
-	//calculate eigenvector inverses ... 
-	mat33invert(eigenvectorsInverse, eigenvectors);
-}
 
 var boundaryMethods = {
 	periodic : function(nx,q) {
@@ -146,13 +102,7 @@ var boundaryMethods = {
 	}
 };
 
-/*
-time derivative + advection component + source term = 0
-d/dt (rho) + d/dx(rho u) = 0
-d/dt (rho u) + d/dx(rho u&2) + d/dx (P) = 0
-d/dt (rho e_total) + d/dx (rho e_total u) + d/dx (P u) = 0
-*/
-var eulerEquationBurgersForwardEuler = {
+var EulerEquationBurgersSolver = makeClass({
 	initStep : function() {},
 	calcCFLTimestep : function() {
 		var mindum = undefined;
@@ -169,6 +119,16 @@ var eulerEquationBurgersForwardEuler = {
 		//if (mindum != mindum) throw 'nan';
 		return this.cfl * mindum;
 	},
+});
+
+/*
+time derivative + advection component + source term = 0
+d/dt (rho) + d/dx(rho u) = 0
+d/dt (rho u) + d/dx(rho u&2) + d/dx (P) = 0
+d/dt (rho e_total) + d/dx (rho e_total u) + d/dx (P u) = 0
+*/
+var EulerEquationBurgersForwardEuler = makeClass({
+	super : EulerEquationBurgersSolver,
 	step : function(dt) {
 		assert(this.x.length == this.nx);
 		assert(this.xi.length == this.nx + 1);
@@ -245,7 +205,7 @@ var eulerEquationBurgersForwardEuler = {
 			this.q[i][2] -= dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
 		}
 	}
-};
+});
 
 /*
 TODO 3x3 block tridiagonal thomas algorithm
@@ -256,9 +216,8 @@ Treating the flux limiter and the interface velocity as constants when I could c
 I get timesteps of .7, when .3 or so is what the max CFL timestep for explicit was giving me,
  but still see a lot more oscillations in the system.
 */
-var eulerEquationBurgersBackwardEulerGaussSeidel = {
-	initStep : function() {},
-	calcCFLTimestep : eulerEquationBurgersForwardEuler.calcCFLTimestep,
+var EulerEquationBurgersBackwardEulerGaussSeidel = makeClass({
+	super : EulerEquationBurgersSolver,
 	step : function(dt) {
 		for (var i = 0; i < this.nx; ++i) {
 			for (var j = 0; j < 3; ++j) {
@@ -371,44 +330,9 @@ var eulerEquationBurgersBackwardEulerGaussSeidel = {
 			}
 		}
 	}
-};
+});
 
-var eulerEquationGodunovForwardEuler = {
-	initStep : function() {
-		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
-		//(i.e. qi[ix] is between q[ix-1] and q[ix])
-		for (var ix = 1; ix < this.nx; ++ix) {
-			//compute Roe averaged interface values
-			var densityL = this.q[ix-1][0];
-			var velocityL = this.q[ix-1][1] / densityL;
-			var energyTotalL = this.q[ix-1][2] / densityL;
-			var energyKinematicL = .5 * velocityL * velocityL;
-			var energyThermalL = energyTotalL - energyKinematicL;
-			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
-			var hTotalL = energyTotalL + pressureL / densityL;
-			
-			var densityR = this.q[ix][0];
-			var velocityR = this.q[ix][1] / densityR;
-			var energyTotalR = this.q[ix][2] / densityR;
-			var energyKinematicR = .5 * velocityR * velocityR;
-			var energyThermalR = energyTotalR - energyKinematicR;
-			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
-			var hTotalR = energyTotalR + pressureR / densityR;
-			
-			var velocity = .5 * (velocityL + velocityR);
-			var hTotal = .5 * (hTotalL + hTotalR);
-
-			//compute eigenvectors and values at the interface based on Roe averages
-			eulerEquationBuildEigenstate(
-				this.interfaceMatrix[ix],
-				this.interfaceEigenvalues[ix], 
-				this.interfaceEigenvectors[ix], 
-				this.interfaceEigenvectorsInverse[ix], 
-				velocity, hTotal, this.gamma);
-		}	
-	},
+var GodunovSolver = makeClass({
 	/*
 	store eigenvalues and eigenvectors of interfaces
 	use the lambdas to calc the DT based on CFL
@@ -535,7 +459,94 @@ var eulerEquationGodunovForwardEuler = {
 			}
 		}
 	}
-};
+});
+
+var EulerEquationGodunovSolver = makeClass({
+	super : GodunovSolver,
+	buildEigenstate : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+		//calculate matrix & eigenvalues & vectors at interface from state at interface
+		var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
+		//matrix, listed per column
+		matrix[0][0] = 0;
+		matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
+		matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
+		matrix[1][0] = 1;
+		matrix[1][1] = (3 - gamma) * velocity;
+		matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
+		matrix[2][0] = 0;
+		matrix[2][1] = gamma - 1;
+		matrix[2][2] = gamma * velocity;
+
+		//eigenvalues: min, mid, max
+		eigenvalues[0] = velocity - speedOfSound;
+		eigenvalues[1] = velocity;
+		eigenvalues[2] = velocity + speedOfSound;
+		//min eigenvector
+		eigenvectors[0][0] = 1;
+		eigenvectors[0][1] = velocity - speedOfSound;
+		eigenvectors[0][2] = hTotal - speedOfSound * velocity;
+		//mid eigenvector
+		eigenvectors[1][0] = 1;
+		eigenvectors[1][1] = velocity;
+		eigenvectors[1][2] = .5 * velocity * velocity;
+		//max eigenvector
+		eigenvectors[2][0] = 1;
+		eigenvectors[2][1] = velocity + speedOfSound;
+		eigenvectors[2][2] = hTotal + speedOfSound * velocity;
+		//calculate eigenvector inverses ... 
+		mat33invert(eigenvectorsInverse, eigenvectors);
+	}
+});
+
+/*
+output:
+matrix
+eigenvalues
+eigenvectors
+
+input:
+velocity
+hTotal
+speedOfSound
+*/
+var EulerEquationGodunovForwardEuler = makeClass({
+	super : EulerEquationGodunovSolver,
+	initStep : function() {
+		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
+		//(i.e. qi[ix] is between q[ix-1] and q[ix])
+		for (var ix = 1; ix < this.nx; ++ix) {
+			//compute Roe averaged interface values
+			var densityL = this.q[ix-1][0];
+			var velocityL = this.q[ix-1][1] / densityL;
+			var energyTotalL = this.q[ix-1][2] / densityL;
+			var energyKinematicL = .5 * velocityL * velocityL;
+			var energyThermalL = energyTotalL - energyKinematicL;
+			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
+			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
+			var hTotalL = energyTotalL + pressureL / densityL;
+			
+			var densityR = this.q[ix][0];
+			var velocityR = this.q[ix][1] / densityR;
+			var energyTotalR = this.q[ix][2] / densityR;
+			var energyKinematicR = .5 * velocityR * velocityR;
+			var energyThermalR = energyTotalR - energyKinematicR;
+			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
+			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
+			var hTotalR = energyTotalR + pressureR / densityR;
+			
+			var velocity = .5 * (velocityL + velocityR);
+			var hTotal = .5 * (hTotalL + hTotalR);
+
+			//compute eigenvectors and values at the interface based on Roe averages
+			EulerEquationGodunovForwardEuler.prototype.buildEigenstate.call(this,
+				this.interfaceMatrix[ix],
+				this.interfaceEigenvalues[ix], 
+				this.interfaceEigenvectors[ix], 
+				this.interfaceEigenvectorsInverse[ix], 
+				velocity, hTotal, this.gamma);
+		}	
+	}
+});
 
 /*
 relation:
@@ -553,7 +564,8 @@ u = q1 / q0
 h_total = e_total + P / rho
 Cs = sqrt(gamma P / rho)
 */
-var eulerEquationRoeForwardEuler = {
+var EulerEquationRoeForwardEuler = makeClass({
+	super : EulerEquationGodunovSolver,
 	initStep : function() {
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 1; ix < this.nx; ++ix) {
@@ -583,24 +595,22 @@ var eulerEquationRoeForwardEuler = {
 			var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
 
 			//compute eigenvectors and values at the interface based on Roe averages
-			eulerEquationBuildEigenstate(
+			EulerEquationRoeForwardEuler.prototype.buildEigenstate.call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
 				this.interfaceEigenvectorsInverse[ix], 
 				velocity, hTotal, this.gamma);
 		}
-	},
-	calcCFLTimestep : eulerEquationGodunovForwardEuler.calcCFLTimestep,
-	step : eulerEquationGodunovForwardEuler.step
-};
+	}
+});
 
 var eulerEquationSimulation = {
 	methods : {
-		'Burgers / Forward Euler' : eulerEquationBurgersForwardEuler,
-		'Burgers / Backward Euler via Gauss Seidel' : eulerEquationBurgersBackwardEulerGaussSeidel,
-		'Godunov / Forward Euler' : eulerEquationGodunovForwardEuler,
-		'Roe / Forward Euler' : eulerEquationRoeForwardEuler
+		'Burgers / Forward Euler' : EulerEquationBurgersForwardEuler.prototype,
+		'Burgers / Backward Euler via Gauss Seidel' : EulerEquationBurgersBackwardEulerGaussSeidel.prototype,
+		'Godunov / Forward Euler' : EulerEquationGodunovForwardEuler.prototype,
+		'Roe / Forward Euler' : EulerEquationRoeForwardEuler.prototype
 	},
 	initialConditions : {
 		Sod : function() {
@@ -629,6 +639,17 @@ var eulerEquationSimulation = {
 				this.q[i][1] = rho * u;
 				this.q[i][2] = rho * eTotal;
 			}
+		},
+		Sedov : function() {
+			this.resetCoordinates(-1, 1);
+			var pressure = 1e-4;
+			var rho = 1;
+			for (var i = 0; i < this.nx; ++i) {
+				this.q[i][0] = rho;
+				this.q[i][1] = 0;
+				this.q[i][2] = pressure / (this.gamma - 1);
+			}
+			this.q[Math.floor(this.nx/2)][2] = 1e+2;
 		}
 	}
 };
@@ -692,7 +713,8 @@ function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 	mat33invert(eigenvectorsInverse, eigenvectors);
 }
 
-var admEquationRoeForwardEuler = {
+var ADMEquationRoeForwardEuler = makeClass({
+	super : GodunovSolver,
 	initStep : function() {
 		var dx = (xmax - xmin) / this.nx;
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
@@ -726,14 +748,12 @@ var admEquationRoeForwardEuler = {
 				alpha, g);
 		}
 		//how about those boundary eigenstates?
-	},
-	calcCFLTimestep : eulerEquationGodunovForwardEuler.calcCFLTimestep,
-	step : eulerEquationGodunovForwardEuler.step
-};
+	}
+});
 
 var admEquationSimulation = {
 	methods : {
-		'Roe / Forward Euler' : admEquationRoeForwardEuler
+		'Roe / Forward Euler' : ADMEquationRoeForwardEuler.prototype
 	},
 	initialConditions : {
 		GaugeShock : function() {
@@ -930,12 +950,12 @@ var Hydro = makeClass({
 			this.vertexPositions[1+4*i] = q[i][0] * .25 * (xmax - xmin) / (ymax - ymin);
 			this.vertexPositions[2+4*i] = x[i];
 			this.vertexPositions[3+4*i] = 0;
-			this.vertexStates[0+6*i] = 1;
-			this.vertexStates[1+6*i] = 1;
-			this.vertexStates[2+6*i] = 1;
-			this.vertexStates[3+6*i] = q[i][0];
-			this.vertexStates[4+6*i] = Math.abs(q[i][1] / q[i][0]);
-			this.vertexStates[5+6*i] = q[i][2] / q[i][0];
+			this.vertexStates[0+6*i] = Math.abs(q[i][1] / q[i][0]);
+			this.vertexStates[1+6*i] = q[i][0];
+			this.vertexStates[2+6*i] = q[i][2] / q[i][0];
+			this.vertexStates[3+6*i] = 0;
+			this.vertexStates[4+6*i] = 0;
+			this.vertexStates[5+6*i] = 0;
 		}
 	}
 });
@@ -1015,15 +1035,22 @@ $(document).ready(function(){
 		}
 	});
 
-	$('#reset_Euler_Sod').click(function(){ 
-		eulerEquationSimulation.initialConditions.Sod.call(hydro.state);
-	});
-	$('#reset_Euler_Wave').click(function(){ 
-		eulerEquationSimulation.initialConditions.Wave.call(hydro.state);
-	});
-	$('#reset_ADM_GaugeShock').click(function(){ 
-		admEquationSimulation.initialConditions.GaugeShock.call(hydro.state);
-	});
+	for (simulationName in simulations) {
+		var simulation = simulations[simulationName];
+		for (initialConditionName in simulation.initialConditions) {
+			(function(){
+				var method = simulation.initialConditions[initialConditionName];
+				var parent = $('#'+simulationName+'_controls');
+				$('<button>', {
+					text : 'Reset '+initialConditionName,
+					click : function() {
+						method.call(hydro.state);
+					}
+				}).appendTo(parent);
+				$('<br>').appendTo(parent);
+			})();
+		}
+	}
 
 	(function(){
 		var select = $('#gridsize');
@@ -1074,8 +1101,6 @@ $(document).ready(function(){
 		
 			//...and now select the visible select's selection
 			hydro.state.algorithm = $('#'+val+'_algorithm').val();
-		
-			console.log('changing...');
 		});
 		
 		select.val(hydro.state.simulation);
