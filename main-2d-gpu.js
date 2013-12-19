@@ -46,15 +46,14 @@ var resetSodCylinderSolidShader;
 var resetWaveShader;
 var resetKelvinHemholtzShader;
 
-var burgersComputePressureShader;
-var burgersApplyPressureToMomentumShader;
-var burgersApplyPressureToWorkShader;
-
 var burgersComputeCFLShader;
 var burgersComputeInterfaceVelocityShader;
 var burgersComputeFluxSlopeShader = [];	//[side]
 var burgersComputeFluxShader = {};		//[fluxMethod][side]
 var burgersUpdateStateShader;
+var burgersComputePressureShader;
+var burgersApplyPressureToMomentumShader;
+var burgersApplyPressureToWorkShader;
 
 var roeComputeCFLShader;
 var roeComputeRoeValueShader = [];	//[side] = [velocity.x, velocity.y, hTotal, speedOfSound]
@@ -438,7 +437,7 @@ var advectMethods = {
 				uniforms : {
 					dpos : [1/this.nx, 1/this.nx],
 					dt : dt,
-					dx : [dx, dy],
+					dt_dx : [dt / dx, dt / dy],
 					externalForce : [externalForceX, externalForceY]
 				},
 				texs : [this.qTex, this.solidTex, this.pressureTex]
@@ -455,7 +454,7 @@ var advectMethods = {
 				uniforms : {
 					dpos : [1/this.nx, 1/this.nx],
 					dt : dt,
-					dx : [dx, dy],
+					dt_dx : [dt / dx, dt / dy],
 					externalForce : [externalForceX, externalForceY]
 				},
 				texs : [this.qTex, this.solidTex, this.pressureTex]
@@ -1079,11 +1078,11 @@ function update() {
 	
 	//draw
 	GL.draw();
-	
+
 	hydro.state.qTex.bind(0);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	if (gl.getExtension('OES_texture_float_linear')) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 	hydro.state.pressureTex.bind(1);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	if (gl.getExtension('OES_texture_float_linear')) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 	currentColorScheme.bind(2);
 
 	GL.unitQuad.draw({
@@ -2035,20 +2034,20 @@ void main() {
 		if (solidYL > .5) pressureYL = pressureC;
 		float pressureYR = texture2D(pressureTex, posYR).x;
 		if (solidYR > .5) pressureYR = pressureC; 
-		
-		vec2 pressureGrad = vec2(pressureXR - pressureXL, pressureYR - pressureYL) / (2. * dx);
+	
+		vec2 dPressure = .5 * vec2(pressureXR - pressureXL, pressureYR - pressureYL);
 
 		vec4 q = texture2D(qTex, pos);
 		float rho = q.x;
 		gl_FragColor = q;
-		gl_FragColor.yz -= dt * (pressureGrad + rho * externalForce);
+		gl_FragColor.yz -= dt_dx * dPressure + dt * rho * externalForce;
 	}
 }
 */}),
 			uniforms : {
 				dpos : 'vec2',
 				dt : 'float',
-				dx : 'vec2',
+				dt_dx : 'vec2',
 				externalForce : 'vec2',
 			},
 			texs : ['qTex', 'solidTex', 'pressureTex']
@@ -2100,20 +2099,20 @@ void main() {
 		float vYL = rho_v_YL.y / rho_v_YL.x;
 		if (solidYL > .5) vYL = -uvC.y;
 		
-		vec2 pressureTimesVelocityGrad = vec2(
+		vec2 dPressureTimesVelocity = .5 * vec2(
 			pressureXR * uXR - pressureXL * uXL, 
-			pressureYR * vYR - pressureYL * vYL) / (2. * dx);
+			pressureYR * vYR - pressureYL * vYL);
 
 		vec4 q = texture2D(qTex, pos);
 		gl_FragColor = q;
-		gl_FragColor.w -= dt * (pressureTimesVelocityGrad.x + pressureTimesVelocityGrad.y + dot(q.yz, externalForce));
+		gl_FragColor.w -= dot(dt_dx, dPressureTimesVelocity) + dt * dot(q.yz, externalForce);
 	}
 }
 */}),
 			uniforms : {
 				dpos : 'vec2',
 				dt : 'float',
-				dx : 'vec2',
+				dt_dx : 'vec2',
 				externalForce : 'vec2'
 			},
 			texs : ['qTex', 'solidTex', 'pressureTex']

@@ -248,103 +248,9 @@ var drawToScreenMethods = {
 
 var integrationMethods = {
 	'Forward Euler' : {
-		initPressure : function() {
-			for (var i = 0; i < this.cells.length; ++i) {
-				var cell = this.cells[i];
-				//if (cell.q[0] !== cell.q[0]) throw 'nan';
-				//if (cell.q[1] !== cell.q[1]) throw 'nan';
-				//if (cell.q[2] !== cell.q[2]) throw 'nan';
-				//if (cell.q[0] === 0) throw 'divide by zero error';
-				var x = cell.x[0];
-				var y = cell.x[1];
-				var rho = cell.q[0];
-				var u = cell.q[1] / rho;
-				var v = cell.q[2] / rho;
-				var energyTotal = cell.q[3] / rho;
-				var energyKinetic = .5 * (u * u + v * v);
-				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-				var energyThermal = energyTotal - energyKinetic - energyPotential;
-				cell.pressure = (this.gamma - 1) * rho * energyThermal;
-				//if (cell.pressure !== cell.pressure) throw 'nan';
-			}
-		},
-		applyExternalForce : function(dt) {
-			for (var i = 0; i < this.cells.length; ++i) {
-				var cell = this.cells[i];
-				var rho = cell.q[0];
-				cell.q[3] -= dt * (externalForceX * cell.q[1] + externalForceY * cell.q[2]);
-				cell.q[1] -= dt * rho * externalForceX;
-				cell.q[2] -= dt * rho * externalForceY;
-			}
-		},
-		applyMomentumDiffusion : function(dt) {
-			for (var i = 0; i < this.edges.length; ++i) {
-				var edge = this.edges[i];
-				if (edge.cells.length == 2) {	//one neighbor means ghost cell mirror means matching energies means zero gradient.
-					var cellA = this.cells[edge.cells[0]];
-					var cellB = this.cells[edge.cells[1]];
-					var dPressure = cellA.pressure - cellB.pressure;	//direction of normal
-					var dx = cellA.x[0] - cellB.x[0];
-					var dy = cellA.x[1] - cellB.x[1];
-					var ds = Math.sqrt(dx * dx + dy * dy);
-					
-					cellA.q[1] -= dt * dPressure / ds * edge.normal[0];
-					cellA.q[2] -= dt * dPressure / ds * edge.normal[1];
-					
-					cellB.q[1] += dt * dPressure / ds * edge.normal[0];
-					cellB.q[2] += dt * dPressure / ds * edge.normal[1];
-				}
-			}
-		},
-		applyWorkDiffusion : function(dt) {
-			for (var i = 0; i < this.edges.length; ++i) {
-				var edge = this.edges[i];
-				if (edge.cells.length == 1) {
-					var cellA = this.cells[edge.cells[0]];
-
-					var dx = 2 * (cellA.x[0] - edge.x[0]);
-					var dy = 2 * (cellA.x[1] - edge.x[1]);
-					var ds = Math.sqrt(dx * dx + dy * dy);
-
-					var rhoA = cellA.q[0];
-					var uA = cellA.q[1] / rhoA;
-					var vA = cellA.q[2] / rhoA;
-					var pressureA = cellA.pressure;
-					
-					var rhoB = rhoA;
-					var uB = -uA;
-					var vB = -vA;
-					var pressureB = pressureA;	
-					var dWork = pressureA * (uA * edge.normal[0] + vA * edge.normal[1])
-							- pressureB * (uB * edge.normal[0] + vB * edge.normal[1]);
-
-					cellA.q[3] -= dt * dWork / ds; 
-				} else {
-					var cellA = this.cells[edge.cells[0]];
-					var cellB = this.cells[edge.cells[1]];
-					
-					var dx = cellA.x[0] - cellB.x[0];
-					var dy = cellA.x[1] - cellB.x[1];
-					var ds = Math.sqrt(dx * dx + dy * dy);
-			
-					var rhoA = cellA.q[0];
-					var uA = cellA.q[1] / rhoA;
-					var vA = cellA.q[2] / rhoA;
-					
-					var rhoB = cellB.q[0];
-					var uB = cellB.q[1] / rhoB;
-					var vB = cellB.q[2] / rhoB;
-
-					var dWork = cellA.pressure * (uA * edge.normal[0] + vA * edge.normal[1])
-							- cellB.pressure * (uB * edge.normal[0] + vB * edge.normal[1]);
-
-					cellA.q[3] -= dt * dWork / ds; 
-					cellB.q[3] += dt * dWork / ds; 
-				}
-			}
-		},
 		advect : {
 			Burgers : function(dt) {
+				/**/
 				for (var i = 0; i < this.edges.length; ++i) {
 					//TODO weight averages by distances from edge ... or volume ... or something
 					var edge = this.edges[i];
@@ -374,7 +280,6 @@ var integrationMethods = {
 						edge.r[j] = 0;
 					}
 				}
-
 
 				//construct flux:
 				for (var i = 0; i < this.edges.length; ++i) {
@@ -416,6 +321,142 @@ var integrationMethods = {
 						}
 					}
 				}
+				/**/
+				
+				//compute pressure
+				for (var i = 0; i < this.cells.length; ++i) {
+					var cell = this.cells[i];
+					//if (cell.q[0] !== cell.q[0]) throw 'nan';
+					//if (cell.q[1] !== cell.q[1]) throw 'nan';
+					//if (cell.q[2] !== cell.q[2]) throw 'nan';
+					//if (cell.q[0] === 0) throw 'divide by zero error';
+					var x = cell.x[0];
+					var y = cell.x[1];
+					var rho = cell.q[0];
+					var u = cell.q[1] / rho;
+					var v = cell.q[2] / rho;
+					var energyTotal = cell.q[3] / rho;
+					var energyKinetic = .5 * (u * u + v * v);
+					var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+					var energyThermal = energyTotal - energyKinetic - energyPotential;
+					cell.pressure = (this.gamma - 1) * rho * energyThermal;
+					//if (cell.pressure !== cell.pressure) throw 'nan';
+				}
+
+				//apply external force
+				for (var i = 0; i < this.cells.length; ++i) {
+					var cell = this.cells[i];
+					var rho = cell.q[0];
+					cell.q[3] -= dt * (externalForceX * cell.q[1] + externalForceY * cell.q[2]);
+					cell.q[1] -= dt * rho * externalForceX;
+					cell.q[2] -= dt * rho * externalForceY;
+				}
+
+				//apply momentum diffusion = pressure
+				/* per-edge method */
+				for (var i = 0; i < this.edges.length; ++i) {
+					var edge = this.edges[i];
+					if (edge.cells.length == 2) {	//one neighbor means ghost cell mirror means matching energies means zero gradient.
+						var cellA = this.cells[edge.cells[0]];
+						var cellB = this.cells[edge.cells[1]];
+						var dPressure = cellA.pressure - cellB.pressure;	//direction of normal
+						var dx = cellA.x[0] - cellB.x[0];
+						var dy = cellA.x[1] - cellB.x[1];
+						var ds = Math.sqrt(dx * dx + dy * dy);
+						
+						cellA.q[1] -= dt * dPressure / ds * edge.normal[0];
+						cellA.q[2] -= dt * dPressure / ds * edge.normal[1];
+						
+						cellB.q[1] += dt * dPressure / ds * edge.normal[0];
+						cellB.q[2] += dt * dPressure / ds * edge.normal[1];
+					}
+				}
+				/**/
+				/*for (var i = 0; i < this.cells.length; ++i) {
+					var cell = this.cells[i];
+					var total_dPressure_times_dx = 0;
+					var total_dPressure_times_dy = 0;
+					var total_dx = 0;
+					var total_dy = 0;
+					for (var j = 0; j < cell.edges.length; ++j) {
+						var edge = this.edges[cell.edges[j]];
+						if (edge.cells.length != 2) continue;
+						var cellB = edge.getOpposing(cell);
+						var this_dPressure = cell.pressure - cellB.pressure;
+						var dx = cell.x[0] - cellB.x[0];
+						var dy = cell.x[1] - cellB.x[1];
+						
+						if (dx < 0) {
+							total_dx -= dx;
+							total_dPressure_times_dx -= this_dPressure;
+						} else {
+							total_dx += dx;
+							total_dPressure_times_dx += this_dPressure;
+						}
+						
+						if (dy < 0) {
+							total_dy -= dy;
+							total_dPressure_times_dy -= this_dPressure;
+						} else {
+							total_dy += dy;
+							total_dPressure_times_dy += this_dPressure;
+						}
+					}
+					var total_dPressure_dx = total_dPressure_times_dx / total_dx;
+					var total_dPressure_dy = total_dPressure_times_dy / total_dy;
+					
+					cell.q[1] -= dt * total_dPressure_dx;
+					cell.q[2] -= dt * total_dPressure_dy;
+				}
+				*/
+
+				//apply work diffusion = momentum
+				for (var i = 0; i < this.edges.length; ++i) {
+					var edge = this.edges[i];
+					if (edge.cells.length == 1) {
+						var cellA = this.cells[edge.cells[0]];
+
+						var dx = 2 * (cellA.x[0] - edge.x[0]);
+						var dy = 2 * (cellA.x[1] - edge.x[1]);
+						var ds = Math.sqrt(dx * dx + dy * dy);
+
+						var rhoA = cellA.q[0];
+						var uA = cellA.q[1] / rhoA;
+						var vA = cellA.q[2] / rhoA;
+						var pressureA = cellA.pressure;
+						
+						var rhoB = rhoA;
+						var uB = -uA;
+						var vB = -vA;
+						var pressureB = pressureA;	
+						var dWork = pressureA * (uA * edge.normal[0] + vA * edge.normal[1])
+								- pressureB * (uB * edge.normal[0] + vB * edge.normal[1]);
+
+						cellA.q[3] -= dt * dWork / ds; 
+					} else {
+						var cellA = this.cells[edge.cells[0]];
+						var cellB = this.cells[edge.cells[1]];
+						
+						var dx = cellA.x[0] - cellB.x[0];
+						var dy = cellA.x[1] - cellB.x[1];
+						var ds = Math.sqrt(dx * dx + dy * dy);
+				
+						var rhoA = cellA.q[0];
+						var uA = cellA.q[1] / rhoA;
+						var vA = cellA.q[2] / rhoA;
+						
+						var rhoB = cellB.q[0];
+						var uB = cellB.q[1] / rhoB;
+						var vB = cellB.q[2] / rhoB;
+
+						var dWork = cellA.pressure * (uA * edge.normal[0] + vA * edge.normal[1])
+								- cellB.pressure * (uB * edge.normal[0] + vB * edge.normal[1]);
+
+						cellA.q[3] -= dt * dWork / ds; 
+						cellB.q[3] += dt * dWork / ds; 
+					}
+				}
+
 			},
 			'Riemann / Roe' : function(dt) {
 				var qLs = [];
@@ -903,6 +944,10 @@ HydroEdge.prototype = {
 				this.cells[1] = tmp;
 			}
 		}	
+	},
+	getOpposing(cell) {
+		if (this.state.cells[this.cells[0]] == cell) return this.state.cells[this.cells[1]];
+		if (this.state.cells[this.cells[1]] == cell) return this.state.cells[this.cells[0]];
 	}
 };
 
@@ -1156,18 +1201,6 @@ var HydroState = makeClass({
 	step : function(dt) {
 		//solve
 		integrationMethods[this.integrationMethod].advect[this.advectMethod].call(this, dt);
-			
-		//compute pressure
-		integrationMethods[this.integrationMethod].initPressure.call(this);
-
-		//apply external force
-		integrationMethods[this.integrationMethod].applyExternalForce.call(this, dt);
-
-		//apply momentum diffusion = pressure
-		integrationMethods[this.integrationMethod].applyMomentumDiffusion.call(this, dt);
-		
-		//apply work diffusion = momentum
-		integrationMethods[this.integrationMethod].applyWorkDiffusion.call(this, dt);
 	},
 	update : function() {
 //console.log('update');

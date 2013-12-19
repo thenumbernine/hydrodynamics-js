@@ -29,26 +29,41 @@ _gaq.push(['_trackPageview']);
 			<img id='menu' src='menu.png' style='padding:5px'/><br>
 			<div id='content' style='display:none'>
 				<a href='README' target='_blank'>README</a><br>
-				<button id='reset-sod'>Reset Sod</button>
+			
+				Simulation:
+				<select id='simulation'></select>
 				<br>
-				<button id='reset-wave'>Reset Wave</button>
-				<br>
+				
+				<div id='Euler_controls' style='display:none'>
+					Algorithm:
+					<select id='Euler_algorithm'></select>
+					<br>
+					<button id='reset_Euler_Sod'>Reset Sod</button>
+					<br>
+					<button id='reset_Euler_Wave'>Reset Wave</button>
+					<br>
+				</div>
+
+				<div id='ADM_controls' style='display:none'>
+					Algorithm:
+					<select id='ADM_algorithm'></select>
+					<br>
+					<button id='reset_ADM_GaugeShock'>Reset Gauge Shock</select>
+					<br>
+				</div>
+
 				Size:
 				<select id='gridsize'></select><br>
 				Boundary:
 				<select id='boundaryMethod'></select><br>
 				Flux Limiter:
 				<select id='fluxMethod'></select><br>
-				Advect:
-				<select id='advectMethod'></select><br>
-				Integrator:
-				<select id='integrationMethod'></select><br>
 		
 				<br>
 				Timestep:<br>
-				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep'/>CFL-based
+				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based
 					<input id='timeStepCFL' value='.5'/><br>
-				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep' checked='checked'/>Fixed
+				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
 					<input id='timeStepValue' value='1'/><br>
 				<br>
 

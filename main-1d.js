@@ -8,12 +8,12 @@
 var panel;
 var canvas;
 var waveVtxBuf, waveStateBuf;
-var xmin = 0;
-var xmax = 100; 
-var ymin = -10;
-var ymax = 50;
+var xmin = -1;
+var xmax = 25; 
+var ymin = 0;
+var ymax = 1;
 var gridstep = 10;
-var useCFL = false;
+var useCFL = true;
 var fixedDT = .2;
 var gaussSeidelIterations = 20;
 
@@ -59,7 +59,7 @@ velocity
 hTotal
 speedOfSound
 */
-function buildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+function eulerEquationBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
 	//calculate matrix & eigenvalues & vectors at interface from state at interface
 	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
 	//matrix, listed per column
@@ -146,15 +146,126 @@ var boundaryMethods = {
 	}
 };
 
-//'this' is HydroState
-var integrationMethods = {
-	'Forward Euler' : {
-		Burgers : function(dt) {
-			assert(this.x.length == this.nx);
-			assert(this.xi.length == this.nx + 1);
-			assert(this.q.length == this.nx);
-			assert(this.ui.length == this.nx + 1);
+/*
+time derivative + advection component + source term = 0
+d/dt (rho) + d/dx(rho u) = 0
+d/dt (rho u) + d/dx(rho u&2) + d/dx (P) = 0
+d/dt (rho e_total) + d/dx (rho e_total u) + d/dx (P u) = 0
+*/
+var eulerEquationBurgersForwardEuler = {
+	initStep : function() {},
+	calcCFLTimestep : function() {
+		var mindum = undefined;
+		for (var i = 0; i < this.nx; ++i) {
+			var u = this.q[i][1] / this.q[i][0];
+			var energyTotal = this.q[i][2] / this.q[i][0];
+			var energyKinematic = .5 * u * u;
+			var energyThermal = energyTotal - energyKinematic;
+			var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
+			var dx = this.xi[i+1] - this.xi[i];
+			var dum = dx / (speedOfSound + Math.abs(u));
+			if (mindum === undefined || dum < mindum) mindum = dum;
+		}
+		//if (mindum != mindum) throw 'nan';
+		return this.cfl * mindum;
+	},
+	step : function(dt) {
+		assert(this.x.length == this.nx);
+		assert(this.xi.length == this.nx + 1);
+		assert(this.q.length == this.nx);
+		assert(this.ui.length == this.nx + 1);
+	
+		//get velocity at interfaces from state
+		for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
+			this.ui[ix] = .5 * (this.q[ix][1] / this.q[ix][0] + this.q[ix-1][1] / this.q[ix-1][0]);
+		}
+		this.ui[0] = this.ui[this.nx] = 0;
+
+		//compute flux and advect for each state vector
+		for (var j = 0; j < 3; ++j) {
+			//r_{i-1/2} flux limiter
+			for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
+				var dq = this.q[i][j] - this.q[i-1][j];
+				if (Math.abs(dq) > 0) {
+					if (this.ui[i] >= 0) {
+						this.r[i][j] = (this.q[i-1][j] - this.q[i-2][j]) / dq;
+					} else {
+						this.r[i][j] = (this.q[i+1][j] - this.q[i][j]) / dq;
+					}
+				} else {
+					this.r[i][j] = 0;
+				}
+			}
+			this.r[0][j] = this.r[1][j] = this.r[this.nx-1][j] = this.r[this.nx][j] = 0;
+
+			//construct flux:
+			for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+				//flux limiter
+				var phi = fluxMethods[this.fluxMethod](this.r[i][j]);
+				if (this.ui[i] >= 0) {
+					this.flux[i][j] = this.ui[i] * this.q[i-1][j];
+				} else {
+					this.flux[i][j] = this.ui[i] * this.q[i][j];
+				}
+				var delta = phi * (this.q[i][j] - this.q[i-1][j]);
+				var dx = this.x[i] - this.x[i-1];
+				this.flux[i][j] += delta * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
+			}
+			this.flux[0][j] = this.flux[this.nx][j] = 0;
+
+			//update cells
+			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+				this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
+			}
+		}			
+	
+		// apply pressure source terms
 		
+		//boundary again
+		this.boundary();
+
+		//compute pressure
+		for (var i = 0; i < this.nx; ++i) {
+			var u = this.q[i][1] / this.q[i][0];
+			var energyTotal = this.q[i][2] / this.q[i][0];
+			var energyKinematic = .5 * u * u;
+			var energyThermal = energyTotal - energyKinematic;
+			this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
+		}
+
+		//apply momentum diffusion = pressure
+		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+			this.q[i][1] -= dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
+		}
+
+		//apply work diffusion = momentum
+		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+			var u_inext = this.q[i+1][1] / this.q[i+1][0];
+			var u_iprev = this.q[i-1][1] / this.q[i-1][0];
+			this.q[i][2] -= dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
+		}
+	}
+};
+
+/*
+TODO 3x3 block tridiagonal thomas algorithm
+until then, Gauss-Seidel
+
+Linearizing our relationship between current and next timesteps.
+Treating the flux limiter and the interface velocity as constants when I could consider them in terms of q's. 
+I get timesteps of .7, when .3 or so is what the max CFL timestep for explicit was giving me,
+ but still see a lot more oscillations in the system.
+*/
+var eulerEquationBurgersBackwardEulerGaussSeidel = {
+	initStep : function() {},
+	calcCFLTimestep : eulerEquationBurgersForwardEuler.calcCFLTimestep,
+	step : function(dt) {
+		for (var i = 0; i < this.nx; ++i) {
+			for (var j = 0; j < 3; ++j) {
+				this.oldQ[i][j] = this.q[i][j];
+			}
+		}
+		for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 			//get velocity at interfaces from state
 			for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
 				this.ui[ix] = .5 * (this.q[ix][1] / this.q[ix][0] + this.q[ix-1][1] / this.q[ix-1][0]);
@@ -178,33 +289,53 @@ var integrationMethods = {
 				}
 				this.r[0][j] = this.r[1][j] = this.r[this.nx-1][j] = this.r[this.nx][j] = 0;
 
-				//construct flux:
-				for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+				//update cells
+				
+				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+					var dx = this.xi[i+1] - this.xi[i];
+					
+					var dflux_qip = 0;
+					var dflux_qi = 0;
+					var dflux_qin = 0;
+					
 					//flux limiter
 					var phi = fluxMethods[this.fluxMethod](this.r[i][j]);
 					if (this.ui[i] >= 0) {
-						this.flux[i][j] = this.ui[i] * this.q[i-1][j];
+						dflux_qip -= this.ui[i];
 					} else {
-						this.flux[i][j] = this.ui[i] * this.q[i][j];
+						dflux_qi -= this.ui[i];
 					}
-					var delta = phi * (this.q[i][j] - this.q[i-1][j]);
-					var dx = this.x[i] - this.x[i-1];
-					this.flux[i][j] += delta * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
+					dflux_qi -= phi * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
+					dflux_qip += phi * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
+					
+					var phi = fluxMethods[this.fluxMethod](this.r[i+1][j]);
+					if (this.ui[i+1] >= 0) {
+						dflux_qi += this.ui[i+1];
+					} else {
+						dflux_qin += this.ui[i+1];
+					}
+					dflux_qin += phi * .5 * Math.abs(this.ui[i+1]) * (1 - Math.abs(this.ui[i+1] * dt / dx));
+					dflux_qi -= phi * .5 * Math.abs(this.ui[i+1]) * (1 - Math.abs(this.ui[i+1] * dt / dx));
+					
+					this.q[i][j] = (this.oldQ[i][j] - dt / dx * (
+						dflux_qip * this.q[i-1][j] 
+						+ dflux_qin * this.q[i+1][j])) / (1 + dt / dx * dflux_qi);
 				}
-				this.flux[0][j] = this.flux[this.nx][j] = 0;
-
-				//update cells
-				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-					this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
-				}
-			}			
+			}
+		}	
+	
+		// only needed for Burgers	
 		
-			// only needed for Burgers	
-			
-			//boundary again
-			this.boundary();
+		//boundary again
+		this.boundary();
 
-			//compute pressure
+		//apply momentum diffusion = pressure
+		for (var i = 0; i < this.nx; ++i) {
+			for (var j = 0; j < 3; ++j) {
+				this.oldQ[i][j] = this.q[i][j];
+			}
+		}
+		for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 			for (var i = 0; i < this.nx; ++i) {
 				var u = this.q[i][1] / this.q[i][0];
 				var energyTotal = this.q[i][2] / this.q[i][0];
@@ -212,363 +343,437 @@ var integrationMethods = {
 				var energyThermal = energyTotal - energyKinematic;
 				this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
 			}
-
-			//apply momentum diffusion = pressure
+			
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				this.q[i][1] -= dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
-			}
-
-			//apply work diffusion = momentum
-			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				var u_inext = this.q[i+1][1] / this.q[i+1][0];
-				var u_iprev = this.q[i-1][1] / this.q[i-1][0];
-				this.q[i][2] -= dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
-			}
-		},
-		
-		/*
-		relation:
-		
-		eigenvalues:
-		lambda 1 = u - Cs
-		lambda 2 = u
-		lambda 3 = u + Cs
-		eigenvectors:
-		e 1 = (1, u - Cs, h_total - Cs u)
-		e 2 = (1, u, .5*u^2)
-		e 3 = (1, u + Cs, h_total + Cs u)
-		rho = q0
-		u = q1 / q0
-		h_total = e_total + P / rho
-		Cs = sqrt(gamma P / rho)
-		*/
-		'Riemann / Roe' : function(dt) {
-			for (var ix = 1; ix < this.nx; ++ix) {
-				for (var j = 0; j < 3; ++j) {
-					this.interfaceDeltaQTilde[ix][j] = this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
-											+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
-											+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]);
-				}
-			}
-			
-			for (var j = 0; j < 3; ++j) {
-				this.interfaceDeltaQTilde[0][j] = 0;
-				this.interfaceDeltaQTilde[this.nx][j] = 0;
-			}
-			
-			for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
-				for (var j = 0; j < 3; ++j) {
-					var interfaceDeltaQTilde = this.interfaceDeltaQTilde[ix][j];
-					if (Math.abs(interfaceDeltaQTilde) > 0) {
-						if (this.interfaceEigenvalues[j] > 0) {
-							this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix-1][j] / interfaceDeltaQTilde;
-						} else {
-							this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
-						}
-					} else {
-						this.rTilde[ix][j] = 0;
-					}
-				}
-			}
-
-			//..and keep the boundary r's zero	
-			for (var j = 0; j < 3; ++j) {
-				this.rTilde[0][j] = this.rTilde[1][j] = this.rTilde[this.nx-1][j] = this.rTilde[this.nx][j] = 0;
-			}
-			/*
-			for (var ix = 0; ix < this.nghost; ++ix) {
-				for (var j = 0; j < 3; ++j) {
-					this.rTilde[ix][j] = 0;
-					this.rTilde[this.nx-ix][j] = 0;
-				}	
-			}
-			*/
-			
-			//transform cell q's into cell qTilde's (eigenspace)
-			// ... so q_{i-1/2}L = q_{i-1}, q_{i-1/2}R = q_i
-			// qTilde_{i-1/2}L = E_{i-1/2}^-1 q_{i-1}, qTilde_{i-1/2}R = E_{i-1/2}^-1 q_i
-			//use them to detemine qTilde's at boundaries
-			//use them (and eigenvalues at boundaries) to determine fTilde's at boundaries
-			//use them (and eigenvectors at boundaries) to determine f's at boundaries
-			//use them to advect, like good old fluxes advect
-			var fluxTilde = [];
-			var fluxAvg = [];
-
-			//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
-			//(i.e. qi[ix] is between q[ix-1] and q[ix])
-			//Looks good according to "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro, p.191
-			for (var ix = 1; ix < this.nx; ++ix) {
-				//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
-				//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
-				for (var j = 0; j < 3; ++j) {
-					fluxAvg[j] = .5 * ( 
-						this.interfaceMatrix[ix][0][j] * (this.q[ix-1][0] + this.q[ix][0])
-						+ this.interfaceMatrix[ix][1][j] * (this.q[ix-1][1] + this.q[ix][1])
-						+ this.interfaceMatrix[ix][2][j] * (this.q[ix-1][2] + this.q[ix][2]));
-				}
-
-				//calculate flux
-				for (var j = 0; j < 3; ++j) {
-					var theta = 0;
-					if (this.interfaceEigenvalues[ix][j] >= 0) {
-						theta = 1;
-					} else {
-						theta = -1;
-					}
-					
-					var phi = fluxMethods[this.fluxMethod](this.rTilde[ix][j]);
-					var dx = this.xi[ix] - this.xi[ix-1];
-					var epsilon = this.interfaceEigenvalues[ix][j] * dt / dx;
-					
-					//flux[ix][k] = fluxTilde[ix][j] * interfaceEigenvectors[ix][k][j]
-					//flux in eigenvector basis is the q vector transformed by the inverse then scaled by the eigenvalue
-					//should the eigenvalue be incorperated here, after flux limiter is taken into account, or beforehand?
-					//1D says after, but notes say before ...
-					var deltaFluxTilde = this.interfaceEigenvalues[ix][j] * this.interfaceDeltaQTilde[ix][j];
-					
-					fluxTilde[j] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
-				}
-
-				//reproject fluxTilde back into q
-				for (var j = 0; j < 3; ++j) {
-					this.flux[ix][j] = fluxAvg[j]
-						+ this.interfaceEigenvectors[ix][0][j] * fluxTilde[0] 
-						+ this.interfaceEigenvectors[ix][1][j] * fluxTilde[1] 
-						+ this.interfaceEigenvectors[ix][2][j] * fluxTilde[2];
-				}
-
-			}
-			
-			//zero boundary flux
-			for (var j = 0; j < 3; ++j) {
-				this.flux[0][j] = this.flux[this.nx][j] = 0;
-			}
-
-			//update cells
-			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
-				}
+				this.q[i][1] = this.oldQ[i][1] - dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
 			}
 		}
-	},
-	//TODO 3x3 block tridiagonal thomas algorithm
-	//until then, Gauss-Seidel
-	'Backward Euler + Gauss Seidel' : {
-		//Linearizing our relationship between current and next timesteps.
-		//Treating the flux limiter and the interface velocity as constants when I could consider them in terms of q's. 
-		//I get timesteps of .7, when .3 or so is what the max CFL timestep for explicit was giving me,
-		// but still see a lot more oscillations in the system.
-		Burgers : function(dt) {
-			for (var i = 0; i < this.nx; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					this.oldQ[i][j] = this.q[i][j];
-				}
-			}
-			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
-				//get velocity at interfaces from state
-				for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
-					this.ui[ix] = .5 * (this.q[ix][1] / this.q[ix][0] + this.q[ix-1][1] / this.q[ix-1][0]);
-				}
-				this.ui[0] = this.ui[this.nx] = 0;
 
-				//compute flux and advect for each state vector
-				for (var j = 0; j < 3; ++j) {
-					//r_{i-1/2} flux limiter
-					for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
-						var dq = this.q[i][j] - this.q[i-1][j];
-						if (Math.abs(dq) > 0) {
-							if (this.ui[i] >= 0) {
-								this.r[i][j] = (this.q[i-1][j] - this.q[i-2][j]) / dq;
-							} else {
-								this.r[i][j] = (this.q[i+1][j] - this.q[i][j]) / dq;
-							}
-						} else {
-							this.r[i][j] = 0;
-						}
-					}
-					this.r[0][j] = this.r[1][j] = this.r[this.nx-1][j] = this.r[this.nx][j] = 0;
-
-					//update cells
-					
-					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-						var dx = this.xi[i+1] - this.xi[i];
-						
-						var dflux_qip = 0;
-						var dflux_qi = 0;
-						var dflux_qin = 0;
-						
-						//flux limiter
-						var phi = fluxMethods[this.fluxMethod](this.r[i][j]);
-						if (this.ui[i] >= 0) {
-							dflux_qip -= this.ui[i];
-						} else {
-							dflux_qi -= this.ui[i];
-						}
-						dflux_qi -= phi * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
-						dflux_qip += phi * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
-						
-						var phi = fluxMethods[this.fluxMethod](this.r[i+1][j]);
-						if (this.ui[i+1] >= 0) {
-							dflux_qi += this.ui[i+1];
-						} else {
-							dflux_qin += this.ui[i+1];
-						}
-						dflux_qin += phi * .5 * Math.abs(this.ui[i+1]) * (1 - Math.abs(this.ui[i+1] * dt / dx));
-						dflux_qi -= phi * .5 * Math.abs(this.ui[i+1]) * (1 - Math.abs(this.ui[i+1] * dt / dx));
-						
-						this.q[i][j] = (this.oldQ[i][j] - dt / dx * (
-							dflux_qip * this.q[i-1][j] 
-							+ dflux_qin * this.q[i+1][j])) / (1 + dt / dx * dflux_qi);
-					}
-				}
-			}	
-		
-			// only needed for Burgers	
-			
-			//boundary again
-			this.boundary();
-
-			//apply momentum diffusion = pressure
-			for (var i = 0; i < this.nx; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					this.oldQ[i][j] = this.q[i][j];
-				}
+		//apply work diffusion = momentum
+		for (var i = 0; i < this.nx; ++i) {
+			for (var j = 0; j < 3; ++j) {
+				this.oldQ[i][j] = this.q[i][j];
 			}
-			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
-				for (var i = 0; i < this.nx; ++i) {
-					var u = this.q[i][1] / this.q[i][0];
-					var energyTotal = this.q[i][2] / this.q[i][0];
-					var energyKinematic = .5 * u * u;
-					var energyThermal = energyTotal - energyKinematic;
-					this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
-				}
-				
-				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-					this.q[i][1] = this.oldQ[i][1] - dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
-				}
-			}
-
-			//apply work diffusion = momentum
-			for (var i = 0; i < this.nx; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					this.oldQ[i][j] = this.q[i][j];
-				}
-			}
-			for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
-				for (var i = 0; i < this.nx; ++i) {
-					var u = this.q[i][1] / this.q[i][0];
-					var energyTotal = this.q[i][2] / this.q[i][0];
-					var energyKinematic = .5 * u * u;
-					var energyThermal = energyTotal - energyKinematic;
-					this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
-				}
-				
-				for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-					var u_inext = this.q[i+1][1] / this.q[i+1][0];
-					var u_iprev = this.q[i-1][1] / this.q[i-1][0];
-					this.q[i][2] = this.oldQ[i][2] - dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
-				}
-			}
-		},
-		'Riemann / Roe' : function(dt) {
-			//TODO
-			integrationMethods['Forward Euler']['Riemann / Roe'].call(this, dt);
 		}
-	}
-};
-
-//called with 'this' the HydroState
-var advectMethods = {
-	Burgers : {
-		initStep : function() {},
-		calcCFLTimestep : function() {
-			var mindum = undefined;
+		for (var iter = 0; iter < gaussSeidelIterations; ++iter) {
 			for (var i = 0; i < this.nx; ++i) {
 				var u = this.q[i][1] / this.q[i][0];
 				var energyTotal = this.q[i][2] / this.q[i][0];
 				var energyKinematic = .5 * u * u;
 				var energyThermal = energyTotal - energyKinematic;
-				var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
-				var dx = this.xi[i+1] - this.xi[i];
-				var dum = dx / (speedOfSound + Math.abs(u));
-				if (mindum === undefined || dum < mindum) mindum = dum;
+				this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
 			}
-			//if (mindum != mindum) throw 'nan';
-			return this.cfl * mindum;
-		}
-	},
-	'Riemann / Roe' : {
-		initStep : function() {
-			//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
-			//(i.e. qi[ix] is between q[ix-1] and q[ix])
-			for (var ix = 1; ix < this.nx; ++ix) {
-				//compute Roe averaged interface values
-				var densityL = this.q[ix-1][0];
-				var velocityL = this.q[ix-1][1] / densityL;
-				var energyTotalL = this.q[ix-1][2] / densityL;
-				var energyKinematicL = .5 * velocityL * velocityL;
-				var energyThermalL = energyTotalL - energyKinematicL;
-				var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-				var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
-				var hTotalL = energyTotalL + pressureL / densityL;
-				var roeWeightL = Math.sqrt(densityL);
-				
-				var densityR = this.q[ix][0];
-				var velocityR = this.q[ix][1] / densityR;
-				var energyTotalR = this.q[ix][2] / densityR;
-				var energyKinematicR = .5 * velocityR * velocityR;
-				var energyThermalR = energyTotalR - energyKinematicR;
-				var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-				var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
-				var hTotalR = energyTotalR + pressureR / densityR;
-				var roeWeightR = Math.sqrt(densityR);
-				
-				var denom = roeWeightL + roeWeightR;
-				var velocity = (roeWeightL * velocityL + roeWeightR * velocityR) / denom;
-				var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
-
-				//compute eigenvectors and values at the interface based on Roe averages
-				buildEigenstate(
-					this.interfaceMatrix[ix],
-					this.interfaceEigenvalues[ix], 
-					this.interfaceEigenvectors[ix], 
-					this.interfaceEigenvectorsInverse[ix], 
-					velocity, hTotal, this.gamma);
+			
+			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+				var u_inext = this.q[i+1][1] / this.q[i+1][0];
+				var u_iprev = this.q[i-1][1] / this.q[i-1][0];
+				this.q[i][2] = this.oldQ[i][2] - dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
 			}
-		
-		},
-		/*
-		store eigenvalues and eigenvectors of interfaces
-		use the lambdas to calc the DT based on CFL
-		*/
-		calcCFLTimestep : function() {
-	
-			var mindum = undefined;
-			for (var i = 1; i < this.nx; ++i) {
-				var maxLambda = Math.max(0, this.interfaceEigenvalues[i][0], this.interfaceEigenvalues[i][1], this.interfaceEigenvalues[i][2]);
-				var minLambda = Math.min(0, this.interfaceEigenvalues[i+1][0], this.interfaceEigenvalues[i+1][1], this.interfaceEigenvalues[i+1][2]);
-				var dum = (this.xi[i+1] - this.xi[i]) / (maxLambda - minLambda);
-				if (mindum === undefined || dum < mindum) mindum = dum;
-			}
-			//if (mindum != mindum) throw 'nan';
-			return this.cfl * mindum;
 		}
 	}
 };
 
-var HydroState = makeClass({ 
-	init : function(args) {
-		this.nx = args.size;
-		this.gamma = args.gamma;
-		this.cfl =.5;
-		var x0 = 0;
-		var x1 = 100;
+var eulerEquationGodunovForwardEuler = {
+	initStep : function() {
+		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
+		//(i.e. qi[ix] is between q[ix-1] and q[ix])
+		for (var ix = 1; ix < this.nx; ++ix) {
+			//compute Roe averaged interface values
+			var densityL = this.q[ix-1][0];
+			var velocityL = this.q[ix-1][1] / densityL;
+			var energyTotalL = this.q[ix-1][2] / densityL;
+			var energyKinematicL = .5 * velocityL * velocityL;
+			var energyThermalL = energyTotalL - energyKinematicL;
+			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
+			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
+			var hTotalL = energyTotalL + pressureL / densityL;
+			
+			var densityR = this.q[ix][0];
+			var velocityR = this.q[ix][1] / densityR;
+			var energyTotalR = this.q[ix][2] / densityR;
+			var energyKinematicR = .5 * velocityR * velocityR;
+			var energyThermalR = energyTotalR - energyKinematicR;
+			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
+			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
+			var hTotalR = energyTotalR + pressureR / densityR;
+			
+			var velocity = .5 * (velocityL + velocityR);
+			var hTotal = .5 * (hTotalL + hTotalR);
+
+			//compute eigenvectors and values at the interface based on Roe averages
+			eulerEquationBuildEigenstate(
+				this.interfaceMatrix[ix],
+				this.interfaceEigenvalues[ix], 
+				this.interfaceEigenvectors[ix], 
+				this.interfaceEigenvectorsInverse[ix], 
+				velocity, hTotal, this.gamma);
+		}	
+	},
+	/*
+	store eigenvalues and eigenvectors of interfaces
+	use the lambdas to calc the DT based on CFL
+	*/
+	calcCFLTimestep : function() {
+
+		var mindum = undefined;
+		for (var i = 1; i < this.nx; ++i) {
+			var maxLambda = Math.max(0, this.interfaceEigenvalues[i][0], this.interfaceEigenvalues[i][1], this.interfaceEigenvalues[i][2]);
+			var minLambda = Math.min(0, this.interfaceEigenvalues[i+1][0], this.interfaceEigenvalues[i+1][1], this.interfaceEigenvalues[i+1][2]);
+			var dum = (this.xi[i+1] - this.xi[i]) / (maxLambda - minLambda);
+			if (mindum === undefined || dum < mindum) mindum = dum;
+		}
+		//if (mindum != mindum) throw 'nan';
+		return this.cfl * mindum;
+	},
+	step : function(dt) {
+		for (var ix = 1; ix < this.nx; ++ix) {
+			for (var j = 0; j < 3; ++j) {
+				this.interfaceDeltaQTilde[ix][j] = 
+					this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
+					+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
+					+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]);
+			}
+		}
 		
+		for (var j = 0; j < 3; ++j) {
+			this.interfaceDeltaQTilde[0][j] = 0;
+			this.interfaceDeltaQTilde[this.nx][j] = 0;
+		}
+		
+		for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
+			for (var j = 0; j < 3; ++j) {
+				var interfaceDeltaQTilde = this.interfaceDeltaQTilde[ix][j];
+				if (Math.abs(interfaceDeltaQTilde) > 0) {
+					if (this.interfaceEigenvalues[j] > 0) {
+						this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix-1][j] / interfaceDeltaQTilde;
+					} else {
+						this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
+					}
+				} else {
+					this.rTilde[ix][j] = 0;
+				}
+			}
+		}
+
+		//..and keep the boundary r's zero	
+		for (var j = 0; j < 3; ++j) {
+			this.rTilde[0][j] = this.rTilde[1][j] = this.rTilde[this.nx-1][j] = this.rTilde[this.nx][j] = 0;
+		}
+		/*
+		for (var ix = 0; ix < this.nghost; ++ix) {
+			for (var j = 0; j < 3; ++j) {
+				this.rTilde[ix][j] = 0;
+				this.rTilde[this.nx-ix][j] = 0;
+			}	
+		}
+		*/
+		
+		//transform cell q's into cell qTilde's (eigenspace)
+		// ... so q_{i-1/2}L = q_{i-1}, q_{i-1/2}R = q_i
+		// qTilde_{i-1/2}L = E_{i-1/2}^-1 q_{i-1}, qTilde_{i-1/2}R = E_{i-1/2}^-1 q_i
+		//use them to detemine qTilde's at boundaries
+		//use them (and eigenvalues at boundaries) to determine fTilde's at boundaries
+		//use them (and eigenvectors at boundaries) to determine f's at boundaries
+		//use them to advect, like good old fluxes advect
+		var fluxTilde = [];
+		var fluxAvg = [];
+
+		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
+		//(i.e. qi[ix] is between q[ix-1] and q[ix])
+		//Looks good according to "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro, p.191
+		for (var ix = 1; ix < this.nx; ++ix) {
+			//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
+			//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
+			for (var j = 0; j < 3; ++j) {
+				fluxAvg[j] = .5 * ( 
+					this.interfaceMatrix[ix][0][j] * (this.q[ix-1][0] + this.q[ix][0])
+					+ this.interfaceMatrix[ix][1][j] * (this.q[ix-1][1] + this.q[ix][1])
+					+ this.interfaceMatrix[ix][2][j] * (this.q[ix-1][2] + this.q[ix][2]));
+			}
+
+			//calculate flux
+			for (var j = 0; j < 3; ++j) {
+				var theta = 0;
+				if (this.interfaceEigenvalues[ix][j] >= 0) {
+					theta = 1;
+				} else {
+					theta = -1;
+				}
+				
+				var phi = fluxMethods[this.fluxMethod](this.rTilde[ix][j]);
+				var dx = this.xi[ix] - this.xi[ix-1];
+				var epsilon = this.interfaceEigenvalues[ix][j] * dt / dx;
+				
+				//flux[ix][k] = fluxTilde[ix][j] * interfaceEigenvectors[ix][k][j]
+				//flux in eigenvector basis is the q vector transformed by the inverse then scaled by the eigenvalue
+				//should the eigenvalue be incorperated here, after flux limiter is taken into account, or beforehand?
+				//1D says after, but notes say before ...
+				var deltaFluxTilde = this.interfaceEigenvalues[ix][j] * this.interfaceDeltaQTilde[ix][j];
+				
+				fluxTilde[j] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+			}
+
+			//reproject fluxTilde back into q
+			for (var j = 0; j < 3; ++j) {
+				this.flux[ix][j] = fluxAvg[j]
+					+ this.interfaceEigenvectors[ix][0][j] * fluxTilde[0] 
+					+ this.interfaceEigenvectors[ix][1][j] * fluxTilde[1] 
+					+ this.interfaceEigenvectors[ix][2][j] * fluxTilde[2];
+			}
+
+		}
+		
+		//zero boundary flux
+		for (var j = 0; j < 3; ++j) {
+			this.flux[0][j] = this.flux[this.nx][j] = 0;
+		}
+
+		//update cells
+		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+			for (var j = 0; j < 3; ++j) {
+				this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
+			}
+		}
+	}
+};
+
+/*
+relation:
+
+eigenvalues:
+lambda 1 = u - Cs
+lambda 2 = u
+lambda 3 = u + Cs
+eigenvectors:
+e 1 = (1, u - Cs, h_total - Cs u)
+e 2 = (1, u, .5*u^2)
+e 3 = (1, u + Cs, h_total + Cs u)
+rho = q0
+u = q1 / q0
+h_total = e_total + P / rho
+Cs = sqrt(gamma P / rho)
+*/
+var eulerEquationRoeForwardEuler = {
+	initStep : function() {
+		//same idea as Godunov but with Roe weighting: sqrt(rho)
+		for (var ix = 1; ix < this.nx; ++ix) {
+			//compute Roe averaged interface values
+			var densityL = this.q[ix-1][0];
+			var velocityL = this.q[ix-1][1] / densityL;
+			var energyTotalL = this.q[ix-1][2] / densityL;
+			var energyKinematicL = .5 * velocityL * velocityL;
+			var energyThermalL = energyTotalL - energyKinematicL;
+			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
+			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
+			var hTotalL = energyTotalL + pressureL / densityL;
+			var roeWeightL = Math.sqrt(densityL);
+			
+			var densityR = this.q[ix][0];
+			var velocityR = this.q[ix][1] / densityR;
+			var energyTotalR = this.q[ix][2] / densityR;
+			var energyKinematicR = .5 * velocityR * velocityR;
+			var energyThermalR = energyTotalR - energyKinematicR;
+			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
+			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
+			var hTotalR = energyTotalR + pressureR / densityR;
+			var roeWeightR = Math.sqrt(densityR);
+			
+			var denom = roeWeightL + roeWeightR;
+			var velocity = (roeWeightL * velocityL + roeWeightR * velocityR) / denom;
+			var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
+
+			//compute eigenvectors and values at the interface based on Roe averages
+			eulerEquationBuildEigenstate(
+				this.interfaceMatrix[ix],
+				this.interfaceEigenvalues[ix], 
+				this.interfaceEigenvectors[ix], 
+				this.interfaceEigenvectorsInverse[ix], 
+				velocity, hTotal, this.gamma);
+		}
+	},
+	calcCFLTimestep : eulerEquationGodunovForwardEuler.calcCFLTimestep,
+	step : eulerEquationGodunovForwardEuler.step
+};
+
+var eulerEquationSimulation = {
+	methods : {
+		'Burgers / Forward Euler' : eulerEquationBurgersForwardEuler,
+		'Burgers / Backward Euler via Gauss Seidel' : eulerEquationBurgersBackwardEulerGaussSeidel,
+		'Godunov / Forward Euler' : eulerEquationGodunovForwardEuler,
+		'Roe / Forward Euler' : eulerEquationRoeForwardEuler
+	},
+	initialConditions : {
+		Sod : function() {
+			this.resetCoordinates(-1, 25);
+			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[i];
+				var rho = (x < (xmin * .7 + xmax * .3)) ? 1 : .1;
+				var u = 0;
+				var eTotal = 1;
+				this.q[i][0] = rho; 
+				this.q[i][1] = rho * u; 
+				this.q[i][2] = rho * eTotal; 
+			}
+		},
+		Wave : function() {
+			this.resetCoordinates(-1, 1);
+			var xmid = .5 * (xmin + xmax);
+			var dg = .1 * (xmax - xmin);
+			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[i];
+				var dx = x - xmid;
+				var rho = 1 + .3 * Math.exp(-(dx*dx)/(dg*dg));
+				var u = 0;
+				var eTotal = 1;
+				this.q[i][0] = rho;
+				this.q[i][1] = rho * u;
+				this.q[i][2] = rho * eTotal;
+			}
+		}
+	}
+};
+
+/*
+From "Numerical Relativity", Alcubierre. 2008. ch.10 "Examples of Numerical Relativity" section 2: "Toy 1+1 Relativity"
+
+State variables:
+q[0] = D_alpha = d/dx ln alpha
+q[1] = D_g = d/dx ln g
+q[2] = K^tilde = sqrt(g) K
+
+... for primtiive variables
+alpha = lapse
+g = g_xx = metric
+K = extrinsic curvature = K^x_x
+
+...and some extra variables:
+f comes from Bona-Masso slicing family: d/dt alpha = -alpha^2 f(alpha) K
+(shift value is zero)
+*/
+
+var adm_BonaMasso_f = 1; 		//aiming to recreate the f=.5, f=1, f=1.5 graphs ...
+
+function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, alpha, g) {
+	var f = adm_BonaMasso_f;
+	
+	var oneOverSqrtG = 1 / Math.sqrt(g);
+	var sqrtF = Math.sqrt(f);
+	
+	matrix[0][0] = 0;
+	matrix[0][1] = 0;
+	matrix[0][2] = alpha * oneOverSqrtG;
+	matrix[1][0] = 0;
+	matrix[1][1] = 0;
+	matrix[1][2] = 0;
+	matrix[2][0] = alpha * f * oneOverSqrtG;
+	matrix[2][1] = 2 * alpha * oneOverSqrtG;
+	matrix[2][2] = 0;
+
+	eigenvalues[0] = -alpha * sqrtF * oneOverSqrtG;
+	eigenvalues[1] = 0;
+	eigenvalues[2] = -eigenvalues[0];
+
+	//column 0: min
+	eigenvectors[0][0] = f;
+	eigenvectors[0][1] = 2;
+	eigenvectors[0][2] = -sqrtF;
+
+	//column 1: mid
+	eigenvectors[1][0] = 0;
+	eigenvectors[1][1] = 1;
+	eigenvectors[1][2] = 0;
+
+	//column 2: max
+	eigenvectors[2][0] = f;
+	eigenvectors[2][1] = 2;
+	eigenvectors[2][2] = sqrtF;
+	
+	//calculate eigenvector inverses ... 
+	mat33invert(eigenvectorsInverse, eigenvectors);
+}
+
+var admEquationRoeForwardEuler = {
+	initStep : function() {
+		var dx = (xmax - xmin) / this.nx;
+		//same idea as Godunov but with Roe weighting: sqrt(rho)
+		for (var ix = 2; ix < this.nx-1; ++ix) {
+			var ixL = ix-1;
+			var ixR = ix;
+
+			//q_ix,0 = d/dx ln alpha
+			var ln_alpha_L = (this.q[ixL+1][0] - this.q[ixL-1][0]) / (2 * dx);
+			var alpha_L = Math.exp(ln_alpha_L);
+
+			//q_ix,1 = d/dx ln g
+			var ln_g_L = (this.q[ixL+1][0] - this.q[ixL-1][0]) / (2 * dx);
+			var g_L = Math.exp(ln_g_L);
+
+			var ln_alpha_R = (this.q[ixR+1][0] - this.q[ixR-1][0]) / (2 * dx);
+			var alpha_R = Math.exp(ln_alpha_R);
+			
+			var ln_g_R = (this.q[ixR+1][0] - this.q[ixR-1][0]) / (2 * dx);
+			var g_R = Math.exp(ln_g_R);
+
+			var alpha = .5 * (alpha_L + alpha_R);
+			var g = .5 * (g_L + g_R);
+
+			//compute eigenvectors and values at the interface based on Roe averages
+			admEquationsBuildEigenstate(
+				this.interfaceMatrix[ix],
+				this.interfaceEigenvalues[ix], 
+				this.interfaceEigenvectors[ix], 
+				this.interfaceEigenvectorsInverse[ix], 
+				alpha, g);
+		}
+		//how about those boundary eigenstates?
+	},
+	calcCFLTimestep : eulerEquationGodunovForwardEuler.calcCFLTimestep,
+	step : eulerEquationGodunovForwardEuler.step
+};
+
+var admEquationSimulation = {
+	methods : {
+		'Roe / Forward Euler' : admEquationRoeForwardEuler
+	},
+	initialConditions : {
+		GaugeShock : function() {
+			this.resetCoordinates(-30, 30);
+			var xmid = (xmax + xmin) * .5;
+			for (var i = 0; i < this.nx; ++i) {
+				var x = (this.x[i] - xmid) / ((xmax - xmid) / 3);
+				var h = Math.exp(-x*x); 
+				var dh_dx = -2 * x * h;
+				var d2h_dx2 = 2 * h * (2 * x * x - 1);
+				var g = 1 - dh_dx * dh_dx;
+				var D_g = -2 * dh_dx * d2h_dx2 / g;
+				var KTilde = -d2h_dx2 / g;
+				var f = adm_BonaMasso_f;
+				var D_alpha = Math.sqrt(f) * KTilde;
+				this.q[i][0] = D_alpha;
+				this.q[i][1] = D_g;
+				this.q[i][2] = KTilde;
+			}
+		}
+	}
+};
+
+//hmm, maybe I should combine all of these into one list, and have them individuall state who they belong to
+var simulations = {
+	Euler : eulerEquationSimulation//,
+	//ADM : admEquationSimulation
+};
+
+var HydroState = makeClass({ 
+	//call this to reflect this.x and this.xi after changing xmin, xmax, or this.nx
+	resetCoordinates : function(xmin_, xmax_) {
+		xmin = xmin_;
+		xmax = xmax_;
+		onresize();
+
 		//x_i: cell positions
 		this.x = new Float32Array(this.nx);
 		for (var i = 0; i < this.nx; ++i) {
-			this.x[i] = x0 + (x1 - x0) * i / (this.nx-1);
+			this.x[i] = xmin + (xmax - xmin) * i / (this.nx-1);
 		}
 		
 		//x_{i-1/2}: interface positions
@@ -578,6 +783,15 @@ var HydroState = makeClass({
 		}
 		this.xi[0] = 2 * this.xi[1] - this.xi[2];
 		this.xi[this.nx] = 2 * this.xi[this.nx-1] - this.xi[this.nx-2]; 
+	},
+	init : function(args) {
+		this.nx = args.size;
+		this.cfl =.5;
+		
+		//used for Euler equation of state
+		this.gamma = args.gamma;
+	
+		this.resetCoordinates();
 
 		//q_j,i: state vector, stored as q[j][i]
 		//q_0,i: density: rho
@@ -588,7 +802,7 @@ var HydroState = makeClass({
 			this.q[i] = [];
 		}
 
-		this.resetSod();
+		eulerEquationSimulation.initialConditions.Sod.call(this);
 		
 		//p_i: pressure
 		this.pressure = new Float32Array(this.nx);
@@ -654,35 +868,8 @@ var HydroState = makeClass({
 		//solver configuration
 		this.boundaryMethod = 'mirror';
 		this.fluxMethod = 'superbee';
-		this.advectMethod = 'Riemann / Roe';
-		this.integrationMethod = 'Forward Euler';//'Backward Euler + Gauss Seidel';
-	},
-	resetSod : function() {
-		for (var i = 0; i < this.nx; ++i) {
-			var x = this.x[i];
-			var rho = (x < 30) ? 1 : .1;
-			var u = 0;
-			var eTotal = 1;
-			this.q[i][0] = rho; 
-			this.q[i][1] = rho * u; 
-			this.q[i][2] = rho * eTotal; 
-		}
-	},
-	resetWave : function() {
-		var x0 = this.x[0];
-		var x1 = this.x[this.nx-1];
-		var xmid = .5 * (x0 + x1);
-		var dg = .1 * (x1 - x0);
-		for (var i = 0; i < this.nx; ++i) {
-			var x = this.x[i];
-			var dx = x - xmid;
-			var rho = 1 + .3 * Math.exp(-(dx*dx)/(dg*dg));
-			var u = 0;
-			var eTotal = 1;
-			this.q[i][0] = rho;
-			this.q[i][1] = rho * u;
-			this.q[i][2] = rho * eTotal;
-		}
+		this.simulation = 'Euler';
+		this.algorithm = 'Roe / Forward Euler';
 	},
 	boundary : function() {
 		boundaryMethods[this.boundaryMethod](this.nx, this.q);
@@ -692,16 +879,16 @@ var HydroState = makeClass({
 		this.boundary();
 	
 		//solve
-		integrationMethods[this.integrationMethod][this.advectMethod].call(this, dt);
+		simulations[this.simulation].methods[this.algorithm].step.call(this, dt);
 	},
 	update : function() {
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
-		advectMethods[this.advectMethod].initStep.call(this, dt);
+		simulations[this.simulation].methods[this.algorithm].initStep.call(this, dt);
 		
 		//get timestep
 		var dt;
 		if (useCFL) {
-			dt = advectMethods[this.advectMethod].calcCFLTimestep.call(this);
+			dt = simulations[this.simulation].methods[this.algorithm].calcCFLTimestep.call(this);
 		} else {
 			dt = fixedDT;
 		}
@@ -729,7 +916,6 @@ var Hydro = makeClass({
 		this.vertexStates = new Float32Array(6*this.state.nx);
 	},
 	update : function() {
-		//todo adm or something
 		//update a copy of the grid and its once-refined
 		//...and a once-unrefined ... over mergeable cells only?
 		//then test for errors and split when needed
@@ -741,7 +927,7 @@ var Hydro = makeClass({
 		var nx = this.state.nx;
 		for (var i = 0; i < nx; ++i) {
 			this.vertexPositions[0+4*i] = x[i];
-			this.vertexPositions[1+4*i] = q[i][0]*15;
+			this.vertexPositions[1+4*i] = q[i][0] * .25 * (xmax - xmin) / (ymax - ymin);
 			this.vertexPositions[2+4*i] = x[i];
 			this.vertexPositions[3+4*i] = 0;
 			this.vertexStates[0+6*i] = 1;
@@ -754,7 +940,7 @@ var Hydro = makeClass({
 	}
 });
 
-var hydro = new Hydro();
+var hydro;
 
 function update() {
 	//iterate
@@ -772,6 +958,7 @@ function onresize() {
 	//factor out aspectratio from fovY (thus making it fovX)
 	var aspectRatio = canvas.width / canvas.height;
 	GL.view.fovY = .5 * (xmax - xmin) / aspectRatio;
+	GL.view.pos[0] = (xmax + xmin) / 2;
 	GL.view.pos[1] = (ymax + ymin) / 2 / aspectRatio;
 	GL.resize();
 }
@@ -791,6 +978,32 @@ function buildSelect(id, key, map) {
 }
 
 $(document).ready(function(){
+	canvas = $('<canvas>', {
+		css : {
+			left : 0,
+			top : 0,
+			position : 'absolute'
+		}
+	}).prependTo(document.body).get(0);
+	$(canvas).disableSelection()
+	
+	try {
+		gl = GL.init(canvas);
+	} catch (e) {
+		panel.remove();
+		$(canvas).remove();
+		$('#webglfail').show();
+		throw e;
+	}
+
+	GL.view.ortho = true;
+	GL.view.zNear = -1;
+	GL.view.zFar = 1;
+	GL.view.pos[0] = (xmax + xmin) / 2;
+	GL.view.pos[1] = (ymax + ymin) / 2;
+
+	hydro = new Hydro();
+	
 	panel = $('#panel');	
 
 	var panelContent = $('#content');
@@ -802,8 +1015,15 @@ $(document).ready(function(){
 		}
 	});
 
-	$('#reset-sod').click(function(){ hydro.state.resetSod(); });
-	$('#reset-wave').click(function(){ hydro.state.resetWave(); });
+	$('#reset_Euler_Sod').click(function(){ 
+		eulerEquationSimulation.initialConditions.Sod.call(hydro.state);
+	});
+	$('#reset_Euler_Wave').click(function(){ 
+		eulerEquationSimulation.initialConditions.Wave.call(hydro.state);
+	});
+	$('#reset_ADM_GaugeShock').click(function(){ 
+		admEquationSimulation.initialConditions.GaugeShock.call(hydro.state);
+	});
 
 	(function(){
 		var select = $('#gridsize');
@@ -829,8 +1049,38 @@ $(document).ready(function(){
 	
 	buildSelect('boundaryMethod', 'boundaryMethod', boundaryMethods);
 	buildSelect('fluxMethod', 'fluxMethod', fluxMethods);
-	buildSelect('advectMethod', 'advectMethod', advectMethods);
-	buildSelect('integrationMethod', 'integrationMethod', integrationMethods);
+	
+	buildSelect('Euler_algorithm', 'algorithm', eulerEquationSimulation.methods);	//this will change as 'simulations' changes
+	buildSelect('ADM_algorithm', 'algorithm', admEquationSimulation.methods);	//this will change as 'simulations' changes
+
+	(function(){
+		var id = 'simulation';
+		var key = 'simulation';
+		var map = simulations;
+		var select = $('#' + id);
+		for (var k in map) {
+			var option = $('<option>', {text : k});
+			option.appendTo(select);
+			if (hydro.state[key] == k) {
+				option.attr('selected', 'true');
+			}
+		}
+		select.change(function() {
+			var val = select.val();
+			hydro.state[key] = val; 
+			
+			$('#ADM_controls, #Euler_controls').hide();
+			$('#'+val+'_controls').show();
+		
+			//...and now select the visible select's selection
+			hydro.state.algorithm = $('#'+val+'_algorithm').val();
+		
+			console.log('changing...');
+		});
+		
+		select.val(hydro.state.simulation);
+		select.trigger('change');
+	})();
 
 	$('#timeStepCFLBased').change(function() {
 		if (!$(this).is(':checked')) return;
@@ -853,30 +1103,7 @@ $(document).ready(function(){
 		fixedDT = v;
 	});
 
-	canvas = $('<canvas>', {
-		css : {
-			left : 0,
-			top : 0,
-			position : 'absolute'
-		}
-	}).prependTo(document.body).get(0);
-	$(canvas).disableSelection()
-	
-	try {
-		gl = GL.init(canvas);
-	} catch (e) {
-		panel.remove();
-		$(canvas).remove();
-		$('#webglfail').show();
-		throw e;
-	}
 
-	GL.view.ortho = true;
-	GL.view.zNear = -1;
-	GL.view.zFar = 1;
-	GL.view.pos[0] = (xmax + xmin) / 2;
-	GL.view.pos[1] = (ymax + ymin) / 2;
-	
 	var plainShader = new GL.ShaderProgram({
 		vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
@@ -968,5 +1195,6 @@ void main() {
 
 	//start it off
 	onresize();
+	$(window).resize(onresize);
 	update();
 });
