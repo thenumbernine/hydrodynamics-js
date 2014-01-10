@@ -18,6 +18,7 @@ var pause = false;
 var gaussSeidelIterations = 20;
 var plainShader;
 var graphShader;
+var gridObj;
 
 function isnan(x) {
 	return x != x;
@@ -122,6 +123,13 @@ var boundaryMethods = {
 	}
 };
 
+var eulerGetPrimitives = function(i) {
+	var rho = this.q[i][0];
+	var u = this.q[i][1] / rho;
+	var e = this.q[i][2] / rho;
+	return [rho, u, e];
+};
+
 var EulerEquationBurgersSolver = makeClass({
 	initStep : function() {},
 	calcCFLTimestep : function() {
@@ -139,6 +147,7 @@ var EulerEquationBurgersSolver = makeClass({
 		//if (mindum != mindum) throw 'nan';
 		return this.cfl * mindum;
 	},
+	getPrimitives : eulerGetPrimitives
 });
 
 /*
@@ -458,10 +467,9 @@ var GodunovSolver = makeClass({
 		return this.cfl * mindum;
 	},
 	step : function(dt) {
-
 		var deriv = GodunovSolver.prototype.calcDerivative;
 
-		/* Euler */
+		/* Euler * /
 		var dq_dt = deriv.call(this, dt);
 		addMulState(this.q, dq_dt, dt);
 		/**/
@@ -491,6 +499,21 @@ var GodunovSolver = makeClass({
 		addMulState(this.q, k2, dt / 3);
 		addMulState(this.q, k3, dt / 3);
 		addMulState(this.q, k4, dt / 6);
+		/**/
+	
+		/* ICN3 */
+		//first iteration
+		var srcQ = copyState(this.q);
+		var firstK = deriv.call(this, dt);
+		addMulState(this.q, firstK, dt);
+
+		//second and so on
+		for (var i = 1; i < 3; ++i) {
+			var k = deriv.call(this, dt);
+			copyState(srcQ, this.q);
+			addMulState(this.q, k, .5 * dt);
+			addMulState(this.q, firstK, .5 * dt);
+		}
 		/**/
 	},
 	calcDerivative : function(dt) {
@@ -727,7 +750,8 @@ var EulerEquationGodunovSolver = makeClass({
 		eigenvectors[2][2] = hTotal + speedOfSound * velocity;
 		//calculate eigenvector inverses ... 
 		mat33invert(eigenvectorsInverse, eigenvectors);
-	}
+	},
+	getPrimitives : eulerGetPrimitives
 });
 
 /*
@@ -962,7 +986,7 @@ function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 	mat33invert(eigenvectorsInverse, eigenvectors);
 }
 
-var ADMEquationRoeForwardEuler = makeClass({
+var ADMEquationGodunovForwardEuler = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
 		var dx = (xmax - xmin) / this.nx;
@@ -997,12 +1021,32 @@ var ADMEquationRoeForwardEuler = makeClass({
 				alpha, g);
 		}
 		//how about those boundary eigenstates?
+	},
+	step : function(dt) {
+		var deriv = ADMEquationGodunovForwardEuler.prototype.calcDerivative;
+
+		//ICN3:
+		//first iteration
+		var srcQ = copyState(this.q);
+		var firstK = deriv.call(this, dt);
+		addMulState(this.q, firstK, dt);
+
+		//second and so on
+		for (var i = 1; i < 3; ++i) {
+			var k = deriv.call(this, dt);
+			copyState(srcQ, this.q);
+			addMulState(this.q, k, .5 * dt);
+			addMulState(this.q, firstK, .5 * dt);
+		}
+	},
+	getPrimitives : function(i) {
+		return this.q[i];
 	}
 });
 
 var admEquationSimulation = {
 	methods : {
-		'Roe / Forward Euler' : ADMEquationRoeForwardEuler.prototype
+		'Godunov / Forward Euler' : ADMEquationGodunovForwardEuler.prototype
 	},
 	initialConditions : {
 		GaugeShock : function() {
@@ -1028,8 +1072,8 @@ var admEquationSimulation = {
 
 //hmm, maybe I should combine all of these into one list, and have them individuall state who they belong to
 var simulations = {
-	Euler : eulerEquationSimulation//,
-	//ADM : admEquationSimulation
+	Euler : eulerEquationSimulation,
+	ADM : admEquationSimulation
 };
 
 var HydroState = makeClass({ 
@@ -1150,6 +1194,9 @@ var HydroState = makeClass({
 		//solve
 		simulations[this.simulation].methods[this.algorithm].step.call(this, dt);
 	},
+	getPrimitives : function() {
+		return simulations[this.simulation].methods[this.algorithm].getPrimitives.apply(this, arguments);
+	},
 	update : function() {
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
 		simulations[this.simulation].methods[this.algorithm].initStep.call(this, dt);
@@ -1226,14 +1273,23 @@ var Hydro = makeClass({
 		//update geometry
 		for (var i = 0; i < this.state.nx; ++i) {
 			this.vertexXBuffer.data[i] = this.state.x[i];
+			//rescale to -1,1
+			this.vertexXBuffer.data[i] -= xmin;
+			this.vertexXBuffer.data[i] *= 2 / (xmax - xmin);
+			this.vertexXBuffer.data[i]--;
 		}
 		this.vertexXBuffer.updateData();
-		
+	
+		for (var i = 0; i < this.stateGraphObjs.length; ++i) {
+			this.stateGraphObjs[i].uniforms.scale = 1/(xmax - xmin);
+		}
+
 		//TODO this is only for Euler -- make it generic
 		for (var i = 0; i < this.state.nx; ++i) {
-			this.primitiveBuffers[0].data[i] = this.state.q[i][0];
-			this.primitiveBuffers[1].data[i] = this.state.q[i][1] / this.state.q[i][0];
-			this.primitiveBuffers[2].data[i] = this.state.q[i][2] / this.state.q[i][0];
+			var prims = this.state.getPrimitives(i);
+			this.primitiveBuffers[0].data[i] = prims[0];
+			this.primitiveBuffers[1].data[i] = prims[1];
+			this.primitiveBuffers[2].data[i] = prims[2];
 		}
 		for (var j = 0; j < 3; ++j) {
 			this.primitiveBuffers[j].updateData();
@@ -1324,10 +1380,11 @@ void main() {
 		vertexCode : mlstr(function(){/*
 attribute float vertex;
 attribute float state;
+uniform float scale;
 uniform mat4 mvMat;
 uniform mat4 projMat;
 void main() {
-	gl_Position = projMat * mvMat * vec4(vertex, state, 0., 1.);
+	gl_Position = projMat * mvMat * vec4(vertex, scale * state, 0., 1.);
 	gl_PointSize = 3.;
 }
 */}),
@@ -1340,7 +1397,8 @@ void main() {
 */}),
 		fragmentPrecision : 'best',
 		uniforms : {
-			color : [1,1,1,1]
+			color : [1,1,1,1],
+			scale : 1
 		}
 	});
 
@@ -1359,7 +1417,7 @@ void main() {
 
 	$('#pause').click(function() {
 		pause = !pause;
-		$('#pause').attr('src', pause ? 'stop.png' : 'play.png');
+		$('#pause').attr('src', pause ? 'play.png' : 'pause.png');
 	});
 
 	for (simulationName in simulations) {
@@ -1501,7 +1559,7 @@ void main() {
 		grid.push(xmax);
 		grid.push(j);
 	}
-	var gridObj = new GL.SceneObject({
+	gridObj = new GL.SceneObject({
 		mode : gl.LINES,
 		attrs : {
 			vertex : new GL.ArrayBuffer({data:grid, dim:2})
