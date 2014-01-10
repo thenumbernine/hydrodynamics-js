@@ -513,11 +513,10 @@ var GodunovSolver = makeClass({
 			for (var j = 0; j < 3; ++j) {
 				var interfaceDeltaQTilde = this.interfaceDeltaQTilde[ix][j];
 				if (Math.abs(interfaceDeltaQTilde) > 0) {
-					if (this.interfaceEigenvalues[j] >= 0) {
+					if (this.interfaceEigenvalues[ix][j] >= 0) {
 						this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix-1][j] / interfaceDeltaQTilde;
 					} else {
-						//hmm, Hydrodynamics II eqn 6.50 and the Burgers implementation all say the minus sign doesn't belong here
-						this.rTilde[ix][j] = -this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
+						this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
 					}
 				} else {
 					this.rTilde[ix][j] = 0;
