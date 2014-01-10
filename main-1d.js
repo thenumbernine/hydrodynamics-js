@@ -50,6 +50,24 @@ function mat33invert(out, a) {
 	}
 }
 
+var copyState = function(srcQ, destQ) {
+	if (destQ === undefined) destQ = [];
+	for (var i = 0; i < srcQ.length; ++i) {
+		if (destQ[i] === undefined) destQ[i] = [];
+		for (var j = 0; j < 3; ++j) {
+			destQ[i][j] = srcQ[i][j];
+		}
+	}
+	return destQ;
+};
+
+var addMulState = function(to, from, scalar) {
+	for (var i = 0; i < to.length; ++i) {
+		for (var j = 0; j < 3; ++j) {
+			to[i][j] += scalar * from[i][j];
+		}
+	}
+};
 
 var boundaryMethods = {
 	periodic : function(nx,q) {
@@ -146,7 +164,7 @@ var EulerEquationBurgersForwardEuler = makeClass({
 		//compute flux and advect for each state vector
 		for (var j = 0; j < 3; ++j) {
 			//r_{i-1/2} flux limiter
-			for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
+			for (var i = this.nghost; i < this.nx+1-this.nghost; ++i) {
 				var dq = this.q[i][j] - this.q[i-1][j];
 				if (Math.abs(dq) > 0) {
 					if (this.ui[i] >= 0) {
@@ -422,10 +440,6 @@ var EulerEquationBurgersBackwardEulerTridiagonal = makeClass({
 });
 
 
-/*
-this uses no extrapolation of left and right states
-and therefore suffers the 'spurious oscillations' that so many articles describe
-*/
 var GodunovSolver = makeClass({
 	/*
 	store eigenvalues and eigenvectors of interfaces
@@ -444,61 +458,45 @@ var GodunovSolver = makeClass({
 		return this.cfl * mindum;
 	},
 	step : function(dt) {
-		var thiz = this;
-		var copyState = function(srcQ, destQ) {
-			if (destQ === undefined) destQ = [];
-			for (var i = 0; i < thiz.nx; ++i) {
-				if (destQ[i] === undefined) destQ[i] = [];
-				for (var j = 0; j < 3; ++j) {
-					destQ[i][j] = srcQ[i][j];
-				}
-			}
-			return destQ;
-		};
-		var addMul = function(to, from, scalar) {
-			for (var i = thiz.nghost; i < thiz.nx - thiz.nghost; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					to[i][j] += scalar * from[i][j];
-				}
-			}
-		};
+
 		var deriv = GodunovSolver.prototype.calcDerivative;
 
-		/* Euler * /
+		/* Euler */
 		var dq_dt = deriv.call(this, dt);
-		addMul(this.q, dq_dt, dt);
+		addMulState(this.q, dq_dt, dt);
 		/**/
 
 		/* RK2 * /
 		var src = copyState(this.q);
 		var k1 = deriv.call(this, dt);
-		addMul(this.q, k1, .5 * dt);
+		addMulState(this.q, k1, .5 * dt);
 		var k2 = deriv.call(this, dt);
 		copyState(src, this.q);
-		addMul(this.q, k2, dt);
+		addMulState(this.q, k2, dt);
 		/**/
 
-		/* RK4 */
+		/* RK4 * /
 		var src = copyState(this.q);
 		var k1 = deriv.call(this, dt);
-		addMul(this.q, k1, .5 * dt);
+		addMulState(this.q, k1, .5 * dt);
 		var k2 = deriv.call(this, dt);
 		copyState(src, this.q);
-		addMul(this.q, k2, .5 * dt);
+		addMulState(this.q, k2, .5 * dt);
 		var k3 = deriv.call(this, dt);
 		copyState(src, this.q);
-		addMul(this.q, k3, dt);
+		addMulState(this.q, k3, dt);
 		var k4 = deriv.call(this, dt);
 		copyState(src, this.q);
-		addMul(this.q, k1, dt / 6);
-		addMul(this.q, k2, dt / 3);
-		addMul(this.q, k3, dt / 3);
-		addMul(this.q, k4, dt / 6);
+		addMulState(this.q, k1, dt / 6);
+		addMulState(this.q, k2, dt / 3);
+		addMulState(this.q, k3, dt / 3);
+		addMulState(this.q, k4, dt / 6);
 		/**/
 	},
 	calcDerivative : function(dt) {
 		for (var ix = 1; ix < this.nx; ++ix) {
 			for (var j = 0; j < 3; ++j) {
+				//the change in state represented in interface eigenbasis
 				this.interfaceDeltaQTilde[ix][j] = 
 					this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
 					+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
@@ -511,14 +509,15 @@ var GodunovSolver = makeClass({
 			this.interfaceDeltaQTilde[this.nx][j] = 0;
 		}
 		
-		for (var ix = this.nghost; ix < this.nx+this.nghost-3; ++ix) {
+		for (var ix = this.nghost; ix < this.nx-this.nghost+1; ++ix) {
 			for (var j = 0; j < 3; ++j) {
 				var interfaceDeltaQTilde = this.interfaceDeltaQTilde[ix][j];
 				if (Math.abs(interfaceDeltaQTilde) > 0) {
-					if (this.interfaceEigenvalues[j] > 0) {
+					if (this.interfaceEigenvalues[j] >= 0) {
 						this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix-1][j] / interfaceDeltaQTilde;
 					} else {
-						this.rTilde[ix][j] = this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
+						//hmm, Hydrodynamics II eqn 6.50 and the Burgers implementation all say the minus sign doesn't belong here
+						this.rTilde[ix][j] = -this.interfaceDeltaQTilde[ix+1][j] / interfaceDeltaQTilde;
 					}
 				} else {
 					this.rTilde[ix][j] = 0;
@@ -557,7 +556,7 @@ var GodunovSolver = makeClass({
 		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 		//(i.e. qi[ix] is between q[ix-1] and q[ix])
 		//Looks good according to "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro, p.191
-		for (var ix = 1; ix < this.nx; ++ix) {
+		for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
 			//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 			//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
 				
@@ -651,7 +650,7 @@ var GodunovSolver = makeClass({
 					theta = -1;
 				}
 				
-				var phi = fluxMethods[this.fluxMethod](this.rTilde[ix][j]);
+				var phiTilde = fluxMethods[this.fluxMethod](this.rTilde[ix][j]);
 				var dx = this.xi[ix] - this.xi[ix-1];
 				var epsilon = this.interfaceEigenvalues[ix][j] * dt / dx;
 				
@@ -661,7 +660,7 @@ var GodunovSolver = makeClass({
 				//1D says after, but notes say before ...
 				var deltaFluxTilde = this.interfaceEigenvalues[ix][j] * this.interfaceDeltaQTilde[ix][j];
 				
-				fluxTilde[j] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+				fluxTilde[j] = -.5 * deltaFluxTilde * (theta + phiTilde * (epsilon - theta));
 			}
 
 			//reproject fluxTilde back into q
@@ -687,7 +686,10 @@ var GodunovSolver = makeClass({
 				dq_dt[i][j] = -(this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
 			}
 		}
-
+		for (var i = 0; i < this.nghost; ++i) {
+			dq_dt[i] = [0,0,0];
+			dq_dt[this.nx-i-1] = [0,0,0];
+		}
 		return dq_dt;
 	}
 });
@@ -1354,6 +1356,11 @@ void main() {
 		} else {
 			panelContent.hide();
 		}
+	});
+
+	$('#pause').click(function() {
+		pause = !pause;
+		$('#pause').attr('src', pause ? 'stop.png' : 'play.png');
 	});
 
 	for (simulationName in simulations) {
