@@ -444,6 +444,59 @@ var GodunovSolver = makeClass({
 		return this.cfl * mindum;
 	},
 	step : function(dt) {
+		var thiz = this;
+		var copyState = function(srcQ, destQ) {
+			if (destQ === undefined) destQ = [];
+			for (var i = 0; i < thiz.nx; ++i) {
+				if (destQ[i] === undefined) destQ[i] = [];
+				for (var j = 0; j < 3; ++j) {
+					destQ[i][j] = srcQ[i][j];
+				}
+			}
+			return destQ;
+		};
+		var addMul = function(to, from, scalar) {
+			for (var i = thiz.nghost; i < thiz.nx - thiz.nghost; ++i) {
+				for (var j = 0; j < 3; ++j) {
+					to[i][j] += scalar * from[i][j];
+				}
+			}
+		};
+		var deriv = GodunovSolver.prototype.calcDerivative;
+
+		/* Euler * /
+		var dq_dt = deriv.call(this, dt);
+		addMul(this.q, dq_dt, dt);
+		/**/
+
+		/* RK2 * /
+		var src = copyState(this.q);
+		var k1 = deriv.call(this, dt);
+		addMul(this.q, k1, .5 * dt);
+		var k2 = deriv.call(this, dt);
+		copyState(src, this.q);
+		addMul(this.q, k2, dt);
+		/**/
+
+		/* RK4 */
+		var src = copyState(this.q);
+		var k1 = deriv.call(this, dt);
+		addMul(this.q, k1, .5 * dt);
+		var k2 = deriv.call(this, dt);
+		copyState(src, this.q);
+		addMul(this.q, k2, .5 * dt);
+		var k3 = deriv.call(this, dt);
+		copyState(src, this.q);
+		addMul(this.q, k3, dt);
+		var k4 = deriv.call(this, dt);
+		copyState(src, this.q);
+		addMul(this.q, k1, dt / 6);
+		addMul(this.q, k2, dt / 3);
+		addMul(this.q, k3, dt / 3);
+		addMul(this.q, k4, dt / 6);
+		/**/
+	},
+	calcDerivative : function(dt) {
 		for (var ix = 1; ix < this.nx; ++ix) {
 			for (var j = 0; j < 3; ++j) {
 				this.interfaceDeltaQTilde[ix][j] = 
@@ -626,11 +679,16 @@ var GodunovSolver = makeClass({
 		}
 
 		//update cells
+		var dq_dt = [];
 		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+			dq_dt[i] = [];
 			for (var j = 0; j < 3; ++j) {
-				this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
+				//this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
+				dq_dt[i][j] = -(this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
 			}
 		}
+
+		return dq_dt;
 	}
 });
 
