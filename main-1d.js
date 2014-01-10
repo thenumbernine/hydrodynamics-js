@@ -7,15 +7,17 @@
 
 var panel;
 var canvas;
-var waveVtxBuf, waveStateBuf;
 var xmin = -1;
-var xmax = 25; 
-var ymin = 0;
-var ymax = 1;
-var gridstep = 10;
+var xmax = 1; 
+var ymin = -1;
+var ymax = 2;
+var gridstep = .1;
 var useCFL = true;
 var fixedDT = .2;
+var pause = false;
 var gaussSeidelIterations = 20;
+var plainShader;
+var graphShader;
 
 function isnan(x) {
 	return x != x;
@@ -332,6 +334,98 @@ var EulerEquationBurgersBackwardEulerGaussSeidel = makeClass({
 	}
 });
 
+var EulerEquationBurgersBackwardEulerTridiagonal = makeClass({
+	super : EulerEquationBurgersSolver,
+	step : function(dt) {
+		//get velocity at interfaces from state
+		for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
+			this.ui[ix] = .5 * (this.q[ix][1] / this.q[ix][0] + this.q[ix-1][1] / this.q[ix-1][0]);
+		}
+		this.ui[0] = this.ui[this.nx] = 0;
+
+		//compute flux and advect for each state vector
+		for (var j = 0; j < 3; ++j) {
+			//r_{i-1/2} flux limiter
+			for (var i = this.nghost; i < this.nx+this.nghost-3; ++i) {
+				var dq = this.q[i][j] - this.q[i-1][j];
+				if (Math.abs(dq) > 0) {
+					if (this.ui[i] >= 0) {
+						this.r[i][j] = (this.q[i-1][j] - this.q[i-2][j]) / dq;
+					} else {
+						this.r[i][j] = (this.q[i+1][j] - this.q[i][j]) / dq;
+					}
+				} else {
+					this.r[i][j] = 0;
+				}
+			}
+			this.r[0][j] = this.r[1][j] = this.r[this.nx-1][j] = this.r[this.nx][j] = 0;
+
+			//update cells
+			
+			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+				var dx = this.xi[i+1] - this.xi[i];
+				
+				var dflux_qip = 0;
+				var dflux_qi = 0;
+				var dflux_qin = 0;
+				
+				//flux limiter
+				var phi = fluxMethods[this.fluxMethod](this.r[i][j]);
+				if (this.ui[i] >= 0) {
+					dflux_qip -= this.ui[i];
+				} else {
+					dflux_qi -= this.ui[i];
+				}
+				dflux_qi -= phi * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
+				dflux_qip += phi * .5 * Math.abs(this.ui[i]) * (1 - Math.abs(this.ui[i] * dt / dx));
+				
+				var phi = fluxMethods[this.fluxMethod](this.r[i+1][j]);
+				if (this.ui[i+1] >= 0) {
+					dflux_qi += this.ui[i+1];
+				} else {
+					dflux_qin += this.ui[i+1];
+				}
+				dflux_qin += phi * .5 * Math.abs(this.ui[i+1]) * (1 - Math.abs(this.ui[i+1] * dt / dx));
+				dflux_qi -= phi * .5 * Math.abs(this.ui[i+1]) * (1 - Math.abs(this.ui[i+1] * dt / dx));
+				
+				this.q[i][j] = (this.q[i][j] - dt / dx * (
+					dflux_qip * this.q[i-1][j] 
+					+ dflux_qin * this.q[i+1][j])) / (1 + dt / dx * dflux_qi);
+			}
+		}
+
+		// only needed for Burgers	
+		
+		//boundary again
+		this.boundary();
+
+		var a = [];	//lower band
+		var b = [];	//diagonal
+		var c = [];	//upper band
+
+		//apply momentum diffusion = pressure
+		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+			var dtOverTwoDx = dt / (this.x[i+1] - this.x[i-1]);
+			this.q[i][1] = this.q[i][1] 
+				- dtOverTwoDx * (this.gamma - 1) * (this.q[i+1][2] - .5 * this.q[i+1][1] * this.q[i+1][1] / this.q[i+1][0]) 
+				+ dtOverTwoDx * (this.gamma - 1) * (this.q[i-1][2] - .5 * this.q[i-1][1] * this.q[i-1][1] / this.q[i-1][0]);
+		}
+
+		//apply work diffusion = momentum
+		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+			var dtOverTwoDx = dt / (this.x[i+1] - this.x[i-1]);
+			this.q[i][2] = this.q[i][2] 
+				- dtOverTwoDx * this.pressure[i+1] * this.q[i+1][1] / this.q[i+1][0]
+				+ dtOverTwoDx * this.pressure[i-1] * this.q[i-1][1] / this.q[i-1][0];
+		}
+	}
+});
+
+
+/*
+this uses no extrapolation of left and right states
+and therefore suffers the 'spurious oscillations' that so many articles describe
+*/
 var GodunovSolver = makeClass({
 	/*
 	store eigenvalues and eigenvectors of interfaces
@@ -391,7 +485,8 @@ var GodunovSolver = makeClass({
 			}	
 		}
 		*/
-		
+
+
 		//transform cell q's into cell qTilde's (eigenspace)
 		// ... so q_{i-1/2}L = q_{i-1}, q_{i-1/2}R = q_i
 		// qTilde_{i-1/2}L = E_{i-1/2}^-1 q_{i-1}, qTilde_{i-1/2}R = E_{i-1/2}^-1 q_i
@@ -401,6 +496,10 @@ var GodunovSolver = makeClass({
 		//use them to advect, like good old fluxes advect
 		var fluxTilde = [];
 		var fluxAvg = [];
+		var interfaceQL = [];
+		var interfaceQR = [];
+
+		var qTildeMid = [];
 
 		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 		//(i.e. qi[ix] is between q[ix-1] and q[ix])
@@ -408,12 +507,87 @@ var GodunovSolver = makeClass({
 		for (var ix = 1; ix < this.nx; ++ix) {
 			//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 			//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
+				
+			//most sources seem to refer to qL and qR as q_{i-1/2,j,L} = q_{i-1,j} and q{i-1/2,j,R} = q_{i,j}
+			//then there is http://bh0.physics.ubc.ca/People/benjamin/projects/nr/report2/node21.html and Hydrodynamics II section 7.5 which say to extrapolate qL and qR based on slope limited stuff 
+			
+			//trying to go by this: 
+			//http://crd.lbl.gov/assets/pubs_presos/AMCS/ANAG/A141984.pdf
+			//var qL2 = this.q[ix-2];
+			var qL = this.q[ix-1];
+			var qR = this.q[ix];
+			//var qR2 = this.q[ix+1];
+		
+			//which basii should be used for reprojection?
+			//var qTildeL2 = [];
+			//var qTildeL = [];
+			//var qTildeR = [];
+			//var qTildeR2 = [];
+			//for (var j = 0; j < 3; ++j) {
+				//qTildeL2[j] = 
+				//	this.interfaceEigenvectorsInverse[ix-1][0][j] * qL2[0]
+				//	+ this.interfaceEigenvectorsInverse[ix-1][1][j] * qL2[1]
+				//	+ this.interfaceEigenvectorsInverse[ix-1][2][j] * qL2[2];
+				//qTildeL[j] = 
+				//	this.interfaceEigenvectorsInverse[ix][0][j] * qL[0]
+				//	+ this.interfaceEigenvectorsInverse[ix][1][j] * qL[1]
+				//	+ this.interfaceEigenvectorsInverse[ix][2][j] * qL[2];
+				//qTildeR[j] = 
+				//	this.interfaceEigenvectorsInverse[ix][0][j] * qR[0]
+				//	+ this.interfaceEigenvectorsInverse[ix][1][j] * qR[1]
+				//	+ this.interfaceEigenvectorsInverse[ix][2][j] * qR[2];
+				//qTildeR2[j] = 
+				//	this.interfaceEigenvectorsInverse[ix+1][0][j] * qR2[0]
+				//	+ this.interfaceEigenvectorsInverse[ix+1][1][j] * qR2[1]
+				//	+ this.interfaceEigenvectorsInverse[ix+1][2][j] * qR2[2];
+			//}
+			
+			//q_{i-1/2},j
+			//qTildeMid[ix] = [];
+			//for (var j = 0; j < 3; ++j) {
+			//	qTildeMid[ix][j] = (7 * (qTildeR[j] + qTildeL[j]) - (qTildeL2[j] + qTildeR2[j])) / 12;
+			//}
+		//}
+		//set limits on parabola left and right sides
+		//for (var i = 2; i < this.nx-2; ++i) {
+			//for (var j = 0; j < 3; ++j) {
+				//var qTilde = 
+				//var qTildeL = qTildeMid[i][j];
+				//var qTildeR = qTildeMid[i+1][j];
+			
+				//if (a_R,j - a,j) * (a,j - a_L,j) <= 0 then ...
+				//  but how do we find a,j if we are using qTilde i.e. eigenbasis-projected values?
+				//  should we use the eigenbasis at the cell center?  or the eigenbasis at the interfaces somehow?
+				//...or should we not be doing this in eigenbasis space?
+				//if (qTildeR - 
+			//}
+		//}
+		//for (var ix = 1; ix < this.nx; ++ix) {
+			//... and then apply the rest of the interface jacobian 
+			//for (var j = 0; j < 3; ++j) {
+			//	interfaceQL[j] = 
+			//		this.interfaceEigenvectors[ix][0][j] * this.interfaceEigenvalues[ix][0] * qTildeL[0]
+			//		+ this.interfaceEigenvectors[ix][1][j] * this.interfaceEigenvalues[ix][1] * qTildeL[1]
+			//		+ this.interfaceEigenvectors[ix][2][j] * this.interfaceEigenvalues[ix][2] * qTildeL[2];
+			//	interfaceQR[j] = 
+			//		this.interfaceEigenvectors[ix][0][j] * this.interfaceEigenvalues[ix][0] * qTildeR[0]
+			//		+ this.interfaceEigenvectors[ix][1][j] * this.interfaceEigenvalues[ix][1] * qTildeR[1]
+			//		+ this.interfaceEigenvectors[ix][2][j] * this.interfaceEigenvalues[ix][2] * qTildeR[2];
+			//	fluxAvg[j] = .5 * (interfaceQL[j] + interfaceQR[j]);
+			//}
+		//}
+		//for (var ix = 1; ix < this.nx; ++ix) {
+
+/**/
+			//if I wasn't doing all the above slope-limited stuff, this would suffice:
+			//however if I'm not using this then I don't need to store the interface jacobian matrix
 			for (var j = 0; j < 3; ++j) {
 				fluxAvg[j] = .5 * ( 
-					this.interfaceMatrix[ix][0][j] * (this.q[ix-1][0] + this.q[ix][0])
-					+ this.interfaceMatrix[ix][1][j] * (this.q[ix-1][1] + this.q[ix][1])
-					+ this.interfaceMatrix[ix][2][j] * (this.q[ix-1][2] + this.q[ix][2]));
+					this.interfaceMatrix[ix][0][j] * (qL[0] + qR[0])
+					+ this.interfaceMatrix[ix][1][j] * (qL[1] + qR[1])
+					+ this.interfaceMatrix[ix][2][j] * (qL[2] + qR[2]));
 			}
+/**/
 
 			//calculate flux
 			for (var j = 0; j < 3; ++j) {
@@ -444,7 +618,6 @@ var GodunovSolver = makeClass({
 					+ this.interfaceEigenvectors[ix][1][j] * fluxTilde[1] 
 					+ this.interfaceEigenvectors[ix][2][j] * fluxTilde[2];
 			}
-
 		}
 		
 		//zero boundary flux
@@ -515,7 +688,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 		//(i.e. qi[ix] is between q[ix-1] and q[ix])
 		for (var ix = 1; ix < this.nx; ++ix) {
-			//compute Roe averaged interface values
+			//compute averaged interface values
 			var densityL = this.q[ix-1][0];
 			var velocityL = this.q[ix-1][1] / densityL;
 			var energyTotalL = this.q[ix-1][2] / densityL;
@@ -537,7 +710,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 			var velocity = .5 * (velocityL + velocityR);
 			var hTotal = .5 * (hTotalL + hTotalR);
 
-			//compute eigenvectors and values at the interface based on Roe averages
+			//compute eigenvectors and values at the interface based on averages
 			EulerEquationGodunovForwardEuler.prototype.buildEigenstate.call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
@@ -609,12 +782,13 @@ var eulerEquationSimulation = {
 	methods : {
 		'Burgers / Forward Euler' : EulerEquationBurgersForwardEuler.prototype,
 		'Burgers / Backward Euler via Gauss Seidel' : EulerEquationBurgersBackwardEulerGaussSeidel.prototype,
+		//'Burgers / Backward Euler via Block Tridiagonal' : EulerEquationBurgersBackwardEulerTridiagonal.prototype,
 		'Godunov / Forward Euler' : EulerEquationGodunovForwardEuler.prototype,
 		'Roe / Forward Euler' : EulerEquationRoeForwardEuler.prototype
 	},
 	initialConditions : {
 		Sod : function() {
-			this.resetCoordinates(-1, 25);
+			this.resetCoordinates(-1, 1);
 			for (var i = 0; i < this.nx; ++i) {
 				var x = this.x[i];
 				var rho = (x < (xmin * .7 + xmax * .3)) ? 1 : .1;
@@ -623,6 +797,33 @@ var eulerEquationSimulation = {
 				this.q[i][0] = rho; 
 				this.q[i][1] = rho * u; 
 				this.q[i][2] = rho * eTotal; 
+			}
+		},
+		Sedov : function() {
+			this.resetCoordinates(-1, 1);
+			var pressure = 1e-5;
+			var rho = 1;
+			for (var i = 0; i < this.nx; ++i) {
+				this.q[i][0] = rho;
+				this.q[i][1] = 0;
+				this.q[i][2] = pressure / (this.gamma - 1);
+			}
+			this.q[Math.floor(this.nx/2)][2] = 1e+5;
+		},
+		Advect : function() {
+			this.resetCoordinates(-1, 1);
+			var xmid = .5 * (xmax + xmin);
+			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[i];
+				var xGreaterThanMid = x > xmid;
+				var rho = xGreaterThanMid ? .5 : 1;
+				var u = 1;
+				var energyKinetic = .5 * u * u;
+				var pressure = 1;
+				var energyTotal = pressure / (rho * (this.gamma - 1)) + energyKinetic;
+				this.q[i][0] = rho;
+				this.q[i][1] = rho * u;
+				this.q[i][2] = rho * energyTotal;
 			}
 		},
 		Wave : function() {
@@ -639,17 +840,6 @@ var eulerEquationSimulation = {
 				this.q[i][1] = rho * u;
 				this.q[i][2] = rho * eTotal;
 			}
-		},
-		Sedov : function() {
-			this.resetCoordinates(-1, 1);
-			var pressure = 1e-4;
-			var rho = 1;
-			for (var i = 0; i < this.nx; ++i) {
-				this.q[i][0] = rho;
-				this.q[i][1] = 0;
-				this.q[i][2] = pressure / (this.gamma - 1);
-			}
-			this.q[Math.floor(this.nx/2)][2] = 1e+2;
 		}
 	}
 };
@@ -930,10 +1120,43 @@ var Hydro = makeClass({
 			size : size,
 			gamma : gamma
 		});
+		
+		//geometry buffers
+		this.vertexXBuffer = new GL.ArrayBuffer({
+			dim : 1,
+			count : size,
+			usage : gl.DYNAMIC_DRAW,
+			keep : true
+		});
+
+		var colors = [[1,0,0,1], [0,1,0,1], [0,.5,1,1], [1,1,1,1]];
+
+		this.primitiveBuffers = [];
+		this.stateGraphObjs = [];
+		for (var i = 0; i < 3; ++i) {
+			var stateBuffer = new GL.ArrayBuffer({
+				dim : 1,
+				count : size,
+				usage : gl.DYNAMIC_DRAW,
+				keep : true
+			});
+			this.primitiveBuffers.push(stateBuffer);
 	
-		//geometry
-		this.vertexPositions = new Float32Array(4*this.state.nx);
-		this.vertexStates = new Float32Array(6*this.state.nx);
+			//make graphs
+			var stateGraphObj = new GL.SceneObject({
+				mode : gl.LINE_STRIP,
+				attrs : {
+					vertex : this.vertexXBuffer,
+					state : stateBuffer
+				},
+				shader : graphShader,
+				uniforms : {
+					color : colors[i % colors.length]
+				},
+				blend : [gl.ONE, gl.ONE]
+			});
+			this.stateGraphObjs.push(stateGraphObj);
+		}
 	},
 	update : function() {
 		//update a copy of the grid and its once-refined
@@ -942,20 +1165,19 @@ var Hydro = makeClass({
 		this.state.update();
 	
 		//update geometry
-		var x = this.state.x;
-		var q = this.state.q;
-		var nx = this.state.nx;
-		for (var i = 0; i < nx; ++i) {
-			this.vertexPositions[0+4*i] = x[i];
-			this.vertexPositions[1+4*i] = q[i][0] * .25 * (xmax - xmin) / (ymax - ymin);
-			this.vertexPositions[2+4*i] = x[i];
-			this.vertexPositions[3+4*i] = 0;
-			this.vertexStates[0+6*i] = Math.abs(q[i][1] / q[i][0]);
-			this.vertexStates[1+6*i] = q[i][0];
-			this.vertexStates[2+6*i] = q[i][2] / q[i][0];
-			this.vertexStates[3+6*i] = 0;
-			this.vertexStates[4+6*i] = 0;
-			this.vertexStates[5+6*i] = 0;
+		for (var i = 0; i < this.state.nx; ++i) {
+			this.vertexXBuffer.data[i] = this.state.x[i];
+		}
+		this.vertexXBuffer.updateData();
+		
+		//TODO this is only for Euler -- make it generic
+		for (var i = 0; i < this.state.nx; ++i) {
+			this.primitiveBuffers[0].data[i] = this.state.q[i][0];
+			this.primitiveBuffers[1].data[i] = this.state.q[i][1] / this.state.q[i][0];
+			this.primitiveBuffers[2].data[i] = this.state.q[i][2] / this.state.q[i][0];
+		}
+		for (var j = 0; j < 3; ++j) {
+			this.primitiveBuffers[j].updateData();
 		}
 	}
 });
@@ -964,22 +1186,15 @@ var hydro;
 
 function update() {
 	//iterate
-	hydro.update();
-	waveVtxBuf.updateData(hydro.vertexPositions);
-	waveStateBuf.updateData(hydro.vertexStates);
+	if (!pause) hydro.update();
 	//draw
 	GL.draw();
 	requestAnimFrame(update);
 }
 
 function onresize() {
-	canvas.width = window.innerWidth;
-	canvas.height = window.innerHeight;
-	//factor out aspectratio from fovY (thus making it fovX)
-	var aspectRatio = canvas.width / canvas.height;
-	GL.view.fovY = .5 * (xmax - xmin) / aspectRatio;
-	GL.view.pos[0] = (xmax + xmin) / 2;
-	GL.view.pos[1] = (ymax + ymin) / 2 / aspectRatio;
+	GL.canvas.width = window.innerWidth;
+	GL.canvas.height = window.innerHeight;
 	GL.resize();
 }
 
@@ -998,7 +1213,7 @@ function buildSelect(id, key, map) {
 }
 
 $(document).ready(function(){
-	canvas = $('<canvas>', {
+	var canvas = $('<canvas>', {
 		css : {
 			left : 0,
 			top : 0,
@@ -1019,8 +1234,56 @@ $(document).ready(function(){
 	GL.view.ortho = true;
 	GL.view.zNear = -1;
 	GL.view.zFar = 1;
-	GL.view.pos[0] = (xmax + xmin) / 2;
-	GL.view.pos[1] = (ymax + ymin) / 2;
+	GL.view.pos[0] = 0;//(xmax + xmin) / 2;
+	GL.view.pos[1] = 0;//(ymax + ymin) / 2;
+	GL.view.fovY = ymax - ymin;
+
+	plainShader = new GL.ShaderProgram({
+		vertexCode : mlstr(function(){/*
+attribute vec2 vertex;
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
+	gl_PointSize = 3.;
+}
+*/}),
+		vertexPrecision : 'best',
+		fragmentCode : mlstr(function(){/*
+uniform vec4 color;
+void main() {
+	gl_FragColor = color;
+}
+*/}),
+		fragmentPrecision : 'best',
+		uniforms : {
+			color : [1,1,1,1]
+		}
+	});
+
+	graphShader = new GL.ShaderProgram({
+		vertexCode : mlstr(function(){/*
+attribute float vertex;
+attribute float state;
+uniform mat4 mvMat;
+uniform mat4 projMat;
+void main() {
+	gl_Position = projMat * mvMat * vec4(vertex, state, 0., 1.);
+	gl_PointSize = 3.;
+}
+*/}),
+		vertexPrecision : 'best',
+		fragmentCode : mlstr(function(){/*
+uniform vec4 color;
+void main() {
+	gl_FragColor = color;
+}
+*/}),
+		fragmentPrecision : 'best',
+		uniforms : {
+			color : [1,1,1,1]
+		}
+	});
 
 	hydro = new Hydro();
 	
@@ -1036,11 +1299,11 @@ $(document).ready(function(){
 	});
 
 	for (simulationName in simulations) {
+		var parent = $('#'+simulationName+'_controls');
 		var simulation = simulations[simulationName];
 		for (initialConditionName in simulation.initialConditions) {
 			(function(){
 				var method = simulation.initialConditions[initialConditionName];
-				var parent = $('#'+simulationName+'_controls');
 				$('<button>', {
 					text : 'Reset '+initialConditionName,
 					click : function() {
@@ -1129,95 +1392,87 @@ $(document).ready(function(){
 	});
 
 
-	var plainShader = new GL.ShaderProgram({
-		vertexCode : mlstr(function(){/*
-attribute vec2 vertex;
-uniform mat4 mvMat;
-uniform mat4 projMat;
-void main() {
-	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
-	gl_PointSize = 3.;
-}
-*/}),
-		vertexPrecision : 'best',
-		fragmentCode : mlstr(function(){/*
-uniform vec4 color;
-void main() {
-	gl_FragColor = color;
-}
-*/}),
-		fragmentPrecision : 'best',
+	var axisColor = [.75, .75, .75, 1];
+	(new GL.SceneObject({
+		mode : gl.LINES,
+		attrs : {
+			vertex : new GL.ArrayBuffer({dim : 2, data : [xmin, 0, xmax, 0]})
+		},
+		shader : plainShader,
 		uniforms : {
-			color : [1,1,1,1]
+			color : axisColor
 		}
-	});
+	})).prependTo(GL.root);
+
+	(new GL.SceneObject({
+		mode : gl.LINES,
+		attrs : {
+			vertex : new GL.ArrayBuffer({dim : 2, data : [0, ymin, 0, ymax]})
+		},
+		shader : plainShader,
+		uniforms : {
+			color : axisColor
+		}
+	})).prependTo(GL.root);
+
 
 	//make static grid
+	//...might not be so static...
 	var grid = [];
-	for (var i = xmin; i < xmax; i += gridstep) {
+	for (var i = Math.floor(xmin / gridstep) * gridstep; 
+		i <= Math.ceil(xmax / gridstep) * gridstep; 
+		i += gridstep) 
+	{
 		grid.push(i);
 		grid.push(ymin);
 		grid.push(i);
 		grid.push(ymax);
 	}
-	for (var j = ymin; j < ymax; j += gridstep) {
+	for (var j = Math.floor(ymin / gridstep) * gridstep; 
+		j < Math.ceil(ymax / gridstep) * gridstep; 
+		j += gridstep)
+	{
 		grid.push(xmin);
 		grid.push(j);
 		grid.push(xmax);
 		grid.push(j);
 	}
-	new GL.SceneObject({
+	var gridObj = new GL.SceneObject({
 		mode : gl.LINES,
 		attrs : {
 			vertex : new GL.ArrayBuffer({data:grid, dim:2})
 		},
 		shader : plainShader,
 		uniforms : {
-			color : [.5,.5,.5,1]
+			color : [.25,.25,.25,1]
 		}
 	});
+	gridObj.prependTo(GL.root);
+	
 
-	//make grid
-	waveVtxBuf = new GL.ArrayBuffer({
-		dim : 2,
-		data : hydro.vertexPositions,
-		usage : gl.DYNAMIC_DRAW
-	});
-	waveStateBuf = new GL.ArrayBuffer({
-		dim : 3,
-		data : hydro.vertexStates,
-		usage : gl.DYNAMIC_DRAW
-	});
-	new GL.SceneObject({
-		mode : gl.TRIANGLE_STRIP,
-		attrs : {
-			vertex : waveVtxBuf,
-			state : waveStateBuf
+
+	var zoomFactor = .0003;	// upon mousewheel
+	var dragging = false;
+	mouse = new Mouse3D({
+		pressObj : canvas,
+		mousedown : function() {
+			dragging = false;
 		},
-		shader : new GL.ShaderProgram({
-			vertexCode : mlstr(function(){/*
-attribute vec2 vertex;
-attribute vec3 state;
-varying vec3 statev;
-uniform mat4 mvMat;
-uniform mat4 projMat;
-void main() {
-	statev = state;
-	gl_Position = projMat * mvMat * vec4(vertex.xy, 0., 1.);
-	gl_PointSize = 3.;
-}
-*/}),
-			vertexPrecision : 'best',
-			fragmentCode : mlstr(function(){/*
-varying vec3 statev;
-void main() {
-	gl_FragColor = vec4(statev, 1.);;
-}
-*/}),
-			fragmentPrecision : 'best'
-		})
+		move : function(dx,dy) {
+			dragging = true;
+			var aspectRatio = canvas.width / canvas.height;
+			GL.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * GL.view.fovY);
+			GL.view.pos[1] += dy / canvas.height * 2 * GL.view.fovY;
+			GL.updateProjection();
+		},
+		zoom : function(zoomChange) {
+			dragging = true;
+			var scale = Math.exp(-zoomFactor * zoomChange);
+			GL.view.fovY *= scale 
+			GL.updateProjection();
+		}
 	});
-
+	
 	//start it off
 	onresize();
 	$(window).resize(onresize);

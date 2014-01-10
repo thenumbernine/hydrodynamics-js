@@ -17,6 +17,9 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 1D:
 - finish 'Backward Euler + Gauss-Seidel' & 'Riemann / Roe'
 - more implicit options? fixed point?  some Newton/Levenberg Marquardt/BFGS stuff?
+- render as a good ol fashioned white line with circles or boxes or x's or something as gridpoints
+	- add a toggle for what variable is displayed
+	- overlay exact solution
 
 2D:
 - remove pressure source from Roe version
@@ -42,8 +45,12 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 
 
 all:
+- Entropy fix.
+	- CFD codes has this in euler_solver_v0.f90, Toro describes it on p.364
+- Artificial viscosity
 - Roe solvers are not supposed to have flux limiters directly applied to them (but rather slope limiters?), but I'm doing this, and seeing oscillations.  I should fix it.
-- slope limiters (and two neighbors over) correctly working with arbitrary boundaries
+	- Dullemond describes this in section 7.5, and cites Toro who describes how to do this on p.433
+- slope limiters (and two neighbors over) correctly working with arbitrary boundaries.  I've got an initial pass at this.
 - swappable equations of state
 	- MHD
 	- ADM
