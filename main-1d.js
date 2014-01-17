@@ -1310,6 +1310,7 @@ function update() {
 function onresize() {
 	GL.canvas.width = window.innerWidth;
 	GL.canvas.height = window.innerHeight;
+	$('#content').height(window.innerHeight - 50);
 	GL.resize();
 }
 
