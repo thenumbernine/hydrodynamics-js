@@ -62,6 +62,61 @@ var copyState = function(srcQ, destQ) {
 	return destQ;
 };
 
+var explicitMethods = {
+	Euler : function(dt, deriv) {
+		var dq_dt = copyState(this.q);
+		deriv.call(this, dt, dq_dt);
+		addMulState(this.q, dq_dt, dt);
+	},
+	RK2 : function(dt, deriv) {
+		var src = copyState(this.q);
+		var k1 = copyState(this.q);
+		deriv.call(this, dt, k1);
+		addMulState(this.q, k1, .5 * dt);
+		var k2 = copyState(this.q);
+		deriv.call(this, dt, k2);
+		copyState(src, this.q);
+		addMulState(this.q, k2, dt);
+	},
+	RK4 : function(dt, deriv) {
+		var src = copyState(this.q);
+		var k1 = copyState(this.q);
+		deriv.call(this, dt, k1);
+		addMulState(this.q, k1, .5 * dt);
+		var k2 = copyState(this.q);
+		deriv.call(this, dt, k2);
+		copyState(src, this.q);
+		addMulState(this.q, k2, .5 * dt);
+		var k3 = copyState(this.q);
+		deriv.call(this, dt, k3);
+		copyState(src, this.q);
+		addMulState(this.q, k3, dt);
+		var k4 = copyState(this.q);
+		deriv.call(this, dt, k4);
+		copyState(src, this.q);
+		addMulState(this.q, k1, dt / 6);
+		addMulState(this.q, k2, dt / 3);
+		addMulState(this.q, k3, dt / 3);
+		addMulState(this.q, k4, dt / 6);
+	},
+	ICN3 : function(dt, deriv) {
+		//first iteration
+		var srcQ = copyState(this.q);
+		var firstK = copyState(this.q);
+		deriv.call(this, dt, firstK);
+		addMulState(this.q, firstK, dt);
+		var k = copyState(this.q);
+
+		//second and so on
+		for (var i = 1; i < 3; ++i) {
+			deriv.call(this, dt, k);
+			copyState(srcQ, this.q);
+			addMulState(this.q, k, .5 * dt);
+			addMulState(this.q, firstK, .5 * dt);
+		}
+	}
+};
+
 var addMulState = function(to, from, scalar) {
 	for (var i = 0; i < to.length; ++i) {
 		for (var j = 0; j < 3; ++j) {
@@ -468,55 +523,9 @@ var GodunovSolver = makeClass({
 	},
 	step : function(dt) {
 		var deriv = GodunovSolver.prototype.calcDerivative;
-
-		/* Euler * /
-		var dq_dt = deriv.call(this, dt);
-		addMulState(this.q, dq_dt, dt);
-		/**/
-
-		/* RK2 * /
-		var src = copyState(this.q);
-		var k1 = deriv.call(this, dt);
-		addMulState(this.q, k1, .5 * dt);
-		var k2 = deriv.call(this, dt);
-		copyState(src, this.q);
-		addMulState(this.q, k2, dt);
-		/**/
-
-		/* RK4 * /
-		var src = copyState(this.q);
-		var k1 = deriv.call(this, dt);
-		addMulState(this.q, k1, .5 * dt);
-		var k2 = deriv.call(this, dt);
-		copyState(src, this.q);
-		addMulState(this.q, k2, .5 * dt);
-		var k3 = deriv.call(this, dt);
-		copyState(src, this.q);
-		addMulState(this.q, k3, dt);
-		var k4 = deriv.call(this, dt);
-		copyState(src, this.q);
-		addMulState(this.q, k1, dt / 6);
-		addMulState(this.q, k2, dt / 3);
-		addMulState(this.q, k3, dt / 3);
-		addMulState(this.q, k4, dt / 6);
-		/**/
-	
-		/* ICN3 */
-		//first iteration
-		var srcQ = copyState(this.q);
-		var firstK = deriv.call(this, dt);
-		addMulState(this.q, firstK, dt);
-
-		//second and so on
-		for (var i = 1; i < 3; ++i) {
-			var k = deriv.call(this, dt);
-			copyState(srcQ, this.q);
-			addMulState(this.q, k, .5 * dt);
-			addMulState(this.q, firstK, .5 * dt);
-		}
-		/**/
+		explicitMethods.RK4.call(this, dt, deriv);
 	},
-	calcDerivative : function(dt) {
+	calcDerivative : function(dt, dq_dt) {
 		for (var ix = 1; ix < this.nx; ++ix) {
 			for (var j = 0; j < 3; ++j) {
 				//the change in state represented in interface eigenbasis
@@ -700,9 +709,9 @@ var GodunovSolver = makeClass({
 		}
 
 		//update cells
-		var dq_dt = [];
+		if (dq_dt === undefined) dq_dt = [];
 		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-			dq_dt[i] = [];
+			if (dq_dt[i] === undefined) dq_dt[i] = [];
 			for (var j = 0; j < 3; ++j) {
 				//this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
 				dq_dt[i][j] = -(this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
@@ -712,7 +721,6 @@ var GodunovSolver = makeClass({
 			dq_dt[i] = [0,0,0];
 			dq_dt[this.nx-i-1] = [0,0,0];
 		}
-		return dq_dt;
 	}
 });
 
@@ -1183,6 +1191,7 @@ var HydroState = makeClass({
 		this.fluxMethod = 'superbee';
 		this.simulation = 'Euler';
 		this.algorithm = 'Roe / Forward Euler';
+		this.explicitMethod = 'RK4';
 	},
 	boundary : function() {
 		boundaryMethods[this.boundaryMethod](this.nx, this.q);
@@ -1465,6 +1474,8 @@ void main() {
 	
 	buildSelect('Euler_algorithm', 'algorithm', eulerEquationSimulation.methods);	//this will change as 'simulations' changes
 	buildSelect('ADM_algorithm', 'algorithm', admEquationSimulation.methods);	//this will change as 'simulations' changes
+	
+	buildSelect('explicitMethod', 'explicitMethod', explicitMethods);
 
 	(function(){
 		var id = 'simulation';
