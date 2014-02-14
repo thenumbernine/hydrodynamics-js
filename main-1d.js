@@ -523,7 +523,7 @@ var GodunovSolver = makeClass({
 	},
 	step : function(dt) {
 		var deriv = GodunovSolver.prototype.calcDerivative;
-		explicitMethods.RK4.call(this, dt, deriv);
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	calcDerivative : function(dt, dq_dt) {
 		for (var ix = 1; ix < this.nx; ++ix) {

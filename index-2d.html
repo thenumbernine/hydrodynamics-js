@@ -3,8 +3,8 @@
 	<head>
 		<title>Learning Hydrodynamics - 2D CFD Roe Solver in WebGL</title>
 		
-		<script type='text/javascript' src='/js/jquery-1.10.0.min.js'></script>
-		<script type='text/javascript' src='../js/purl.js'></script>
+		<script type='text/javascript' src='/js/jquery-1.11.0.min.js'></script>
+		<script type='text/javascript' src='/js/purl.js'></script>
 		<script type='text/javascript' src='/js/util.js'></script>
 		<script type='text/javascript' src='/js/gl-matrix.2.2.0.min.js'></script>
 		<script type='text/javascript' src='/js/gl-util.js'></script>
@@ -31,15 +31,17 @@ _gaq.push(['_trackPageview']);
 			<img id='menu' src='menu.png' style='padding:5px'/><br>
 			<div id='content' style='display:none'>
 				<a href='README' target='_blank'>README</a><br>
-				<button id='resetSod'>Reset Sod</button><br>
-				<button id='resetSodCylinder'>Reset Sod w/ Cylinder</button><br>
-				<button id='resetWave'>Reset Wave</button><br>
-				<button id='resetKelvinHemholtz'>Reset Kelvin-Hemholtz</button><br>
-				<button id='resetRayleighTaylor'>Reset Rayleigh-Taylor</button><br>
+				<div id='resetPanel'></div>
 				<input id='useNoise' type='checkbox' name='useNoise' checked='true'/>Perturb Initial Velocity</input><br>
 				<br>
 				Size:
 				<select id='gridsize'></select><br>
+				
+				<div id='Euler_controls'>
+					Algorithm:
+					<select id='Euler_algorithm'></select><br>
+				</div>
+				
 				Boundary:<br>
 				<span style='padding-left:25px'>Top: </span>
 				<select id='boundaryMethodTop'></select>
@@ -59,12 +61,7 @@ _gaq.push(['_trackPageview']);
 				<br>
 				Flux Limiter:
 				<select id='fluxMethod'></select><br>
-				Advect:
-				<select id='advectMethod'></select><br>
-				<!--	
-				Integrator:
-				<select id='integrationMethod'></select><br>
-				-->
+
 				Display Method:
 				<select id='drawToScreenMethod'></select><br>
 				Color Scheme:
