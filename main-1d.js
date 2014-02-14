@@ -52,69 +52,12 @@ function mat33invert(out, a) {
 }
 
 var copyState = function(srcQ, destQ) {
-	if (destQ === undefined) destQ = [];
 	for (var i = 0; i < srcQ.length; ++i) {
-		if (destQ[i] === undefined) destQ[i] = [];
 		for (var j = 0; j < 3; ++j) {
 			destQ[i][j] = srcQ[i][j];
 		}
 	}
 	return destQ;
-};
-
-var explicitMethods = {
-	Euler : function(dt, deriv) {
-		var dq_dt = copyState(this.q);
-		deriv.call(this, dt, dq_dt);
-		addMulState(this.q, dq_dt, dt);
-	},
-	RK2 : function(dt, deriv) {
-		var src = copyState(this.q);
-		var k1 = copyState(this.q);
-		deriv.call(this, dt, k1);
-		addMulState(this.q, k1, .5 * dt);
-		var k2 = copyState(this.q);
-		deriv.call(this, dt, k2);
-		copyState(src, this.q);
-		addMulState(this.q, k2, dt);
-	},
-	RK4 : function(dt, deriv) {
-		var src = copyState(this.q);
-		var k1 = copyState(this.q);
-		deriv.call(this, dt, k1);
-		addMulState(this.q, k1, .5 * dt);
-		var k2 = copyState(this.q);
-		deriv.call(this, dt, k2);
-		copyState(src, this.q);
-		addMulState(this.q, k2, .5 * dt);
-		var k3 = copyState(this.q);
-		deriv.call(this, dt, k3);
-		copyState(src, this.q);
-		addMulState(this.q, k3, dt);
-		var k4 = copyState(this.q);
-		deriv.call(this, dt, k4);
-		copyState(src, this.q);
-		addMulState(this.q, k1, dt / 6);
-		addMulState(this.q, k2, dt / 3);
-		addMulState(this.q, k3, dt / 3);
-		addMulState(this.q, k4, dt / 6);
-	},
-	ICN3 : function(dt, deriv) {
-		//first iteration
-		var srcQ = copyState(this.q);
-		var firstK = copyState(this.q);
-		deriv.call(this, dt, firstK);
-		addMulState(this.q, firstK, dt);
-		var k = copyState(this.q);
-
-		//second and so on
-		for (var i = 1; i < 3; ++i) {
-			deriv.call(this, dt, k);
-			copyState(srcQ, this.q);
-			addMulState(this.q, k, .5 * dt);
-			addMulState(this.q, firstK, .5 * dt);
-		}
-	}
 };
 
 var addMulState = function(to, from, scalar) {
@@ -1123,6 +1066,15 @@ var HydroState = makeClass({
 			this.q[i] = [];
 		}
 
+		this.tmpq = [];
+		for (var j = 0; j < 5; ++j) {
+			this.tmpq[j] = [];
+			for (var i = 0; i < this.nx; ++i) {
+				this.tmpq[j][i] = [];
+			}
+		}
+
+
 		eulerEquationSimulation.initialConditions.Sod.call(this);
 		
 		//p_i: pressure
@@ -1191,7 +1143,7 @@ var HydroState = makeClass({
 		this.fluxMethod = 'superbee';
 		this.simulation = 'Euler';
 		this.algorithm = 'Roe / Forward Euler';
-		this.explicitMethod = 'RK4';
+		this.explicitMethod = 'Euler';
 	},
 	boundary : function() {
 		boundaryMethods[this.boundaryMethod](this.nx, this.q);
