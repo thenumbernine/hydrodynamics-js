@@ -157,10 +157,16 @@ d/dt (rho e_total) + d/dx (rho e_total u) + d/dx (P u) = 0
 var EulerEquationBurgersForwardEuler = makeClass({
 	super : EulerEquationBurgersSolver,
 	step : function(dt) {
-		var deriv = EulerEquationBurgersForwardEuler.prototype.calcDerivative;
-		explicitMethods[this.explicitMethod].call(this, dt, deriv);
+		//boundary precedes this call
+		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersForwardEuler.prototype.integrateFlux);
+		
+		//boundary again
+		this.boundary();
+		
+		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersForwardEuler.prototype.integrateMomentumDiffusion);
+		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersForwardEuler.prototype.integrateWorkDiffusion);
 	},
-	calcDerivative : function(dt, dq_dt) {
+	integrateFlux : function(dt, dq_dt) {
 		assert(this.x.length == this.nx);
 		assert(this.xi.length == this.nx + 1);
 		assert(this.q.length == this.nx);
@@ -213,13 +219,9 @@ var EulerEquationBurgersForwardEuler = makeClass({
 				dq_dt[this.nx-i-1] = [0,0,0];
 			}
 		}			
-	
-		// apply pressure source terms
-		
-		//boundary again
-		this.boundary();
-
-		//compute pressure
+	},
+	//compute pressure
+	integrateMomentumDiffusion : function(dt, dq_dt) {
 		for (var i = 0; i < this.nx; ++i) {
 			var u = this.q[i][1] / this.q[i][0];
 			var energyTotal = this.q[i][2] / this.q[i][0];
@@ -230,14 +232,19 @@ var EulerEquationBurgersForwardEuler = makeClass({
 
 		//apply momentum diffusion = pressure
 		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-			this.q[i][1] -= dt * (this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
+			dq_dt[i][0] = 0;
+			dq_dt[i][1] = -(this.pressure[i+1] - this.pressure[i-1]) / (this.x[i+1] - this.x[i-1]);
+			dq_dt[i][2] = 0;
 		}
-
+	},
+	integrateWorkDiffusion : function(dt, dq_dt) {
 		//apply work diffusion = momentum
 		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
 			var u_inext = this.q[i+1][1] / this.q[i+1][0];
 			var u_iprev = this.q[i-1][1] / this.q[i-1][0];
-			this.q[i][2] -= dt * (this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
+			dq_dt[i][0] = 0;
+			dq_dt[i][1] = 0;
+			dq_dt[i][2] = -(this.pressure[i+1] * u_inext - this.pressure[i-1] * u_iprev) / (this.x[i+1] - this.x[i-1]);
 		}
 	}
 });
