@@ -11,6 +11,7 @@
 		<script type='text/javascript' src='/js/gl-util-gradient.js'></script>
 		<script type='text/javascript' src='/js/mouse3d.js'></script>
 		<script type='text/javascript' src='flux_methods.js'></script>
+		<script type='text/javascript' src='explicit_methods.js'></script>
 		<script type='text/javascript' src='main-2d.js'></script>
 		
 <script type='text/javascript'>
@@ -85,6 +86,11 @@ _gaq.push(['_trackPageview']);
 					<input id='timeStepCFL' value='.5'/><br>
 				<input id='timeStepFixed' type='radio' group='timeStep' name='timeStep'/>Fixed
 					<input id='timeStepValue' value='1'/><br>
+				<br>
+				
+				Explicit Integration:
+				<select id='explicitMethod'></select>
+				<br>
 				<br>
 
 				<input type='radio' group='dimension' onclick='location.href="index-1d.html"'>1D</input><br>

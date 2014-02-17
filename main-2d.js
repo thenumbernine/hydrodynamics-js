@@ -166,6 +166,19 @@ var drawToScreenMethods = {
 	}
 };
 
+var copyState = function(srcQ, destQ) {
+	for (var i = 0; i < srcQ.length; ++i) {
+		destQ[i] = srcQ[i];
+	}
+	return destQ;
+};
+
+var addMulState = function(to, from, scalar) {
+	for (var i = 0; i < to.length; ++i) {
+		to[i] += scalar * from[i];
+	}
+};
+
 var boundaryMethods = {
 	none : {top : function() {}, left : function() {}, right : function() {}, bottom : function() {}},
 	periodic : {
@@ -940,6 +953,10 @@ var GodunovSolver = makeClass({
 		return this.cfl * mindum;
 	},
 	step : function(dt) {
+		var deriv = GodunovSolver.prototype.calcDerivative;
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
+	},
+	calcDerivative : function(dt, dq_dt) {
 		var qLs = [];
 		var qRs = [];
 		for (var j = 1; j < this.nx; ++j) {
@@ -1149,12 +1166,34 @@ var GodunovSolver = makeClass({
 				}
 			}
 		}
+				
+		for (var j = 0; j < this.nghost; ++j) {
+			for (var i = 0; i < this.nx; ++i) {
+				for (var state = 0; state < 4; ++state) {
+					//deriv while we're here
+					//left
+					dq_dt[state + 4 * (j + this.nx * i)] = 0;
+					//right
+					dq_dt[state + 4 * (this.nx-1-j + this.nx * i)] = 0;
+					//bottom
+					dq_dt[state + 4 * (i + this.nx * j)] = 0;
+					//top
+					dq_dt[state + 4 * (i + this.nx * (this.nx-1-j))] = 0;
+				}
+			}
+		}
 
 		//update cells
 		for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				if (this.solid[i + this.nx * j]) continue;
+				for (var state = 0; state < 4; ++state) {
+					dq_dt[state + 4 * (i + this.nx * j)] = 0;
+				}
 				
+				if (this.solid[i + this.nx * j]) {
+					continue;
+				}
+
 				var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
 				var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
 				var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
@@ -1174,7 +1213,7 @@ var GodunovSolver = makeClass({
 						var interfaceFluxIndexR = state + 4 * interfaceIndexR;
 						var interfaceFluxIndexL = state + 4 * interfaceIndexL;
 						var df = this.flux[interfaceFluxIndexR] - this.flux[interfaceFluxIndexL];
-						this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
+						dq_dt[state + 4 * (i + this.nx * j)] -= df / dxi[side];//* volume / (dxi[side] * dxi[side]);
 					}
 				}
 			}
@@ -1727,6 +1766,20 @@ var HydroState = makeClass({
 			}
 		}
 
+		this.tmpq = [];
+		for (var k = 0; k < 5; ++k) {
+			this.tmpq[k] = new Float64Array(this.nx * this.nx * 4);
+			var e = 0;
+			for (var j = 0; j < this.nx; ++j) {
+				for (var i = 0; i < this.nx; ++i) {
+					for (var state = 0; state < 4; ++state) {
+						this.tmpq[k][e] = 0; ++e;
+					}
+				}
+			}
+		}
+
+
 		//my first attempt at arbitrary boundaries ...
 		this.solid = new Float64Array(this.nx * this.nx);
 		var e = 0;
@@ -1846,10 +1899,6 @@ var HydroState = makeClass({
 		}
 
 
-		//used for Forward Euler
-		this.dq_dt = new Float64Array(this.nx * this.nx * 4);
-
-
 		//used for Backward Euler + Gauss-Seidel
 		this.oldQ = new Float64Array(this.nx * this.nx * 4);
 
@@ -1863,7 +1912,7 @@ var HydroState = makeClass({
 		this.boundaryMethodBottom = 'mirror';
 		this.fluxMethod = 'superbee';
 		this.algorithm = 'Roe / Explicit';
-		this.explicitMethod = 'RK4';
+		this.explicitMethod = 'Euler';
 		this.drawToScreenMethod = 'Density';
 	},
 	boundary : function() {
@@ -2067,6 +2116,8 @@ $(document).ready(function(){
 	buildSelect('fluxMethod', 'fluxMethod', fluxMethods);
 	buildSelect('drawToScreenMethod', 'drawToScreenMethod', drawToScreenMethods);
 	buildSelect('Euler_algorithm', 'algorithm', eulerEquationSimulation.methods);
+	
+	buildSelect('explicitMethod', 'explicitMethod', explicitMethods);
 	
 	$.each([
 		'externalForceX',
