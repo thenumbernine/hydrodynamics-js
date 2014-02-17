@@ -157,6 +157,10 @@ d/dt (rho e_total) + d/dx (rho e_total u) + d/dx (P u) = 0
 var EulerEquationBurgersForwardEuler = makeClass({
 	super : EulerEquationBurgersSolver,
 	step : function(dt) {
+		var deriv = EulerEquationBurgersForwardEuler.prototype.calcDerivative;
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
+	},
+	calcDerivative : function(dt, dq_dt) {
 		assert(this.x.length == this.nx);
 		assert(this.xi.length == this.nx + 1);
 		assert(this.q.length == this.nx);
@@ -202,7 +206,11 @@ var EulerEquationBurgersForwardEuler = makeClass({
 
 			//update cells
 			for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-				this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
+				dq_dt[i][j] = -(this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
+			}
+			for (var i = 0; i < this.nghost; ++i) {
+				dq_dt[i] = [0,0,0];
+				dq_dt[this.nx-i-1] = [0,0,0];
 			}
 		}			
 	
@@ -652,11 +660,8 @@ var GodunovSolver = makeClass({
 		}
 
 		//update cells
-		if (dq_dt === undefined) dq_dt = [];
 		for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
-			if (dq_dt[i] === undefined) dq_dt[i] = [];
 			for (var j = 0; j < 3; ++j) {
-				//this.q[i][j] -= dt * (this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
 				dq_dt[i][j] = -(this.flux[i+1][j] - this.flux[i][j]) / (this.xi[i+1] - this.xi[i]);
 			}
 		}
