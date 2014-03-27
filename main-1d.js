@@ -987,20 +987,7 @@ var ADMEquationGodunovForwardEuler = makeClass({
 	},
 	step : function(dt) {
 		var deriv = ADMEquationGodunovForwardEuler.prototype.calcDerivative;
-
-		//ICN3:
-		//first iteration
-		var srcQ = copyState(this.q);
-		var firstK = deriv.call(this, dt);
-		addMulState(this.q, firstK, dt);
-
-		//second and so on
-		for (var i = 1; i < 3; ++i) {
-			var k = deriv.call(this, dt);
-			copyState(srcQ, this.q);
-			addMulState(this.q, k, .5 * dt);
-			addMulState(this.q, firstK, .5 * dt);
-		}
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
 		return this.q[i];

@@ -607,6 +607,126 @@ var advectMethods = {
 	}
 };
 
+/*
+EulerEquationBurgersSolver
+	EulerEquationBurgersExplicit	<- getting carbuncle inaccuracies
+	EulerEquationBurgersBackwardEulerGaussSeidel	<- not on the GPU yet
+GodunovSolver	<- not stable yet
+	EulerEquationGodunovSolver
+		EulerEquationGodunovExplicit
+		EulerEquationRoeExplicit
+*/
+
+var eulerEquationSimulation = {
+	methods : {
+	/*
+		'Burgers / Explicit' : EulerEquationBurgersExplicit.prototype,
+		'Burgers / Backward Euler via Gauss Seidel' : EulerEquationBurgersBackwardEulerGaussSeidel.prototype,
+		'Godunov / Explicit' : EulerEquationGodunovExplicit.prototype,
+		'Roe / Explicit' : EulerEquationRoeExplicit.prototype
+	*/
+	},
+	initialConditions : {
+		Sod : function() {
+			var thiz = this;
+			gl.viewport(0, 0, this.nx, this.nx);
+			fbo.setColorAttachmentTex2D(0, this.qTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : resetSodShader,
+						uniforms : {
+							noiseAmplitude : useNoise ? noiseAmplitude : 0
+						},
+						texs : [thiz.noiseTex]
+					});
+				}
+			});
+			fbo.setColorAttachmentTex2D(0, this.solidTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : solidShader
+					});
+				}
+			});
+		},
+		SodCylinder : function() {
+			var thiz = this;
+			gl.viewport(0, 0, this.nx, this.nx);
+			fbo.setColorAttachmentTex2D(0, this.qTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : resetSodShader,
+						uniforms : {
+							noiseAmplitude : useNoise ? noiseAmplitude : 0
+						},
+						texs : [thiz.noiseTex]
+					});
+				}
+			});
+			fbo.setColorAttachmentTex2D(0, this.solidTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : resetSodCylinderSolidShader
+					});
+				}
+			});
+		},
+		Wave : function() {
+			var thiz = this;
+			gl.viewport(0, 0, this.nx, this.nx);
+			fbo.setColorAttachmentTex2D(0, this.qTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : resetWaveShader,
+						uniforms : {
+							noiseAmplitude : useNoise ? noiseAmplitude : 0
+						},
+						texs : [thiz.noiseTex]
+					});
+				}
+			});
+			fbo.setColorAttachmentTex2D(0, this.solidTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : solidShader
+					});
+				}
+			});
+		},
+		//http://www.astro.princeton.edu/~jstone/Athena/tests/kh/kh.html
+		KelvinHemholtz : function() {
+			var thiz = this;
+			gl.viewport(0, 0, this.nx, this.nx);
+			fbo.setColorAttachmentTex2D(0, this.qTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : resetKelvinHemholtzShader,
+						uniforms : {
+							noiseAmplitude : useNoise ? noiseAmplitude : 0
+						},
+						texs : [thiz.noiseTex]
+					});
+				}
+			});
+			fbo.setColorAttachmentTex2D(0, this.solidTex);
+			fbo.draw({
+				callback : function() {
+					quadObj.draw({
+						shader : solidShader
+					});
+				}
+			});
+		}
+	}
+};
+
 var HydroState = makeClass({ 
 	init : function(args) {
 		var thiz = this;
@@ -793,7 +913,9 @@ var HydroState = makeClass({
 
 		//initial conditions
 		this.resetSod();
+		//eulerEquations.initialConditions.Sod.call(this);
 	},
+	//begin delete
 	resetSod : function() {
 		var thiz = this;
 		gl.viewport(0, 0, this.nx, this.nx);
@@ -891,6 +1013,7 @@ var HydroState = makeClass({
 			}
 		});
 	},
+	//end delete
 	boundary : function() {
 		boundaryMethods[this.boundaryMethod].call(this);
 	},
