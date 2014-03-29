@@ -681,38 +681,84 @@ var GodunovSolver = makeClass({
 
 var EulerEquationGodunovSolver = makeClass({
 	super : GodunovSolver,
-	buildEigenstate : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
-		//calculate matrix & eigenvalues & vectors at interface from state at interface
-		var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
-		//matrix, listed per column
-		matrix[0][0] = 0;
-		matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
-		matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
-		matrix[1][0] = 1;
-		matrix[1][1] = (3 - gamma) * velocity;
-		matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
-		matrix[2][0] = 0;
-		matrix[2][1] = gamma - 1;
-		matrix[2][2] = gamma * velocity;
+	buildEigenstate : {
+		Analytic : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+			//calculate matrix & eigenvalues & vectors at interface from state at interface
+			var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
+			
+			//matrix, listed per column
+			matrix[0][0] = 0;
+			matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
+			matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
+			matrix[1][0] = 1;
+			matrix[1][1] = (3 - gamma) * velocity;
+			matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
+			matrix[2][0] = 0;
+			matrix[2][1] = gamma - 1;
+			matrix[2][2] = gamma * velocity;
 
-		//eigenvalues: min, mid, max
-		eigenvalues[0] = velocity - speedOfSound;
-		eigenvalues[1] = velocity;
-		eigenvalues[2] = velocity + speedOfSound;
-		//min eigenvector
-		eigenvectors[0][0] = 1;
-		eigenvectors[0][1] = velocity - speedOfSound;
-		eigenvectors[0][2] = hTotal - speedOfSound * velocity;
-		//mid eigenvector
-		eigenvectors[1][0] = 1;
-		eigenvectors[1][1] = velocity;
-		eigenvectors[1][2] = .5 * velocity * velocity;
-		//max eigenvector
-		eigenvectors[2][0] = 1;
-		eigenvectors[2][1] = velocity + speedOfSound;
-		eigenvectors[2][2] = hTotal + speedOfSound * velocity;
-		//calculate eigenvector inverses ... 
-		mat33invert(eigenvectorsInverse, eigenvectors);
+			//eigenvalues: min, mid, max
+			eigenvalues[0] = velocity - speedOfSound;
+			eigenvalues[1] = velocity;
+			eigenvalues[2] = velocity + speedOfSound;
+			//min eigenvector
+			eigenvectors[0][0] = 1;
+			eigenvectors[0][1] = velocity - speedOfSound;
+			eigenvectors[0][2] = hTotal - speedOfSound * velocity;
+			//mid eigenvector
+			eigenvectors[1][0] = 1;
+			eigenvectors[1][1] = velocity;
+			eigenvectors[1][2] = .5 * velocity * velocity;
+			//max eigenvector
+			eigenvectors[2][0] = 1;
+			eigenvectors[2][1] = velocity + speedOfSound;
+			eigenvectors[2][2] = hTotal + speedOfSound * velocity;
+			//calculate eigenvector inverses ... 
+			mat33invert(eigenvectorsInverse, eigenvectors);
+		},
+		Numeric : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+			//calculate matrix & eigenvalues & vectors at interface from state at interface
+			var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
+			
+			//matrix, listed per column
+			matrix[0][0] = 0;
+			matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
+			matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
+			matrix[1][0] = 1;
+			matrix[1][1] = (3 - gamma) * velocity;
+			matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
+			matrix[2][0] = 0;
+			matrix[2][1] = gamma - 1;
+			matrix[2][2] = gamma * velocity;
+		
+			//eig and svd of numeric javascript are crapping out on me
+			//time to implement my own version of numeric methods' SVD algorithmm...
+			try {
+				svd(matrix, eigenvectors, eigenvalues, eigenvectorsInverse);
+			} catch (e) {
+				console.log('failed on matrix',matrix);
+				throw e;
+			}
+			//re-inverting them with the Cramer rule seems to get more
+			//stability than using the SVD V* ...
+			mat33invert(eigenvectorsInverse, eigenvectors);
+	
+			//not V* nor V*T seem to work well for an inverse ...
+			/*
+			var tmp = new Array(3);
+			for (var i = 0; i < 3; ++i) {
+				tmp[i] = new Array(3);
+				for (var j = 0; j < 3; ++j) {
+					tmp[i][j] = eigenvectorsInverse[j][i];
+				}
+			}
+			for (var i = 0; i < 3; ++i) {
+				for (var j = 0; j < 3; ++j) {
+					eigenvectorsInverse[i][j] = tmp[i][j];
+				}
+			}
+			*/
+		}
 	},
 	getPrimitives : eulerGetPrimitives
 });
@@ -757,7 +803,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 			var hTotal = .5 * (hTotalL + hTotalR);
 
 			//compute eigenvectors and values at the interface based on averages
-			EulerEquationGodunovForwardEuler.prototype.buildEigenstate.call(this,
+			EulerEquationGodunovForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
@@ -814,7 +860,7 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
 
 			//compute eigenvectors and values at the interface based on Roe averages
-			EulerEquationRoeForwardEuler.prototype.buildEigenstate.call(this,
+			EulerEquationRoeForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
@@ -1020,10 +1066,131 @@ var admEquationSimulation = {
 	}
 };
 
+var mu0 = 1;	//permittivity of free space
+var sqrtMu0 = Math.sqrt(mu0)
+
+function mhdEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, alpha, g) {
+	
+	matrix[0][0] = 0;
+	matrix[0][1] = 0;
+	matrix[0][2] = alpha * oneOverSqrtG;
+	
+	matrix[1][0] = 0;
+	matrix[1][1] = 0;
+	matrix[1][2] = 0;
+	
+	matrix[2][0] = alpha * f * oneOverSqrtG;
+	matrix[2][1] = 2 * alpha * oneOverSqrtG;
+	matrix[2][2] = 0;
+
+	eigenvalues[0] = -alpha * sqrtF * oneOverSqrtG;
+	eigenvalues[1] = 0;
+	eigenvalues[2] = -eigenvalues[0];
+
+	//column 0: min
+	eigenvectors[0][0] = f;
+	eigenvectors[0][1] = 2;
+	eigenvectors[0][2] = -sqrtF;
+
+	//column 1: mid
+	eigenvectors[1][0] = 0;
+	eigenvectors[1][1] = 1;
+	eigenvectors[1][2] = 0;
+
+	//column 2: max
+	eigenvectors[2][0] = f;
+	eigenvectors[2][1] = 2;
+	eigenvectors[2][2] = sqrtF;
+
+	//...and the inverse...
+}
+
+
+var MHDEquationGodunovForwardEuler = makeClass({
+	super : GodunovSolver,
+	initStep : function() {
+		var dx = (xmax - xmin) / this.nx;
+		//same idea as Godunov but with Roe weighting: sqrt(rho)
+		for (var ix = 2; ix < this.nx-1; ++ix) {
+			var ixL = ix-1;
+			var ixR = ix;
+
+			//q_ix,0 = d/dx ln alpha
+			var ln_alpha_L = (this.q[ixL+1][0] - this.q[ixL-1][0]) / (2 * dx);
+			var alpha_L = Math.exp(ln_alpha_L);
+
+			//q_ix,1 = d/dx ln g
+			var ln_g_L = (this.q[ixL+1][0] - this.q[ixL-1][0]) / (2 * dx);
+			var g_L = Math.exp(ln_g_L);
+
+			var ln_alpha_R = (this.q[ixR+1][0] - this.q[ixR-1][0]) / (2 * dx);
+			var alpha_R = Math.exp(ln_alpha_R);
+			
+			var ln_g_R = (this.q[ixR+1][0] - this.q[ixR-1][0]) / (2 * dx);
+			var g_R = Math.exp(ln_g_R);
+
+			var alpha = .5 * (alpha_L + alpha_R);
+			var g = .5 * (g_L + g_R);
+
+			//compute eigenvectors and values at the interface based on Roe averages
+			mhdEquationsBuildEigenstate(
+				this.interfaceMatrix[ix],
+				this.interfaceEigenvalues[ix], 
+				this.interfaceEigenvectors[ix], 
+				this.interfaceEigenvectorsInverse[ix], 
+				alpha, g);
+		}
+		//how about those boundary eigenstates?
+	},
+	step : function(dt) {
+		var deriv = MHDEquationGodunovForwardEuler.prototype.calcDerivative;
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
+	},
+	getPrimitives : function(i) {
+		var rho = this.q[0];
+		return [
+			rho, this.q[1] / rho, this.q[2] / rho, this.q[3] / rho,
+			this.q[4] / rho, this.q[5] * sqrtMu0, this.q[6] * sqrtMu0, this.q[7] * sqrtMu0
+		];
+	}
+});
+
+
+var mhdEquationSimulation = {
+	methods : {
+		'Godunov / Forward Euler' : MHDEquationGodunovForwardEuler.prototype
+	},
+	initialConditions : {
+		Sod : function() {
+			this.resetCoordinates(-1, 1);
+			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[i];
+				var rho = (x < (xmin * .7 + xmax * .3)) ? 1 : .1;
+				var u = 0;
+				var v = 0;
+				var w = 0;
+				var eTotal = 1;
+				var Bx = 0;
+				var By = 0;
+				var Bz = 0;
+				this.q[i][0] = rho; 
+				this.q[i][1] = rho * u; 
+				this.q[i][2] = rho * v;
+				this.q[i][3] = rho * w;
+				this.q[i][4] = rho * eTotal; 
+				this.q[i][5] = Bx / sqrtMu0;
+				this.q[i][6] = By / sqrtMu0;
+				this.q[i][7] = Bz / sqrtMu0;
+			}
+		}
+	}
+};
+
 //hmm, maybe I should combine all of these into one list, and have them individuall state who they belong to
 var simulations = {
 	Euler : eulerEquationSimulation,
-	ADM : admEquationSimulation
+	ADM : admEquationSimulation,
+	//MHD : mhdEquationSimulation
 };
 
 var HydroState = makeClass({ 
@@ -1142,6 +1309,7 @@ var HydroState = makeClass({
 		this.fluxMethod = 'superbee';
 		this.simulation = 'Euler';
 		this.algorithm = 'Roe / Forward Euler';
+		this.eigenDecomposition = 'Analytic';
 		this.explicitMethod = 'Euler';
 	},
 	boundary : function() {
@@ -1425,7 +1593,9 @@ void main() {
 	
 	buildSelect('Euler_algorithm', 'algorithm', eulerEquationSimulation.methods);	//this will change as 'simulations' changes
 	buildSelect('ADM_algorithm', 'algorithm', admEquationSimulation.methods);	//this will change as 'simulations' changes
-	
+
+	buildSelect('eigenDecomposition', 'eigenDecomposition', {Analytic:true, Numeric:true});
+
 	buildSelect('explicitMethod', 'explicitMethod', explicitMethods);
 
 	(function(){

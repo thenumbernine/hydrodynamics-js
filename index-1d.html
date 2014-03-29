@@ -9,6 +9,7 @@
 		<script type='text/javascript' src='/js/gl-matrix.2.2.0.min.js'></script>
 		<script type='text/javascript' src='/js/gl-util.js'></script>
 		<script type='text/javascript' src='/js/mouse3d.js'></script>
+		<script type='text/javascript' src='svd.js'></script>
 		<script type='text/javascript' src='flux_methods.js'></script>
 		<script type='text/javascript' src='explicit_methods.js'></script>
 		<script type='text/javascript' src='main-1d.js'></script>
@@ -40,7 +41,7 @@ _gaq.push(['_trackPageview']);
 				
 				<div id='Euler_controls' style='display:none'>
 					Algorithm:
-					<select id='Euler_algorithm'></select><br>
+					<select id='Euler_algorithm'></select>
 				</div>
 
 				<div id='ADM_controls' style='display:none'>
@@ -54,7 +55,11 @@ _gaq.push(['_trackPageview']);
 				<select id='boundaryMethod'></select><br>
 				Flux Limiter:
 				<select id='fluxMethod'></select><br>
-		
+					
+				<!-- TODO only show this when an EOS selects a Riemann-based method -->
+				Eigen Decomposition:
+				<select id='eigenDecomposition'></select><br>
+
 				<br>
 				Timestep:<br>
 				<input id='timeStepCFLBased' type='radio' group='timeStep' name='timeStep' checked='checked'/>CFL-based
