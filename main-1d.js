@@ -717,6 +717,7 @@ var EulerEquationGodunovSolver = makeClass({
 			mat33invert(eigenvectorsInverse, eigenvectors);
 		},
 		Numeric : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+			
 			//calculate matrix & eigenvalues & vectors at interface from state at interface
 			var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
 			
@@ -730,34 +731,117 @@ var EulerEquationGodunovSolver = makeClass({
 			matrix[2][0] = 0;
 			matrix[2][1] = gamma - 1;
 			matrix[2][2] = gamma * velocity;
+
+			//analytic eigenvectors and eigenvalues
+
+			//eigenvalues: min, mid, max
+			eigenvalues[0] = velocity - speedOfSound;
+			eigenvalues[1] = velocity;
+			eigenvalues[2] = velocity + speedOfSound;
+			//min eigenvector
+			eigenvectors[0][0] = 1;
+			eigenvectors[0][1] = velocity - speedOfSound;
+			eigenvectors[0][2] = hTotal - speedOfSound * velocity;
+			//mid eigenvector
+			eigenvectors[1][0] = 1;
+			eigenvectors[1][1] = velocity;
+			eigenvectors[1][2] = .5 * velocity * velocity;
+			//max eigenvector
+			eigenvectors[2][0] = 1;
+			eigenvectors[2][1] = velocity + speedOfSound;
+			eigenvectors[2][2] = hTotal + speedOfSound * velocity;		
+			//calculate eigenvector inverses ... 
+			mat33invert(eigenvectorsInverse, eigenvectors);
+
+			//reconstructed from analytic ... works
+			// just don't forget that a_ij = a[j][i] (i.e. transpose your i's and j's and all your other matrix index references)
+			/*
+			totalError = 0;
+			lastReconstructedMatrix = [];
+			lastMatrix = [];
+			lastError = [];
+			for (var i = 0; i < 3; ++i) {
+				lastReconstructedMatrix[i] = [];
+				lastMatrix[i] = [];
+				lastError[i] = [];
+				for (var j = 0; j < 3; ++j) {
+					var desired = matrix[i][j];
+					
+					//a_ij = q_ik l_k invq_kj
+					var sum = 0;
+					for (var k = 0; k < 3; ++k) {
+						sum += eigenvectors[k][j] * eigenvalues[k] * eigenvectorsInverse[i][k];
+					}
+					lastMatrix[i][j] = desired; 
+					lastReconstructedMatrix[i][j] = sum;
+
+					lastError[i][j] = Math.abs(sum - desired);
+					totalError += lastError[i][j];
+				}
+			}
+			*/
 		
-			//eig and svd of numeric javascript are crapping out on me
-			//time to implement my own version of numeric methods' SVD algorithmm...
+			var matrixRowMajor = [];
+			for (var i = 0; i < 3; ++i) {
+				matrixRowMajor[i] = [];
+				for (var j = 0; j < 3; ++j) {
+					matrixRowMajor[i][j] = matrix[j][i];
+				}
+			}
+			var u = [];
+			var w = [];
+			var v = [];
+
 			try {
-				svd(matrix, eigenvectors, eigenvalues, eigenvectorsInverse);
+				//uses row major when my storage is column major
+				svd(matrixRowMajor, u/*eigenvectors*/, w/*eigenvalues*/, v/*eigenvectorsInverse*/);
 			} catch (e) {
 				console.log('failed on matrix',matrix);
 				throw e;
 			}
-			//re-inverting them with the Cramer rule seems to get more
-			//stability than using the SVD V* ...
+/* uncomment this when you feel safe using this */
+			for (var i = 0; i < 3; ++i) {
+				eigenvalues[i] = w[i];
+				for (var j = 0; j < 3; ++j) {
+					eigenvectors[i][j] = u[j][i];
+					eigenvectorsInverse[i][j] = v[i][j];
+				}
+			}
+			//using v^t causes the system to explode, so 
+			//re-calculate eigenvector inverses
 			mat33invert(eigenvectorsInverse, eigenvectors);
-	
-			//not V* nor V*T seem to work well for an inverse ...
+/**/
+			
 			/*
-			var tmp = new Array(3);
-			for (var i = 0; i < 3; ++i) {
-				tmp[i] = new Array(3);
-				for (var j = 0; j < 3; ++j) {
-					tmp[i][j] = eigenvectorsInverse[j][i];
-				}
-			}
-			for (var i = 0; i < 3; ++i) {
-				for (var j = 0; j < 3; ++j) {
-					eigenvectorsInverse[i][j] = tmp[i][j];
-				}
-			}
+			according to this, the difference between my svd-reconstructed matrix
+			and the matrix itself is never more than 1e-13 ... 
+			so why the oscillations?
 			*/
+			totalError = 0;
+			lastReconstructedMatrix = [];
+			lastMatrix = [];
+			lastError = [];
+			for (var i = 0; i < 3; ++i) {
+				lastReconstructedMatrix[i] = [];
+				lastMatrix[i] = [];
+				lastError[i] = [];
+				for (var j = 0; j < 3; ++j) {
+					var desired = matrix[i][j];
+					
+					//a_ij = q_ik l_k invq_kj
+					var sum = 0;
+					for (var k = 0; k < 3; ++k) {
+						sum += u[j][k] * w[k] * v[i][k];
+					}
+					lastMatrix[i][j] = desired; 
+					lastReconstructedMatrix[i][j] = sum;
+
+					lastError[i][j] = Math.abs(sum - desired);
+					totalError += lastError[i][j];
+				}
+			}
+			if (!('maximalError' in window)) maximalError = 0;
+			maximalError = Math.max(maximalError === undefined ? 0 : maximalError, totalError);
 		}
 	},
 	getPrimitives : eulerGetPrimitives

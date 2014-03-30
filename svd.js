@@ -129,7 +129,7 @@ function svd(a, u, w, v)
 		++u[i][i];
 	}
 	for (k=n-1;k>=0;k--) { /* Diagonalization of the bidiagonal form. */
-		for (its=1;its<=30;its++) {
+		for (its=1;its<=100;its++) {
 			flag=1;
 			for (l=k;l>=0;l--) { /* Test for splitting. */
 				nm=l-1; /* Note that rv1[1] is always zero. */
@@ -168,7 +168,7 @@ function svd(a, u, w, v)
 				}
 				break;
 			}
-			if (its == 30) throw "no convergence in 30 svd iterations";
+			if (its == 100) throw "no convergence in 100 svd iterations";
 			x=w[l]; /* Shift from bottom 2-by-2 minor. */
 			nm=k-1;
 			y=w[nm];
