@@ -463,6 +463,8 @@ var EulerEquationBurgersBackwardEulerTridiagonal = makeClass({
 
 
 var GodunovSolver = makeClass({
+	//update first calls initStep and then aclls calcCFLTimestep
+	//initStep is abstract.  it is where the eigen decomposition takes place.
 	/*
 	store eigenvalues and eigenvectors of interfaces
 	use the lambdas to calc the DT based on CFL
@@ -799,6 +801,7 @@ var EulerEquationGodunovSolver = makeClass({
 				console.log('failed on matrix',matrix);
 				throw e;
 			}
+
 /* uncomment this when you feel safe using this */
 			for (var i = 0; i < 3; ++i) {
 				eigenvalues[i] = w[i];
@@ -818,9 +821,12 @@ var EulerEquationGodunovSolver = makeClass({
 			so why the oscillations?
 			*/
 			totalError = 0;
+			totalEigenError = 0;
 			lastReconstructedMatrix = [];
 			lastMatrix = [];
 			lastError = [];
+			lastEigenvalues = [];
+			lastReconstructedEigenvalues = [];
 			for (var i = 0; i < 3; ++i) {
 				lastReconstructedMatrix[i] = [];
 				lastMatrix[i] = [];
@@ -839,9 +845,16 @@ var EulerEquationGodunovSolver = makeClass({
 					lastError[i][j] = Math.abs(sum - desired);
 					totalError += lastError[i][j];
 				}
+				lastEigenvalues[i] = eigenvalues[i];
+				lastReconstructedEigenvalues[i] = w[i];
+				var eigenError = Math.abs(eigenvalues[i] - w[i]);
+				totalEigenError += eigenError;
 			}
 			if (!('maximalError' in window)) maximalError = 0;
 			maximalError = Math.max(maximalError === undefined ? 0 : maximalError, totalError);
+			if (!('maximalEigenError' in window)) maximalEigenError = 0;
+			maximalEigenError = Math.max(maximalEigenError === undefined ? 0 : maximalEigenError, totalEigenError);
+			//'desired '+lastMatrix+'\ngot '+lastReconstructedMatrix+'\nerror '+lastError+'\ntotal error '+totalError+' max '+maximalError+'\neig desired '+lastEigenvalues+'\neig got '+lastReconstructedEigenvalues+'\neig total error '+totalEigenError+' max '+maximalEigenError
 		}
 	},
 	getPrimitives : eulerGetPrimitives
@@ -864,27 +877,21 @@ var EulerEquationGodunovForwardEuler = makeClass({
 		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 		//(i.e. qi[ix] is between q[ix-1] and q[ix])
 		for (var ix = 1; ix < this.nx; ++ix) {
+			var qL = this.q[ix-1];
+			var qR = this.q[ix];
+			var qMid0 = (qL[0] + qR[0]) * .5;
+			var qMid1 = (qL[1] + qR[1]) * .5;
+			var qMid2 = (qL[2] + qR[2]) * .5;
+
 			//compute averaged interface values
-			var densityL = this.q[ix-1][0];
-			var velocityL = this.q[ix-1][1] / densityL;
-			var energyTotalL = this.q[ix-1][2] / densityL;
-			var energyKinematicL = .5 * velocityL * velocityL;
-			var energyThermalL = energyTotalL - energyKinematicL;
-			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
-			var hTotalL = energyTotalL + pressureL / densityL;
-			
-			var densityR = this.q[ix][0];
-			var velocityR = this.q[ix][1] / densityR;
-			var energyTotalR = this.q[ix][2] / densityR;
-			var energyKinematicR = .5 * velocityR * velocityR;
-			var energyThermalR = energyTotalR - energyKinematicR;
-			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
-			var hTotalR = energyTotalR + pressureR / densityR;
-			
-			var velocity = .5 * (velocityL + velocityR);
-			var hTotal = .5 * (hTotalL + hTotalR);
+			var densityMid = qMid0;
+			var velocityMid = qMid1 / densityMid;
+			var energyTotalMid = qMid2 / densityMid;
+			var energyKinematicMid = .5 * velocityMid * velocityMid;
+			var energyThermalMid = energyTotalMid - energyKinematicMid;
+			var pressureMid = (this.gamma - 1) * densityMid * energyThermalMid;
+			var speedOfSoundMid = Math.sqrt(this.gamma * pressureMid / densityMid);
+			var hTotalMid = energyTotalMid + pressureMid / densityMid;
 
 			//compute eigenvectors and values at the interface based on averages
 			EulerEquationGodunovForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].call(this,
@@ -892,7 +899,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
 				this.interfaceEigenvectorsInverse[ix], 
-				velocity, hTotal, this.gamma);
+				velocityMid, hTotalMid, this.gamma);
 		}	
 	}
 });
@@ -954,7 +961,7 @@ var EulerEquationRoeForwardEuler = makeClass({
 	}
 });
 
-var eulerEquationSimulation = {
+var hdSimulation = {
 	methods : {
 		'Burgers / Forward Euler' : EulerEquationBurgersForwardEuler.prototype,
 		'Burgers / Backward Euler via Gauss Seidel' : EulerEquationBurgersBackwardEulerGaussSeidel.prototype,
@@ -1079,7 +1086,7 @@ function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 	mat33invert(eigenvectorsInverse, eigenvectors);
 }
 
-var ADMEquationGodunovForwardEuler = makeClass({
+var ADMGodunovForwardEuler = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
 		var dx = (xmax - xmin) / this.nx;
@@ -1116,7 +1123,7 @@ var ADMEquationGodunovForwardEuler = makeClass({
 		//how about those boundary eigenstates?
 	},
 	step : function(dt) {
-		var deriv = ADMEquationGodunovForwardEuler.prototype.calcDerivative;
+		var deriv = ADMGodunovForwardEuler.prototype.calcDerivative;
 		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
@@ -1124,9 +1131,9 @@ var ADMEquationGodunovForwardEuler = makeClass({
 	}
 });
 
-var admEquationSimulation = {
+var admSimulation = {
 	methods : {
-		'Godunov / Forward Euler' : ADMEquationGodunovForwardEuler.prototype
+		'Godunov / Forward Euler' : ADMGodunovForwardEuler.prototype
 	},
 	initialConditions : {
 		GaugeShock : function() {
@@ -1153,7 +1160,7 @@ var admEquationSimulation = {
 var mu0 = 1;	//permittivity of free space
 var sqrtMu0 = Math.sqrt(mu0)
 
-function mhdEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, alpha, g) {
+function mhdBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, alpha, g) {
 	
 	matrix[0][0] = 0;
 	matrix[0][1] = 0;
@@ -1190,7 +1197,7 @@ function mhdEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 }
 
 
-var MHDEquationGodunovForwardEuler = makeClass({
+var MHDGodunovForwardEuler = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
 		var dx = (xmax - xmin) / this.nx;
@@ -1217,7 +1224,7 @@ var MHDEquationGodunovForwardEuler = makeClass({
 			var g = .5 * (g_L + g_R);
 
 			//compute eigenvectors and values at the interface based on Roe averages
-			mhdEquationsBuildEigenstate(
+			mhdBuildEigenstate(
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
@@ -1227,7 +1234,7 @@ var MHDEquationGodunovForwardEuler = makeClass({
 		//how about those boundary eigenstates?
 	},
 	step : function(dt) {
-		var deriv = MHDEquationGodunovForwardEuler.prototype.calcDerivative;
+		var deriv = MHDGodunovForwardEuler.prototype.calcDerivative;
 		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
@@ -1240,9 +1247,9 @@ var MHDEquationGodunovForwardEuler = makeClass({
 });
 
 
-var mhdEquationSimulation = {
+var mhdSimulation = {
 	methods : {
-		'Godunov / Forward Euler' : MHDEquationGodunovForwardEuler.prototype
+		'Godunov / Forward Euler' : MHDGodunovForwardEuler.prototype
 	},
 	initialConditions : {
 		Sod : function() {
@@ -1270,11 +1277,140 @@ var mhdEquationSimulation = {
 	}
 };
 
+//"A Flux-Split Algorithm applied to Relativistic Flows",  R. Donat, J. A. Font, J. M. Ibanez, A. Marquina
+var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, W, density, energyInternal, pressure, gamma) {
+
+	//for newtonian, for enthalpy based on energy total:
+	//var hTotal = energyTotal + pressure / density;
+	//var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
+
+	var enthalpy = 1 + energyInternal + pressure / density;
+	//Alcubierre 7.6.53
+	var speedOfSound = Math.sqrt(gamma * (gamma - 1) * energyInternal / (1 + gamma * energyInternal));
+
+	var denom = 1 - velocity * velocity * speedOfSound * speedOfSound;
+	var a = velocity * (1 - speedOfSound * speedOfSound);
+	var b = speedOfSound * (1 - velocity * velocity);
+
+	//eigenvalues: min, mid, max
+	eigenvalues[0] = (a - b) / denom;
+	eigenvalues[1] = velocity;
+	eigenvalues[2] = (a + b) / denom; 
+
+	var kappaTilde = kappa / density;
+	var K = kappaTilde / (kappaTilde - speedOfSound * speedOfSound);
+	var Aminus= (1 - velocity * velocity) / (1 - velocity * eigenvalues[0]);
+	var Aplus = (1 - velocity * velocity) / (1 - velocity * eigenvalues[2]);
+	
+	//min eigenvector
+	eigenvectors[0][0] = 1;
+	eigenvectors[0][1] = enthalpy * W * Aminus * eigenvalues[0]; 
+	eigenvectors[0][2] = enthalpy * W * Aminus - 1;
+	//mid eigenvector
+	eigenvectors[1][0] = K / (enthalpy * W);
+	eigenvectors[1][1] = velocity;
+	eigenvectors[1][2] = 1 - K / (enthalpy * W);
+	//max eigenvector
+	eigenvectors[2][0] = 1;
+	eigenvectors[2][1] = enthalpy * W * Aplus * eigenvalues[2]; 
+	eigenvectors[2][2] = enthalpy * W * Aplus - 1; 
+	
+	//calculate eigenvector inverses numerically ... though I don't have to ...
+	mat33invert(eigenvectorsInverse, eigenvectors);
+
+	//calculate flux numerically ... though I don't have to ...
+	for (var i = 0; i < 3; ++i) {
+		for (var j = 0; j < 3; ++j) {
+			//a_ij = u_ik w_k vt_kj
+			var s = 0;
+			for (var k = 0; k < 3; ++k) {
+				s += eigenvectors[k][i] * eigenvalues[k] * eigenvectorsInverse[j][k];
+			}
+			matrix[j][i] = s;
+		}
+	}
+}
+
+var SRHDGodunovForwardEuler = makeClass({
+	super : GodunovSolver,
+	initStep : function() {
+		var dx = (xmax - xmin) / this.nx;
+		
+		var prims = [];
+		for (var x = 1; x < this.nx-1; ++x) {
+			prims[i] = this.getPrimitives(i);
+		}
+		
+		for (var ix = 2; ix < this.nx-1; ++ix) {
+			var ixL = ix-1;
+			var ixR = ix;
+
+			var primsL = prims[ixL];
+			var primsR = prims[ixR];
+			var primsAvg = {};
+			for (var k in primsL) {
+				primsAvg[k] = (primsL[k] + primsR[k]) / 2;
+			}
+
+			srhdBuildEigenstate(
+				this.interfaceMatrix[ix],
+				this.interfaceEigenvalues[ix], 
+				this.interfaceEigenvectors[ix], 
+				this.interfaceEigenvectorsInverse[ix],
+				primsAvg.v, primsAvg.W, primsAvg.rho0, primsAvg.eInternal, primsAvg.p, this.gamma);
+		}
+		//how about those boundary eigenstates?
+	},
+	step : function(dt) {
+		var deriv = SRHDGodunovForwardEuler.prototype.calcDerivative;
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
+	},
+	getPrimitives : function(i) {
+		//actually a nonlinear problem ... so ... solve this one later
+		return this.q[i];
+	}
+});
+
+
+
+/*
+Using Alcubierre, Baumgarte & Shapiro, and...
+http://relativity.livingreviews.org/Articles/lrr-2003-7/download/lrr-2003-7Color.pdf
+*/
+var srhdSimulation = {
+	methods : {
+		'Godunov / Forward Euler' : SRHDGodunovForwardEuler.prototype
+	},
+	initialConditions : {
+		Sod : function() {
+			this.resetCoordinates(-1, 1);
+			for (var i = 0; i < this.nx; ++i) {
+				var x = this.x[i];
+				var rho0 = (x < (xmin * .7 + xmax * .3)) ? 1 : .1;
+				var v = 0;	//three-velocity, in geometric units, so vx = 1 <=> speed of light
+				var W = 1 / Math.sqrt(1 - vx * vx);
+			
+				var eInternal = 1;
+				var p = (this.gamma - 1) * rho0 * eInternal;	//
+				var h = 1 + eInternal + p / rho0;
+				
+				var D = rho0 * W; 
+				var S = rho0 * h * W * W * v; 
+				var E = rho0 * h * W * W - p - D;;
+				this.q[i][0] = D;
+				this.q[i][1] = S;
+				this.q[i][2] = E;
+			}
+		}
+	}
+};
+
 //hmm, maybe I should combine all of these into one list, and have them individuall state who they belong to
 var simulations = {
-	Euler : eulerEquationSimulation,
-	ADM : admEquationSimulation,
-	//MHD : mhdEquationSimulation
+	Euler : hdSimulation,
+	//MHD : mhdSimulation,
+	//SRHD : srhdSimulation,
+	ADM : admSimulation
 };
 
 var HydroState = makeClass({ 
@@ -1325,7 +1461,7 @@ var HydroState = makeClass({
 		}
 
 
-		eulerEquationSimulation.initialConditions.Sod.call(this);
+		hdSimulation.initialConditions.Sod.call(this);
 		
 		//p_i: pressure
 		this.pressure = new Float32Array(this.nx);
@@ -1675,8 +1811,8 @@ void main() {
 	buildSelect('boundaryMethod', 'boundaryMethod', boundaryMethods);
 	buildSelect('fluxMethod', 'fluxMethod', fluxMethods);
 	
-	buildSelect('Euler_algorithm', 'algorithm', eulerEquationSimulation.methods);	//this will change as 'simulations' changes
-	buildSelect('ADM_algorithm', 'algorithm', admEquationSimulation.methods);	//this will change as 'simulations' changes
+	buildSelect('Euler_algorithm', 'algorithm', hdSimulation.methods);	//this will change as 'simulations' changes
+	buildSelect('ADM_algorithm', 'algorithm', admSimulation.methods);	//this will change as 'simulations' changes
 
 	buildSelect('eigenDecomposition', 'eigenDecomposition', {Analytic:true, Numeric:true});
 
