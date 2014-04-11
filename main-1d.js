@@ -463,6 +463,68 @@ var EulerEquationBurgersBackwardEulerTridiagonal = makeClass({
 
 
 var GodunovSolver = makeClass({
+	initStep : function() {
+		var nx = this.nx;
+		/* linear */
+		for (var i = 0; i < nx; ++i) {
+			for (var j = 0; j < 3; ++j) {
+				this.qL[i][j] = this.q[i][j];
+				this.qR[i][j] = this.q[i][j];
+			}
+		}
+		for (var ix = 1; ix < nx; ++ix) {
+			for (var j = 0; j < 3; ++j) {
+				var iqL = this.qR[ix-1][j];
+				var iqR = this.qL[ix][j];
+				this.qMid[ix][j] = (iqL + iqR) * .5;
+			}
+		}
+		/**/
+		/* PPM * /
+		for (var j = 0; j < 3; ++j) {
+			this.qL[0][j] = this.q[0][j];
+			this.qR[0][j] = this.q[0][j];
+			this.qL[1][j] = this.q[1][j];
+			this.qR[1][j] = this.q[1][j];
+			this.qL[nx-2][j] = this.q[nx-2][j];
+			this.qR[nx-2][j] = this.q[nx-2][j];
+			this.qL[nx-1][j] = this.q[nx-1][j];
+			this.qR[nx-1][j] = this.q[nx-1][j];
+		}
+		for (var ix = 2; ix < nx-1; ++ix) {
+			for (var j = 0; j < 3; ++j) {
+				this.qMid[ix][j] = 6/12 * (this.q[ix-1][j] + this.q[ix][j])
+								- 1/12 * (this.q[ix-2][j] + this.q[ix+1][j]);
+				this.qR[ix-1][j] = this.qMid[ix][j];
+				this.qL[ix][j] = this.qMid[ix][j];
+			}
+		}	
+		for (var j = 0; j < 3; ++j) {
+			this.qMid[1][j] = (this.qR[0][j] + this.qL[1][j]) * .5;
+			this.qMid[nx-1][j] = (this.qR[nx-2][j] + this.qL[nx-1][j]) * .5;
+		}
+		for (var i = 0; i < nx; ++i) {
+			var q = this.q[i];
+			var qR = this.qR[i];
+			var qL = this.qL[i];
+			for (var j = 0; j < 3; ++j) {
+				if ((qR[j] - q[j]) * (q[j] - qL[j]) <= 0) {
+					qL[j] = q[j];
+					qR[j] = q[j];
+				} else {
+					var a = (qR[j] - qL[j]) * (q[j] - .5 * (qL[j] + qR[j]));
+					var b = (qR[j] - qL[j]) * (qR[j] - qL[j]) / 6;
+					if (a > b) {
+						qL[j] = 3 * q[j] - 2 * qR[j];
+					}
+					if (a < -b) {
+						qR[j] = 3 * q[j] - 2 * qL[j];
+					}
+				}
+			}
+		}
+		/**/
+	},
 	//update first calls initStep and then aclls calcCFLTimestep
 	//initStep is abstract.  it is where the eigen decomposition takes place.
 	/*
@@ -487,12 +549,14 @@ var GodunovSolver = makeClass({
 	},
 	calcDerivative : function(dt, dq_dt) {
 		for (var ix = 1; ix < this.nx; ++ix) {
+			var iqL = this.qR[ix-1];
+			var iqR = this.qL[ix];
 			for (var j = 0; j < 3; ++j) {
 				//the change in state represented in interface eigenbasis
 				this.interfaceDeltaQTilde[ix][j] = 
-					this.interfaceEigenvectorsInverse[ix][0][j] * (this.q[ix][0] - this.q[ix-1][0])
-					+ this.interfaceEigenvectorsInverse[ix][1][j] * (this.q[ix][1] - this.q[ix-1][1])
-					+ this.interfaceEigenvectorsInverse[ix][2][j] * (this.q[ix][2] - this.q[ix-1][2]);
+					this.interfaceEigenvectorsInverse[ix][0][j] * (iqR[0] - iqL[0])
+					+ this.interfaceEigenvectorsInverse[ix][1][j] * (iqR[1] - iqL[1])
+					+ this.interfaceEigenvectorsInverse[ix][2][j] * (iqR[2] - iqL[2]);
 			}
 		}
 		
@@ -539,10 +603,6 @@ var GodunovSolver = makeClass({
 		//use them to advect, like good old fluxes advect
 		var fluxTilde = [];
 		var fluxAvg = [];
-		var interfaceQL = [];
-		var interfaceQR = [];
-
-		var qTildeMid = [];
 
 		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
 		//(i.e. qi[ix] is between q[ix-1] and q[ix])
@@ -550,87 +610,15 @@ var GodunovSolver = makeClass({
 		for (var ix = this.nghost-1; ix < this.nx+this.nghost-2; ++ix) {
 			//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 			//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
-				
-			//most sources seem to refer to qL and qR as q_{i-1/2,j,L} = q_{i-1,j} and q{i-1/2,j,R} = q_{i,j}
-			//then there is http://bh0.physics.ubc.ca/People/benjamin/projects/nr/report2/node21.html and Hydrodynamics II section 7.5 which say to extrapolate qL and qR based on slope limited stuff 
 			
-			//trying to go by this: 
-			//http://crd.lbl.gov/assets/pubs_presos/AMCS/ANAG/A141984.pdf
-			//var qL2 = this.q[ix-2];
-			var qL = this.q[ix-1];
-			var qR = this.q[ix];
-			//var qR2 = this.q[ix+1];
-		
-			//which basii should be used for reprojection?
-			//var qTildeL2 = [];
-			//var qTildeL = [];
-			//var qTildeR = [];
-			//var qTildeR2 = [];
-			//for (var j = 0; j < 3; ++j) {
-				//qTildeL2[j] = 
-				//	this.interfaceEigenvectorsInverse[ix-1][0][j] * qL2[0]
-				//	+ this.interfaceEigenvectorsInverse[ix-1][1][j] * qL2[1]
-				//	+ this.interfaceEigenvectorsInverse[ix-1][2][j] * qL2[2];
-				//qTildeL[j] = 
-				//	this.interfaceEigenvectorsInverse[ix][0][j] * qL[0]
-				//	+ this.interfaceEigenvectorsInverse[ix][1][j] * qL[1]
-				//	+ this.interfaceEigenvectorsInverse[ix][2][j] * qL[2];
-				//qTildeR[j] = 
-				//	this.interfaceEigenvectorsInverse[ix][0][j] * qR[0]
-				//	+ this.interfaceEigenvectorsInverse[ix][1][j] * qR[1]
-				//	+ this.interfaceEigenvectorsInverse[ix][2][j] * qR[2];
-				//qTildeR2[j] = 
-				//	this.interfaceEigenvectorsInverse[ix+1][0][j] * qR2[0]
-				//	+ this.interfaceEigenvectorsInverse[ix+1][1][j] * qR2[1]
-				//	+ this.interfaceEigenvectorsInverse[ix+1][2][j] * qR2[2];
-			//}
-			
-			//q_{i-1/2},j
-			//qTildeMid[ix] = [];
-			//for (var j = 0; j < 3; ++j) {
-			//	qTildeMid[ix][j] = (7 * (qTildeR[j] + qTildeL[j]) - (qTildeL2[j] + qTildeR2[j])) / 12;
-			//}
-		//}
-		//set limits on parabola left and right sides
-		//for (var i = 2; i < this.nx-2; ++i) {
-			//for (var j = 0; j < 3; ++j) {
-				//var qTilde = 
-				//var qTildeL = qTildeMid[i][j];
-				//var qTildeR = qTildeMid[i+1][j];
-			
-				//if (a_R,j - a,j) * (a,j - a_L,j) <= 0 then ...
-				//  but how do we find a,j if we are using qTilde i.e. eigenbasis-projected values?
-				//  should we use the eigenbasis at the cell center?  or the eigenbasis at the interfaces somehow?
-				//...or should we not be doing this in eigenbasis space?
-				//if (qTildeR - 
-			//}
-		//}
-		//for (var ix = 1; ix < this.nx; ++ix) {
-			//... and then apply the rest of the interface jacobian 
-			//for (var j = 0; j < 3; ++j) {
-			//	interfaceQL[j] = 
-			//		this.interfaceEigenvectors[ix][0][j] * this.interfaceEigenvalues[ix][0] * qTildeL[0]
-			//		+ this.interfaceEigenvectors[ix][1][j] * this.interfaceEigenvalues[ix][1] * qTildeL[1]
-			//		+ this.interfaceEigenvectors[ix][2][j] * this.interfaceEigenvalues[ix][2] * qTildeL[2];
-			//	interfaceQR[j] = 
-			//		this.interfaceEigenvectors[ix][0][j] * this.interfaceEigenvalues[ix][0] * qTildeR[0]
-			//		+ this.interfaceEigenvectors[ix][1][j] * this.interfaceEigenvalues[ix][1] * qTildeR[1]
-			//		+ this.interfaceEigenvectors[ix][2][j] * this.interfaceEigenvalues[ix][2] * qTildeR[2];
-			//	fluxAvg[j] = .5 * (interfaceQL[j] + interfaceQR[j]);
-			//}
-		//}
-		//for (var ix = 1; ix < this.nx; ++ix) {
-
-/**/
 			//if I wasn't doing all the above slope-limited stuff, this would suffice:
 			//however if I'm not using this then I don't need to store the interface jacobian matrix
 			for (var j = 0; j < 3; ++j) {
-				fluxAvg[j] = .5 * ( 
-					this.interfaceMatrix[ix][0][j] * (qL[0] + qR[0])
-					+ this.interfaceMatrix[ix][1][j] * (qL[1] + qR[1])
-					+ this.interfaceMatrix[ix][2][j] * (qL[2] + qR[2]));
+				fluxAvg[j] = 
+					this.interfaceMatrix[ix][0][j] * this.qMid[ix][0]
+					+ this.interfaceMatrix[ix][1][j] * this.qMid[ix][1]
+					+ this.interfaceMatrix[ix][2][j] * this.qMid[ix][2];
 			}
-/**/
 
 			//calculate flux
 			for (var j = 0; j < 3; ++j) {
@@ -802,7 +790,9 @@ var EulerEquationGodunovSolver = makeClass({
 				throw e;
 			}
 
-/* uncomment this when you feel safe using this */
+/* Uncomment this when you feel safe using this.
+ * That may never happen. Turns out HLL solvers don't use eigenvectors! 
+ * So numerical decomposition will most likely always be less accurate. */
 			for (var i = 0; i < 3; ++i) {
 				eigenvalues[i] = w[i];
 				for (var j = 0; j < 3; ++j) {
@@ -874,19 +864,13 @@ speedOfSound
 var EulerEquationGodunovForwardEuler = makeClass({
 	super : EulerEquationGodunovSolver,
 	initStep : function() {
-		//qi[ix] = q_{i-1/2} lies between q_{i-1} = q[i-1] and q_i = q[i]
-		//(i.e. qi[ix] is between q[ix-1] and q[ix])
+		EulerEquationGodunovForwardEuler.superProto.initStep.apply(this, arguments);
+		
 		for (var ix = 1; ix < this.nx; ++ix) {
-			var qL = this.q[ix-1];
-			var qR = this.q[ix];
-			var qMid0 = (qL[0] + qR[0]) * .5;
-			var qMid1 = (qL[1] + qR[1]) * .5;
-			var qMid2 = (qL[2] + qR[2]) * .5;
-
 			//compute averaged interface values
-			var densityMid = qMid0;
-			var velocityMid = qMid1 / densityMid;
-			var energyTotalMid = qMid2 / densityMid;
+			var densityMid = this.qMid[ix][0];
+			var velocityMid = this.qMid[ix][1] / densityMid;
+			var energyTotalMid = this.qMid[ix][2] / densityMid;
 			var energyKinematicMid = .5 * velocityMid * velocityMid;
 			var energyThermalMid = energyTotalMid - energyKinematicMid;
 			var pressureMid = (this.gamma - 1) * densityMid * energyThermalMid;
@@ -923,12 +907,13 @@ Cs = sqrt(gamma P / rho)
 var EulerEquationRoeForwardEuler = makeClass({
 	super : EulerEquationGodunovSolver,
 	initStep : function() {
+		EulerEquationRoeForwardEuler.superProto.initStep.apply(this, arguments);
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 1; ix < this.nx; ++ix) {
 			//compute Roe averaged interface values
-			var densityL = this.q[ix-1][0];
-			var velocityL = this.q[ix-1][1] / densityL;
-			var energyTotalL = this.q[ix-1][2] / densityL;
+			var densityL = this.qR[ix-1][0];
+			var velocityL = this.qR[ix-1][1] / densityL;
+			var energyTotalL = this.qR[ix-1][2] / densityL;
 			var energyKinematicL = .5 * velocityL * velocityL;
 			var energyThermalL = energyTotalL - energyKinematicL;
 			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
@@ -936,9 +921,9 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var hTotalL = energyTotalL + pressureL / densityL;
 			var roeWeightL = Math.sqrt(densityL);
 			
-			var densityR = this.q[ix][0];
-			var velocityR = this.q[ix][1] / densityR;
-			var energyTotalR = this.q[ix][2] / densityR;
+			var densityR = this.qL[ix][0];
+			var velocityR = this.qL[ix][1] / densityR;
+			var energyTotalR = this.qL[ix][2] / densityR;
 			var energyKinematicR = .5 * velocityR * velocityR;
 			var energyThermalR = energyTotalR - energyKinematicR;
 			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
@@ -1089,6 +1074,7 @@ function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 var ADMGodunovForwardEuler = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
+		ADMGodunovForwardEuler.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 2; ix < this.nx-1; ++ix) {
@@ -1200,6 +1186,7 @@ function mhdBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInver
 var MHDGodunovForwardEuler = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
+		MHDGodunovForwardEuler.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 2; ix < this.nx-1; ++ix) {
@@ -1297,8 +1284,8 @@ var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvecto
 	eigenvalues[1] = velocity;
 	eigenvalues[2] = (a + b) / denom; 
 
-	var kappaTilde = kappa / density;
-	var K = kappaTilde / (kappaTilde - speedOfSound * speedOfSound);
+	//var kappaTilde = kappa / density;
+	var K = 1;//kappaTilde / (kappaTilde - speedOfSound * speedOfSound);
 	var Aminus= (1 - velocity * velocity) / (1 - velocity * eigenvalues[0]);
 	var Aplus = (1 - velocity * velocity) / (1 - velocity * eigenvalues[2]);
 	
@@ -1316,8 +1303,23 @@ var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvecto
 	eigenvectors[2][2] = enthalpy * W * Aplus - 1; 
 	
 	//calculate eigenvector inverses numerically ... though I don't have to ...
-	mat33invert(eigenvectorsInverse, eigenvectors);
-
+	//mat33invert(eigenvectorsInverse, eigenvectors);
+	//(singular) or we can do it symbolically...
+	var delta = enthalpy * enthalpy * enthalpy * W * (K - 1) * (1 - velocity * velocity) * (Aplus * eigenvalues[2] - Aminus * eigenvalues[0]);
+	var ls = enthalpy * enthalpy / delta;
+	//min
+	eigenvectorsInverse[0][0] = -ls * (enthalpy * W * Aminus * (velocity - eigenvalues[0]) - velocity + k * Aminus * eigenvalues[0]);
+	eigenvectorsInverse[0][1] = -ls * (1 - K * Aminus);
+	eigenvectorsInverse[0][2] = -ls * (-velocity + K * Aminus * eigenvalues[0]);
+	//mid
+	var lms = W / (K - 1);
+	eigenvectorsInverse[1][0] = lms * (enthalpy - W);
+	eigenvectorsInverse[1][1] = lms * W * velocity;
+	eigenvectorsInverse[1][2] = lms * -W;
+	//max
+	eigenvectorsInverse[2][0] = ls * (enthalpy * W * Aplus * (velocity - eigenvalues[2]) - velocity + k * Aplus * eigenvalues[2]);
+	eigenvectorsInverse[2][1] = ls * (1 - K * Aplus);
+	eigenvectorsInverse[2][2] = ls * (-velocity + K * Aplus * eigenvalues[2]);
 	//calculate flux numerically ... though I don't have to ...
 	for (var i = 0; i < 3; ++i) {
 		for (var j = 0; j < 3; ++j) {
@@ -1334,10 +1336,11 @@ var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvecto
 var SRHDGodunovForwardEuler = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
+		SRHDGodunovForwardEuler.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
 		
 		var prims = [];
-		for (var x = 1; x < this.nx-1; ++x) {
+		for (var i = 1; i < this.nx-1; ++i) {
 			prims[i] = this.getPrimitives(i);
 		}
 		
@@ -1367,7 +1370,30 @@ var SRHDGodunovForwardEuler = makeClass({
 	},
 	getPrimitives : function(i) {
 		//actually a nonlinear problem ... so ... solve this one later
-		return this.q[i];
+		var q = this.q[i];
+		var D = q[0];
+		var S = q[1];
+		var E = q[2];
+		var p = q.pressure;	//last iteration
+		var v = S / (E + D + p);
+		var W = 1 / Math.sqrt(1 - v * v);
+		var rho0 = D / W;
+		var energyInternal = (E + D * (1 - W) + p * (1 - W * W)) / (D * W);
+		var nextP = (this.gamma - 1) * rho0 * energyInternal;
+		//rinse, lather, repeat
+		p = nextP;
+		q.pressure = p;
+		var prims = {};
+		prims.v = v;
+		prims.W = W;
+		prims.rho0 = rho0;
+		prims.eInternal = energyInternal;
+		prims.p = p;
+		//for graphing...
+		prims[0] = rho0;
+		prims[1] = v;
+		prims[2] = energyInternal;
+		return prims;
 	}
 });
 
@@ -1388,7 +1414,7 @@ var srhdSimulation = {
 				var x = this.x[i];
 				var rho0 = (x < (xmin * .7 + xmax * .3)) ? 1 : .1;
 				var v = 0;	//three-velocity, in geometric units, so vx = 1 <=> speed of light
-				var W = 1 / Math.sqrt(1 - vx * vx);
+				var W = 1 / Math.sqrt(1 - v * v);
 			
 				var eInternal = 1;
 				var p = (this.gamma - 1) * rho0 * eInternal;	//
@@ -1400,6 +1426,7 @@ var srhdSimulation = {
 				this.q[i][0] = D;
 				this.q[i][1] = S;
 				this.q[i][2] = E;
+				this.q[i].pressure = p;
 			}
 		}
 	}
@@ -1409,7 +1436,7 @@ var srhdSimulation = {
 var simulations = {
 	Euler : hdSimulation,
 	//MHD : mhdSimulation,
-	//SRHD : srhdSimulation,
+	SRHD : srhdSimulation,
 	ADM : admSimulation
 };
 
@@ -1481,10 +1508,20 @@ var HydroState = makeClass({
 		for (var i = 0; i < this.nx+1; ++i) {
 			this.flux[i] = [0,0,0];
 		}
-		
-		//only used with Burger's eqn advection code
+	
+		//used with Burgers 
 		//u_{i-1/2}: interface velocity
 		this.ui = new Float32Array(this.nx+1);
+	
+		//used with Riemann
+		this.qMid = [];
+		for (var i = 0; i <= this.nx; ++i) this.qMid[i] = [0,0,0];
+		//q_i,L and q_i,R	<- L and R at cell (as PPM uses), not at interface (as Godunov uses)
+		//	so without interpolation, q_{i-1/2},R = q_i,L and q_{i-1/2},L = q_{i-1},R
+		this.qL = [];
+		for (var i = 0; i < this.nx; ++i) this.qL[i] = [0,0,0];
+		this.qR = [];
+		for (var i = 0; i < this.nx; ++i) this.qR[i] = [0,0,0];
 
 		//only used with Riemann eqn advection code:
 		//calculated before dt
@@ -1812,6 +1849,7 @@ void main() {
 	buildSelect('fluxMethod', 'fluxMethod', fluxMethods);
 	
 	buildSelect('Euler_algorithm', 'algorithm', hdSimulation.methods);	//this will change as 'simulations' changes
+	buildSelect('SRHD_algorithm', 'algorithm', srhdSimulation.methods);	//this will change as 'simulations' changes
 	buildSelect('ADM_algorithm', 'algorithm', admSimulation.methods);	//this will change as 'simulations' changes
 
 	buildSelect('eigenDecomposition', 'eigenDecomposition', {Analytic:true, Numeric:true});
@@ -1834,7 +1872,7 @@ void main() {
 			var val = select.val();
 			hydro.state[key] = val; 
 			
-			$('#ADM_controls, #Euler_controls').hide();
+			$('#ADM_controls, #SRHD_controls, #Euler_controls').hide();
 			$('#'+val+'_controls').show();
 		
 			//...and now select the visible select's selection
