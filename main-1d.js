@@ -878,23 +878,32 @@ var EulerEquationGodunovForwardEuler = makeClass({
 		EulerEquationGodunovForwardEuler.superProto.initStep.apply(this, arguments);
 		
 		for (var ix = 1; ix < this.nx; ++ix) {
-			//compute averaged interface values
-			var densityMid = this.qMid[ix][0];
-			var velocityMid = this.qMid[ix][1] / densityMid;
-			var energyTotalMid = this.qMid[ix][2] / densityMid;
-			var energyKinematicMid = .5 * velocityMid * velocityMid;
-			var energyThermalMid = energyTotalMid - energyKinematicMid;
-			var pressureMid = (this.gamma - 1) * densityMid * energyThermalMid;
-			var speedOfSoundMid = Math.sqrt(this.gamma * pressureMid / densityMid);
-			var hTotalMid = energyTotalMid + pressureMid / densityMid;
-
+			var densityL = this.qR[ix-1][0];
+			var velocityL = this.qR[ix-1][1] / densityL;
+			var energyTotalL = this.qR[ix-1][2] / densityL;
+			var energyKinematicL = .5 * velocityL * velocityL;
+			var energyThermalL = energyTotalL - energyKinematicL;
+			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
+			var hTotalL = energyTotalL + pressureL / densityL;
+			
+			var densityR = this.qL[ix][0];
+			var velocityR = this.qL[ix][1] / densityR;
+			var energyTotalR = this.qL[ix][2] / densityR;
+			var energyKinematicR = .5 * velocityR * velocityR;
+			var energyThermalR = energyTotalR - energyKinematicR;
+			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
+			var hTotalR = energyTotalR + pressureR / densityR;
+		
+			var velocity = (velocityL + velocityR) * .5;
+			var hTotal = (hTotalL + hTotalR) * .5;
+			
 			//compute eigenvectors and values at the interface based on averages
 			EulerEquationGodunovForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
 				this.interfaceEigenvectorsInverse[ix], 
-				velocityMid, hTotalMid, this.gamma);
+				velocity, hTotal, this.gamma);
 		}	
 	}
 });
@@ -928,7 +937,6 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var energyKinematicL = .5 * velocityL * velocityL;
 			var energyThermalL = energyTotalL - energyKinematicL;
 			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
 			var hTotalL = energyTotalL + pressureL / densityL;
 			var roeWeightL = Math.sqrt(densityL);
 			
@@ -938,7 +946,6 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var energyKinematicR = .5 * velocityR * velocityR;
 			var energyThermalR = energyTotalR - energyKinematicR;
 			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
 			var hTotalR = energyTotalR + pressureR / densityR;
 			var roeWeightR = Math.sqrt(densityR);
 			
