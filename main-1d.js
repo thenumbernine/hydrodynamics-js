@@ -673,7 +673,7 @@ var EulerEquationGodunovSolver = makeClass({
 	super : GodunovSolver,
 	buildEigenstate : {
 		Analytic : {
-			calcFlux : function(matrix, velocity, hTotal, gamma) {
+			calcFlux : function(matrix, velocity, hTotal, gamma, eTotal) {
 				//flux jacobian matrix, listed per column
 				matrix[0][0] = 0;
 				matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
@@ -691,11 +691,11 @@ var EulerEquationGodunovSolver = makeClass({
 				eigenvalues[1] = velocity;
 				eigenvalues[2] = velocity + speedOfSound;
 			},
-			calcAll : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+			calcAll : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma, eTotal) {
 				//calculate matrix & eigenvalues & vectors at interface from state at interface
 				var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
 
-				EulerEquationGodunovSolver.prototype.buildEigenstate.Analytic.calcFlux.call(this, matrix, velocity, hTotal, gamma);
+				EulerEquationGodunovSolver.prototype.buildEigenstate.Analytic.calcFlux.call(this, matrix, velocity, hTotal, gamma, eTotal);
 				EulerEquationGodunovSolver.prototype.buildEigenstate.Analytic.calcEigenvalues.call(this, eigenvalues, velocity, speedOfSound);
 
 				//min eigenvector
@@ -716,7 +716,7 @@ var EulerEquationGodunovSolver = makeClass({
 			}
 		},
 		Numeric : {
-			calcAll : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma) {
+			calcAll : function(matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocity, hTotal, gamma, eTotal) {
 				
 				//calculate matrix & eigenvalues & vectors at interface from state at interface
 				var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * velocity * velocity));	
@@ -896,6 +896,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 		
 			var velocity = (velocityL + velocityR) * .5;
 			var hTotal = (hTotalL + hTotalR) * .5;
+			var energyTotal = (energyTotalL + energyTotalR) * .5;
 			
 			//compute eigenvectors and values at the interface based on averages
 			EulerEquationGodunovForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
@@ -903,7 +904,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
 				this.interfaceEigenvectorsInverse[ix], 
-				velocity, hTotal, this.gamma);
+				velocity, hTotal, this.gamma, energyTotal);
 		}	
 	}
 });
@@ -950,8 +951,10 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var roeWeightR = Math.sqrt(densityR);
 			
 			var denom = roeWeightL + roeWeightR;
-			var velocity = (roeWeightL * velocityL + roeWeightR * velocityR) / denom;
-			var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
+			var invDenom = 1 / denom;
+			var velocity = (roeWeightL * velocityL + roeWeightR * velocityR) * invDenom;
+			var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) * invDenom;
+			var energyTotal = (roeWeightL * energyTotalL + roeWeightR * energyTotalR) * invDenom;
 
 			//compute eigenvectors and values at the interface based on Roe averages
 			EulerEquationRoeForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
