@@ -677,7 +677,7 @@ var EulerEquationGodunovSolver = makeClass({
 				//flux jacobian matrix, listed per column
 				matrix[0][0] = 0;
 				matrix[0][1] = (gamma - 3) / 2 * velocity * velocity;
-				matrix[0][2] = velocity * ((gamma - 1) / 2 * velocity * velocity - hTotal);
+				matrix[0][2] = -velocity * (gamma * eTotal + (1 - gamma) * velocity * velocity); 
 				matrix[1][0] = 1;
 				matrix[1][1] = (3 - gamma) * velocity;
 				matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
@@ -962,7 +962,7 @@ var EulerEquationRoeForwardEuler = makeClass({
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
 				this.interfaceEigenvectorsInverse[ix], 
-				velocity, hTotal, this.gamma);
+				velocity, hTotal, this.gamma, energyTotal);
 		}
 	}
 });
