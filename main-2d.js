@@ -163,6 +163,22 @@ var drawToScreenMethods = {
 			}
 		}
 		return [dataMin, dataMax];
+	},
+	'Eigenbasis Error' : function() {
+		var nx = this.state.nx;
+		var dataMin = undefined; 
+		var dataMax = undefined; 
+		var lastDataRange = this.lastDataMax - this.lastDataMin;
+		var e = 0;
+		for (var j = 0; j < nx; ++j) {
+			for (var i = 0; i < nx; ++i) {
+				var s = this.state.eigenbasisError[0 + 2 * (i + (nx+1) * j)] + this.state.eigenbasisError[1 + 2 * (i + (nx+1) * j)];
+				if (dataMin === undefined || s < dataMin) dataMin = s;
+				if (dataMax === undefined || s > dataMax) dataMax = s;
+				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
+			}
+		}
+		return [dataMin, dataMax];
 	}
 };
 
@@ -1234,7 +1250,7 @@ var EulerEquationGodunovSolver = makeClass({
 	hTotal
 	speedOfSound
 	*/
-	buildEigenstate : function(offset, matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocityX, velocityY, hTotal, gamma, normalX, normalY) {
+	buildEigenstate : function(offset, matrix, eigenvalues, eigenvectors, eigenvectorsInverse, velocityX, velocityY, hTotal, gamma, normalX, normalY, eigenbasisError, energyTotal) {
 
 		if ((hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)) < 0) {
 			console.log('sqrt error');
@@ -1299,6 +1315,13 @@ var EulerEquationGodunovSolver = makeClass({
 		eigenvectorsInverse[3 + 4 * (2 + 4 * offset)] = (normalY * speedOfSound - (gamma - 1) * velocityY) / (2 * speedOfSound * speedOfSound);
 		eigenvectorsInverse[3 + 4 * (3 + 4 * offset)] = (gamma - 1) / (2 * speedOfSound * speedOfSound);
 
+		var checkMatrix = [
+			[0, normalX, normalY, 0],
+			[-velocityN * velocityX + normalX * .5 * (gamma - 1) * velocitySq, normalX * velocityX + velocityN + velocityX * (1 - gamma), normalY * velocityX, normalX * (gamma - 1)],
+			[-velocityN * velocityY + normalY * .5 * (gamma - 1) * velocitySq, normalX * velocityY, normalY * velocityY + velocityN + velocityY * (1 - gamma), normalY * (gamma - 1)],
+			[-velocityN * (gamma * energyTotal + (1. - gamma) * velocitySq), normalX * hTotal - (gamma - 1) * velocityN * velocityX, normalY * hTotal - (gamma - 1) * velocityN * velocityY, velocityN * gamma]
+		];
+
 		//calculate matrix
 		var identCheck = [];
 		var identBad = false;
@@ -1316,6 +1339,9 @@ var EulerEquationGodunovSolver = makeClass({
 					/**/
 				}
 				matrix[i + 4 * (j + 4 * offset)] = s;
+				
+				eigenbasisError[offset] = Math.abs(s - checkMatrix[i][j]);
+				
 				identCheck[i + 4 * j] = d;
 				var epsilon = 1e-5;
 				if (Math.abs(d - (i == j ? 1 : 0)) > epsilon) identBad = true;
@@ -1426,7 +1452,9 @@ var EulerEquationGodunovExplicit = makeClass({
 						 this.interfaceEigenvectors,	//dim^2 = 16
 						 this.interfaceEigenvectorsInverse,	//dim^2 = 16
 						 velocityX, velocityY, hTotal, this.gamma,
-						 dirs[side][0], dirs[side][1]);
+						 dirs[side][0], dirs[side][1],
+						 this.eigenbasisError,
+						 (energyTotalL * roeWeightL + pressureR * roeWeightR) / denom);
 				}
 			}
 		}
@@ -1511,7 +1539,9 @@ var EulerEquationRoeExplicit = makeClass({
 						 this.interfaceEigenvectors,	//dim^2 = 16
 						 this.interfaceEigenvectorsInverse,	//dim^2 = 16
 						 velocityX, velocityY, hTotal, this.gamma,
-						 dirs[side][0], dirs[side][1]);
+						 dirs[side][0], dirs[side][1],
+						 this.eigenbasisError,
+						 (energyTotalL * roeWeightL + pressureR * roeWeightR) / denom);
 				}
 			}
 		}
@@ -1898,6 +1928,8 @@ var HydroState = makeClass({
 			}
 		}
 
+		//testing
+		this.eigenbasisError = new Float64Array((this.nx + 1) * (this.nx + 1) * 2);
 
 		//used for Backward Euler + Gauss-Seidel
 		this.oldQ = new Float64Array(this.nx * this.nx * 4);

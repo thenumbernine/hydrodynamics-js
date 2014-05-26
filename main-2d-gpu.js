@@ -1734,33 +1734,35 @@ void main() {
 	vec2 gridposL = rangeMin + posL * (rangeMax - rangeMin);
 	vec4 qL = texture2D(qTex, posL);
 	float densityL = qL.x;
-	vec2 velocityL = qL.yz / densityL; 
-	float energyTotalL = qL.w / densityL;
+	float invDensityL = 1. / densityL;
+	vec2 velocityL = qL.yz * invDensityL; 
+	float energyTotalL = qL.w * invDensityL;
 	float energyKineticL = .5 * dot(velocityL, velocityL);
 	float energyPotentialL = dot(gridposL - rangeMin, externalForce);
 	float energyThermalL = energyTotalL - energyKineticL - energyPotentialL;
 	float pressureL = (gamma - 1.) * densityL * energyThermalL;
-	float speedOfSoundL = sqrt(gamma * pressureL / densityL);
-	float hTotalL = energyTotalL + pressureL / densityL;
+	float speedOfSoundL = sqrt(gamma * pressureL * invDensityL);
+	float hTotalL = energyTotalL + pressureL * invDensityL;
 	float roeWeightL = sqrt(densityL);
 	
 	vec2 posR = pos;
 	vec2 gridposR = rangeMin + posR * (rangeMax - rangeMin);
 	vec4 qR = texture2D(qTex, posR);
 	float densityR = qR.x; 
-	vec2 velocityR = qR.yz / densityR;
-	float energyTotalR = qR.w / densityR; 
+	float invDensityR = 1. / densityR;
+	vec2 velocityR = qR.yz * invDensityR;
+	float energyTotalR = qR.w * invDensityR; 
 	float energyKineticR = .5 * dot(velocityR, velocityR);
 	float energyPotentialR = dot(gridposR - rangeMin, externalForce);
 	float energyThermalR = energyTotalR - energyKineticR - energyPotentialR;
 	float pressureR = (gamma - 1.) * densityR * energyThermalR;
-	float speedOfSoundR = sqrt(gamma * pressureR / densityR);
-	float hTotalR = energyTotalR + pressureR / densityR;
+	float speedOfSoundR = sqrt(gamma * pressureR * invDensityR);
+	float hTotalR = energyTotalR + pressureR * invDensityR;
 	float roeWeightR = sqrt(densityR);
 
-	float denom = roeWeightL + roeWeightR;
-	vec2 velocity = (roeWeightL * velocityL + roeWeightR * velocityR) / denom;
-	float hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
+	float invDenom = 1. / (roeWeightL + roeWeightR);
+	vec2 velocity = (roeWeightL * velocityL + roeWeightR * velocityR) * invDenom;
+	float hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) * invDenom;
 	
 	float velocitySq = dot(velocity, velocity);
 	float speedOfSound = sqrt((gamma - 1.) * (hTotal - .5 * velocitySq));
@@ -2049,15 +2051,9 @@ void main() {
 		eigenvectorInverseCol2, 
 		eigenvectorInverseCol3);
 
-	mat4 eigenvectorTimesEigenvalueMat = mat4(
-		eigenvectorCol0 * eigenvalues[0], 
-		eigenvectorCol1 * eigenvalues[1], 
-		eigenvectorCol2 * eigenvalues[2], 
-		eigenvectorCol3 * eigenvalues[3]);
-
-	mat4 interfaceMat = eigenvectorTimesEigenvalueMat * eigenvectorInverseMat;
-
-	vec4 fluxAvg = interfaceMat * ((q + qPrev) * .5);
+	vec4 qAvg = (q + qPrev) * .5;
+	vec4 fluxAvgTilde = eigenvectorInverseMat * qAvg;	///matrix multiply
+	fluxAvgTilde *= eigenvalues;						//per-component multiply
 
 	vec4 dqTilde = texture2D(dqTildeTex, pos);
 	vec4 rTilde = texture2D(rTildeTex, pos);
@@ -2066,8 +2062,8 @@ void main() {
 	vec4 theta = step(eigenvalues, vec4(0.)) * 2. - 1.;
 	vec4 epsilon = eigenvalues * dt_dx;
 	vec4 deltaFluxTilde = eigenvalues * dqTilde;
-	vec4 fluxTilde = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
-	gl_FragColor = fluxAvg + eigenvectorMat * fluxTilde;
+	vec4 fluxTilde = fluxAvgTilde - .5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+	gl_FragColor = eigenvectorMat * fluxTilde;
 }
 */}).replace(/\$side/g, i),
 					uniforms : {
