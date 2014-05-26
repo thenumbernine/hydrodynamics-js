@@ -135,8 +135,8 @@ var EulerEquationBurgersSolver = makeClass({
 		for (var i = 0; i < this.nx; ++i) {
 			var u = this.q[i][1] / this.q[i][0];
 			var energyTotal = this.q[i][2] / this.q[i][0];
-			var energyKinematic = .5 * u * u;
-			var energyThermal = energyTotal - energyKinematic;
+			var energyKinetic = .5 * u * u;
+			var energyThermal = energyTotal - energyKinetic;
 			var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
 			var dx = this.xi[i+1] - this.xi[i];
 			var dum = dx / (speedOfSound + Math.abs(u));
@@ -225,8 +225,8 @@ var EulerEquationBurgersForwardEuler = makeClass({
 		for (var i = 0; i < this.nx; ++i) {
 			var u = this.q[i][1] / this.q[i][0];
 			var energyTotal = this.q[i][2] / this.q[i][0];
-			var energyKinematic = .5 * u * u;
-			var energyThermal = energyTotal - energyKinematic;
+			var energyKinetic = .5 * u * u;
+			var energyThermal = energyTotal - energyKinetic;
 			this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
 		}
 
@@ -340,8 +340,8 @@ var EulerEquationBurgersBackwardEulerGaussSeidel = makeClass({
 			for (var i = 0; i < this.nx; ++i) {
 				var u = this.q[i][1] / this.q[i][0];
 				var energyTotal = this.q[i][2] / this.q[i][0];
-				var energyKinematic = .5 * u * u;
-				var energyThermal = energyTotal - energyKinematic;
+				var energyKinetic = .5 * u * u;
+				var energyThermal = energyTotal - energyKinetic;
 				this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
 			}
 			
@@ -360,8 +360,8 @@ var EulerEquationBurgersBackwardEulerGaussSeidel = makeClass({
 			for (var i = 0; i < this.nx; ++i) {
 				var u = this.q[i][1] / this.q[i][0];
 				var energyTotal = this.q[i][2] / this.q[i][0];
-				var energyKinematic = .5 * u * u;
-				var energyThermal = energyTotal - energyKinematic;
+				var energyKinetic = .5 * u * u;
+				var energyThermal = energyTotal - energyKinetic;
 				this.pressure[i] = (this.gamma - 1) * this.q[i][0] * energyThermal;
 			}
 			
@@ -881,16 +881,16 @@ var EulerEquationGodunovForwardEuler = makeClass({
 			var densityL = this.qR[ix-1][0];
 			var velocityL = this.qR[ix-1][1] / densityL;
 			var energyTotalL = this.qR[ix-1][2] / densityL;
-			var energyKinematicL = .5 * velocityL * velocityL;
-			var energyThermalL = energyTotalL - energyKinematicL;
+			var energyKineticL = .5 * velocityL * velocityL;
+			var energyThermalL = energyTotalL - energyKineticL;
 			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
 			var hTotalL = energyTotalL + pressureL / densityL;
 			
 			var densityR = this.qL[ix][0];
 			var velocityR = this.qL[ix][1] / densityR;
 			var energyTotalR = this.qL[ix][2] / densityR;
-			var energyKinematicR = .5 * velocityR * velocityR;
-			var energyThermalR = energyTotalR - energyKinematicR;
+			var energyKineticR = .5 * velocityR * velocityR;
+			var energyThermalR = energyTotalR - energyKineticR;
 			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
 			var hTotalR = energyTotalR + pressureR / densityR;
 		
@@ -935,8 +935,8 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var densityL = this.qR[ix-1][0];
 			var velocityL = this.qR[ix-1][1] / densityL;
 			var energyTotalL = this.qR[ix-1][2] / densityL;
-			var energyKinematicL = .5 * velocityL * velocityL;
-			var energyThermalL = energyTotalL - energyKinematicL;
+			var energyKineticL = .5 * velocityL * velocityL;
+			var energyThermalL = energyTotalL - energyKineticL;
 			var pressureL = (this.gamma - 1) * densityL * energyThermalL;
 			var hTotalL = energyTotalL + pressureL / densityL;
 			var roeWeightL = Math.sqrt(densityL);
@@ -944,8 +944,8 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var densityR = this.qL[ix][0];
 			var velocityR = this.qL[ix][1] / densityR;
 			var energyTotalR = this.qL[ix][2] / densityR;
-			var energyKinematicR = .5 * velocityR * velocityR;
-			var energyThermalR = energyTotalR - energyKinematicR;
+			var energyKineticR = .5 * velocityR * velocityR;
+			var energyThermalR = energyTotalR - energyKineticR;
 			var pressureR = (this.gamma - 1) * densityR * energyThermalR;
 			var hTotalR = energyTotalR + pressureR / densityR;
 			var roeWeightR = Math.sqrt(densityR);
@@ -984,54 +984,84 @@ answer: don't employ flux limiters, just use the jacobian matrix
 			var density = this.q[i][0];
 			var velocity = this.q[i][1] / density;
 			var energyTotal = this.q[i][2] / density;
-			var energyKinematic = .5 * velocity * velocity;
-			var energyThermal = energyTotal - energyKinematic;
+			var energyKinetic = .5 * velocity * velocity;
+			var energyThermal = energyTotal - energyKinetic;
 			var pressure = (this.gamma - 1) * density * energyThermal;
 			var speedOfSound = Math.sqrt(this.gamma * pressure / density);
 			var hTotal = energyTotal + pressure / density;
 			
 			//calculate flux at cell center
-			this.cellFlux[i][0] = this.q[i][1];
-			this.cellFlux[i][1] = (this.gamma - 1) * this.q[i][2] + (3 - this.gamma) * .5 * this.q[i][1] * this.q[i][1] / this.q[i][0];
-			this.cellFlux[i][2] = this.gamma * this.q[i][2] * this.q[i][1] / this.q[i][0] + (1 - this.gamma) * .5 * this.q[i][1] * this.q[i][1] * this.q[i][1] / (this.q[i][0] * this.q[i][0]);
-		}
+			this.cellFlux[i][0] = density * velocity; 
+			this.cellFlux[i][1] = density * velocity * velocity + pressure;
+			this.cellFlux[i][2] = (density * energyTotal + pressure) * velocity;
 
-		for (var ix = 1; ix < this.nx; ++ix) {
-			//compute averaged interface values
-			var densityMid = this.qMid[ix][0];
-			var velocityMid = this.qMid[ix][1] / densityMid;
-			var energyTotalMid = this.qMid[ix][2] / densityMid;
-			var energyKinematicMid = .5 * velocityMid * velocityMid;
-			var energyThermalMid = energyTotalMid - energyKinematicMid;
-			var pressureMid = (this.gamma - 1) * densityMid * energyThermalMid;
-			var speedOfSoundMid = Math.sqrt(this.gamma * pressureMid / densityMid);
-			var hTotalMid = energyTotalMid + pressureMid / densityMid;
-			
-			var speedOfSoundMid = Math.sqrt((this.gamma - 1) * (hTotalMid - .5 * velocityMid * velocityMid));	
+			this.pressure[i] = pressure;
+	
+			//calculate eigenvalues at cell center
 			EulerEquationHLLForwardEuler.superProto.buildEigenstate[this.eigenDecomposition].calcEigenvalues.call(this,
-				this.interfaceEigenvalues[i],
-				velocityMid, speedOfSoundMid);
+				this.eigenvalues[i], velocity, speedOfSound);
+		}
+		
+		for (var i = 1; i < this.nx; ++i) {
+			var fluxL = this.cellFlux[i-1];
+			var fluxR = this.cellFlux[i];
 
-			var dest = this.interfaceFlux[i];
-			var lhs = this.cellFlux[i];
-			var rhs = this.cellFlux[i+1];
+			/* * /
+			var minLambda = this.eigenvalues[i-1][0];
+			var maxLambda = this.eigenvalues[i][2];
+			/**/
+			/* * /
+			var minLambda = Math.min(this.eigenvalues[i-1][0], this.eigenvalues[i][0]);
+			var maxLambda = Math.max(this.eigenvalues[i-1][2], this.eigenvalues[i][2]);
+			/**/
 
-			var minLambda = this.interfaceEigenvalues[i][0];
-			var maxLambda = this.interfaceEigenvalues[i][2];
+			//from lambdas, wavespeeds?
+			var qL = this.q[i-1];
+			var pressureL = this.pressure[i-1];
+			var densityL = qL[0];
+			var velocityL = qL[1] / densityL;
+			var energyTotalL = qL[2] / densityL;
+			var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
+			var enthalpyTotalL = energyTotalL + pressureL / densityL;
+			var weightL = Math.sqrt(densityL);
 
-			if (minLambda >= 0) {
-				for (var j = 0; j < 3; ++j) {
-					dest[j] = lhs[j];
-				}
-			} else if (maxLambda <= 0) {
-				for (var j = 0; j < 3; ++j) {
-					dest[j] = rhs[j];
-				}
+			var qR = this.q[i];
+			var pressureR = this.pressure[i];
+			var densityR = qR[0];
+			var energyTotalR = qR[2] / densityR;
+			var velocityR = qR[1] / densityR;
+			var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
+			var enthalpyTotalR = energyTotalR + pressureR / densityR;
+			var weightR = Math.sqrt(densityR);
+
+			var velocity = (weightL * velocityL + weightR * velocityR) / (weightL + weightR);
+			var enthalpyTotal = (weightL * enthalpyTotalL + weightR * enthalpyTotalR) / (weightL + weightR);
+			var speedOfSound = Math.sqrt((gamma - 1) * (enthalpyTotal - .5 * velocity * velocity));
+			/** /
+			var ql;
+			if (0 <= pressureL) {
+				ql = 1;
 			} else {
-				for (var j = 0; j < 3; ++j) {
-					dest[j] = (maxLambda * lhs[j] - minLambda * rhs[j] + minLambda * maxLambda * (this.q[i+1][j] - this.q[i][j])) / (maxLambda - minLambda);
-				}
+				ql = Math.sqrt(1 - (this.gamma + 1) / (2 * this.gamma))
 			}
+			var qr;
+			if (0 <= pressureR) {
+				qr = 1;
+			} else {
+				qr = Math.sqrt(1 - (this.gamma + 1) / (2 * this.gamma));
+			}
+			var sl = velocityL - speedOfSoundL * ql;
+			var sr = velocityR + speedOfSoundR * qr;
+			/**/
+			var sl = Math.min(velocityL - speedOfSoundL, velocity - speedOfSound, 0);
+			var sr = Math.max(velocityR + speedOfSoundR, velocity + speedOfSound, 0);
+
+			for (var j = 0; j < 3; ++j) {
+				this.interfaceFlux[i][j] = (sr * fluxL[j] - sl * fluxR[j] + sl * sr * (qR[j] - qL[j])) / (sr - sl);
+			}
+
+			//TODO flux limiter
+			// so how do we deconstruct the flux change across the interface such that we can compute its ratios and apply our limiter ...
 		}
 
 		//zero boundary flux
@@ -1410,7 +1440,8 @@ var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvecto
 	eigenvectors[2][0] = 1;
 	eigenvectors[2][1] = enthalpy * W * Aplus * eigenvalues[2]; 
 	eigenvectors[2][2] = enthalpy * W * Aplus - 1; 
-	
+
+/* manual -- producing NaNs * /
 	//calculate eigenvector inverses numerically ... though I don't have to ...
 	//mat33invert(eigenvectorsInverse, eigenvectors);
 	//(singular) or we can do it symbolically...
@@ -1429,6 +1460,10 @@ var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvecto
 	eigenvectorsInverse[2][0] = ls * (enthalpy * W * Aplus * (velocity - eigenvalues[2]) - velocity + k * Aplus * eigenvalues[2]);
 	eigenvectorsInverse[2][1] = ls * (1 - K * Aplus);
 	eigenvectorsInverse[2][2] = ls * (-velocity + K * Aplus * eigenvalues[2]);
+/**/
+/* numeric - producing singular values */
+	mat33invert(eigenvectorsInverse, eigenvectors);
+/**/
 	//calculate flux numerically ... though I don't have to ...
 	for (var i = 0; i < 3; ++i) {
 		for (var j = 0; j < 3; ++j) {
