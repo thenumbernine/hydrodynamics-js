@@ -895,7 +895,7 @@ var HydroState = makeClass({
 		//solver configuration
 		this.boundaryMethod = 'periodic';
 		this.fluxMethod = 'superbee';
-		this.advectMethod = 'Burgers';
+		this.advectMethod = 'Riemann / Roe';
 		this.drawToScreenMethod = 'Density';
 	
 		//initialize all textures to zero by default
