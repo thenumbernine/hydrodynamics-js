@@ -143,8 +143,8 @@ var drawToScreenMethods = {
 };
 
 var fluxMethods = {
-	'donor cell' : 'return vec4(0.);',
-	'Lax-Wendroff' : 'return vec4(1.);',
+	'donor cell' : 'return vec4(0., 0., 0., 0.);',
+	'Lax-Wendroff' : 'return vec4(1., 1., 1., 1.);',
 	'Beam-Warming' : 'return r;',
 	'Fromm' : 'return .5 * (1. + r);',
 
@@ -163,8 +163,8 @@ var fluxMethods = {
 	//'van Albada 2' : function(r) { return 2 * r / (r * r + 1); },
 	
 	'van Leer' : 'return (r + abs(r)) / (1. + abs(r));', 
-	'monotonized central' : 'return max(vec4(0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
-	superbee : 'return max(vec4(0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));'
+	'monotonized central' : 'return max(vec4(0., 0., 0., 0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
+	superbee : 'return max(vec4(0., 0., 0., 0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));'
 	
 	//'Barth-Jespersen' : function(r) {.5 * (r + 1) * Math.min(1, 4*r/(r+1), 4/(r+1)); }
 };
@@ -1402,9 +1402,9 @@ void main() {
 	vec2 delta = gridPos - center;
 	float distSq = dot(delta, delta);
 	if (distSq < .1 * .1) {
-		gl_FragColor = vec4(1.);
+		gl_FragColor = vec4(1., 1., 1., 1.);
 	} else {
-		gl_FragColor = vec4(0.);
+		gl_FragColor = vec4(0., 0., 0., 0.);
 	}
 }		
 */}),
@@ -1550,7 +1550,7 @@ void main() {
 			burgersComputeFluxSlopeShader[i] = new KernelShader({
 				code : mlstr(function(){/*
 void main() {
-	vec2 sidestep = vec2(0.);
+	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
 
 	vec2 posL2 = pos - 2.*sidestep;
@@ -1673,7 +1673,7 @@ void main() {
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
-		gl_FragColor = vec4(0.);
+		gl_FragColor = vec4(0., 0., 0., 0.);
 	} else {
 		vec4 q = texture2D(qTex, pos);
 		vec4 fluxXL = texture2D(fluxXTex, pos);
@@ -1727,7 +1727,7 @@ void main() {
 			roeComputeRoeValueShader[i] = new KernelShader({
 				code : mlstr(function(){/*
 void main() {
-	vec2 sidestep = vec2(0.);
+	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
 	
 	vec2 posL = pos - sidestep;
@@ -1887,32 +1887,36 @@ void main() {
 		*/
 		var roeComputeEigenvectorInverseColumnCode = [
 			mlstr(function(){/*
+	float invDenom = .5 / (speedOfSound * speedOfSound);
 	gl_FragColor = vec4(
-		(.5 * (gamma - 1.) * velocitySq + speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound),	//ei_0,0
-		1. - .5 * (gamma - 1.) * velocitySq / (speedOfSound * speedOfSound),	//ei_1,0
+		(.5 * (gamma - 1.) * velocitySq + speedOfSound * velocityN) * invDenom,	//ei_0,0
+		1. - (gamma - 1.) * velocitySq * invDenom,	//ei_1,0
 		-velocityT, //ei_2,0
-		(.5 * (gamma - 1.) * velocitySq - speedOfSound * velocityN) / (2. * speedOfSound * speedOfSound));	//ei_3,0
+		(.5 * (gamma - 1.) * velocitySq - speedOfSound * velocityN) * invDenom);	//ei_3,0
 */}),
 			mlstr(function(){/*
+	float invDenom = .5 / (speedOfSound * speedOfSound);
 	gl_FragColor = vec4(
-		-(normal.x * speedOfSound + (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound),	//ei_0,1
-		(gamma - 1.) * velocity.x / (speedOfSound * speedOfSound),	//ei_1,1
+		-(normal.x * speedOfSound + (gamma - 1.) * velocity.x) * invDenom,	//ei_0,1
+		(gamma - 1.) * velocity.x * 2. * invDenom,	//ei_1,1
 		tangent.x,	//ei_2,1
-		(normal.x * speedOfSound - (gamma - 1.) * velocity.x) / (2. * speedOfSound * speedOfSound));	//ei_3,1
+		(normal.x * speedOfSound - (gamma - 1.) * velocity.x) * invDenom);	//ei_3,1
 */}),
 			mlstr(function(){/*
+	float invDenom = .5 / (speedOfSound * speedOfSound);
 	gl_FragColor = vec4(
-		-(normal.y * speedOfSound + (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound),	//ei_0,2
-		(gamma - 1.) * velocity.y / (speedOfSound * speedOfSound),	//ei_1,2
+		-(normal.y * speedOfSound + (gamma - 1.) * velocity.y) * invDenom,	//ei_0,2
+		(gamma - 1.) * velocity.y * 2. * invDenom,	//ei_1,2
 		tangent.y,	//ei_2,2
-		(normal.y * speedOfSound - (gamma - 1.) * velocity.y) / (2. * speedOfSound * speedOfSound));	//ei_3,2
+		(normal.y * speedOfSound - (gamma - 1.) * velocity.y) * invDenom);	//ei_3,2
 */}),
 			mlstr(function(){/*
+	float invDenom = .5 / (speedOfSound * speedOfSound);
 	gl_FragColor = vec4(
-		(gamma - 1.) / (2. * speedOfSound * speedOfSound),	//ei_0,3
-		-(gamma - 1.) / (speedOfSound * speedOfSound),	//ei_1,3
+		(gamma - 1.) * invDenom,	//ei_0,3
+		-(gamma - 1.) * 2. * invDenom,	//ei_1,3
 		0.,	//ei_2,3
-		(gamma - 1.) / (2. * speedOfSound * speedOfSound));	//ei_3,3
+		(gamma - 1.) * invDenom);	//ei_3,3
 */})
 		];
 
@@ -1985,7 +1989,7 @@ void main() {
 			roeComputeFluxSlopeShader[i] = new KernelShader({
 				code : (mlstr(function(){/*
 void main() {
-	vec2 sidestep = vec2(0.);
+	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
 	vec4 dqTildePrev = texture2D(dqTildeTex, pos - sidestep); 
 	vec4 dqTilde = texture2D(dqTildeTex, pos); 
@@ -2059,11 +2063,21 @@ void main() {
 	vec4 rTilde = texture2D(rTildeTex, pos);
 	vec4 phi = fluxMethod(rTilde);
 
-	vec4 theta = step(eigenvalues, vec4(0.)) * 2. - 1.;
-	vec4 epsilon = eigenvalues * dt_dx;
-	vec4 deltaFluxTilde = eigenvalues * dqTilde;
-	vec4 fluxTilde = fluxAvgTilde - .5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
-	gl_FragColor = eigenvectorMat * fluxTilde;
+	vec4 fluxTilde;
+	for (int j = 0; j < 4; ++j) {
+		float theta = 1.;
+		if (eigenvalues[j] < 0.) theta = -1.;
+		float epsilon = eigenvalues[j] * dt_dx;
+		float deltaFluxTilde = eigenvalues[j] * dqTilde[j];
+		fluxTilde[j] = fluxAvgTilde[j] - .5 * deltaFluxTilde * (theta + phi[j] * (epsilon - theta));
+	}
+	for (int j = 0; j < 4; ++j) {
+		float sum = 0.;
+		for (int k = 0; k < 4; ++k) {
+			sum += eigenvectorMat[k][j] * fluxTilde[k];
+		}
+		gl_FragColor[j] = sum;
+	}
 }
 */}).replace(/\$side/g, i),
 					uniforms : {
@@ -2100,7 +2114,7 @@ void main() {
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
-		gl_FragColor = vec4(0.);
+		gl_FragColor = vec4(0., 0., 0., 0.);
 	} else {
 		vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 		vec4 q = texture2D(qTex, pos);
@@ -2110,7 +2124,7 @@ void main() {
 		float energyKinetic = .5 * dot(vel, vel);
 		float energyPotential = dot(gridPos - rangeMin, externalForce);
 		float energyThermal = energyTotal - energyKinetic - energyPotential;
-		gl_FragColor = vec4(0.);
+		gl_FragColor = vec4(0., 0., 0., 0.);
 		gl_FragColor.x = (gamma - 1.) * rho * energyThermal;
 	}
 }
@@ -2130,7 +2144,7 @@ void main() {
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
-		gl_FragColor = vec4(0.);
+		gl_FragColor = vec4(0., 0., 0., 0.);
 	} else {	
 		vec2 dposx = vec2(dpos.x, 0.);
 		vec2 dposy = vec2(0., dpos.y);
@@ -2178,7 +2192,7 @@ void main() {
 void main() {
 	float solid = texture2D(solidTex, pos).x;
 	if (solid > .5) {
-		gl_FragColor = vec4(0.);
+		gl_FragColor = vec4(0., 0., 0., 0.);
 	} else {
 		vec2 dposx = vec2(dpos.x, 0.);
 		vec2 dposy = vec2(0., dpos.y);
