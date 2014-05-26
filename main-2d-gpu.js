@@ -2063,21 +2063,11 @@ void main() {
 	vec4 rTilde = texture2D(rTildeTex, pos);
 	vec4 phi = fluxMethod(rTilde);
 
-	vec4 fluxTilde;
-	for (int j = 0; j < 4; ++j) {
-		float theta = 1.;
-		if (eigenvalues[j] < 0.) theta = -1.;
-		float epsilon = eigenvalues[j] * dt_dx;
-		float deltaFluxTilde = eigenvalues[j] * dqTilde[j];
-		fluxTilde[j] = fluxAvgTilde[j] - .5 * deltaFluxTilde * (theta + phi[j] * (epsilon - theta));
-	}
-	for (int j = 0; j < 4; ++j) {
-		float sum = 0.;
-		for (int k = 0; k < 4; ++k) {
-			sum += eigenvectorMat[k][j] * fluxTilde[k];
-		}
-		gl_FragColor[j] = sum;
-	}
+	vec4 theta = step(0., eigenvalues) * 2. - 1.;
+	vec4 epsilon = eigenvalues * dt_dx;
+	vec4 deltaFluxTilde = eigenvalues * dqTilde;
+	vec4 fluxTilde = fluxAvgTilde - .5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+	gl_FragColor = eigenvectorMat * fluxTilde;
 }
 */}).replace(/\$side/g, i),
 					uniforms : {
