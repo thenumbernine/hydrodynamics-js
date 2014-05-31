@@ -1453,9 +1453,7 @@ void main() {
 	{
 		rho = 2.;
 		vel.x = .5;
-	}
-	else
-	{
+	} else {
 		rho = 1.;
 		vel.x = -.5;
 	}

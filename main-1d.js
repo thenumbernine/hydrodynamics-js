@@ -97,7 +97,7 @@ var boundaryMethods = {
 		q[nx-2][2] = q[nx-3][2];
 		q[nx-1][2] = q[nx-4][2];
 	},
-	constant : function(nx,q) {
+	/*constant : function(nx,q) {
 		q[0][0] = 0;
 		q[1][0] = 0;
 		q[nx-2][0] = 0;
@@ -111,6 +111,7 @@ var boundaryMethods = {
 		q[nx-2][2] = 0;
 		q[nx-1][2] = 0;
 	},
+	*/
 	freeflow : function(nx,q) {
 		q[0][0] = q[1][0] = q[2][0];
 		q[nx-1][0] = q[nx-2][0] = q[nx-3][0];
@@ -154,17 +155,17 @@ d/dt (rho) + d/dx(rho u) = 0
 d/dt (rho u) + d/dx(rho u&2) + d/dx (P) = 0
 d/dt (rho e_total) + d/dx (rho e_total u) + d/dx (P u) = 0
 */
-var EulerEquationBurgersForwardEuler = makeClass({
+var EulerEquationBurgersExplicit = makeClass({
 	super : EulerEquationBurgersSolver,
 	step : function(dt) {
 		//boundary precedes this call
-		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersForwardEuler.prototype.integrateFlux);
+		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersExplicit.prototype.integrateFlux);
 		
 		//boundary again
 		this.boundary();
 		
-		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersForwardEuler.prototype.integrateMomentumDiffusion);
-		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersForwardEuler.prototype.integrateWorkDiffusion);
+		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersExplicit.prototype.integrateMomentumDiffusion);
+		explicitMethods[this.explicitMethod].call(this, dt, EulerEquationBurgersExplicit.prototype.integrateWorkDiffusion);
 	},
 	integrateFlux : function(dt, dq_dt) {
 		assert(this.x.length == this.nx);
@@ -872,10 +873,10 @@ velocity
 hTotal
 speedOfSound
 */
-var EulerEquationGodunovForwardEuler = makeClass({
+var EulerEquationGodunovExplicit = makeClass({
 	super : EulerEquationGodunovSolver,
 	initStep : function() {
-		EulerEquationGodunovForwardEuler.superProto.initStep.apply(this, arguments);
+		EulerEquationGodunovExplicit.superProto.initStep.apply(this, arguments);
 		
 		for (var ix = 1; ix < this.nx; ++ix) {
 			var densityL = this.qR[ix-1][0];
@@ -899,7 +900,7 @@ var EulerEquationGodunovForwardEuler = makeClass({
 			var energyTotal = (energyTotalL + energyTotalR) * .5;
 			
 			//compute eigenvectors and values at the interface based on averages
-			EulerEquationGodunovForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
+			EulerEquationGodunovExplicit.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
@@ -925,10 +926,10 @@ u = q1 / q0
 h_total = e_total + P / rho
 Cs = sqrt(gamma P / rho)
 */
-var EulerEquationRoeForwardEuler = makeClass({
+var EulerEquationRoeExplicit = makeClass({
 	super : EulerEquationGodunovSolver,
 	initStep : function() {
-		EulerEquationRoeForwardEuler.superProto.initStep.apply(this, arguments);
+		EulerEquationRoeExplicit.superProto.initStep.apply(this, arguments);
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 1; ix < this.nx; ++ix) {
 			//compute Roe averaged interface values
@@ -957,7 +958,7 @@ var EulerEquationRoeForwardEuler = makeClass({
 			var energyTotal = (roeWeightL * energyTotalL + roeWeightR * energyTotalR) * invDenom;
 
 			//compute eigenvectors and values at the interface based on Roe averages
-			EulerEquationRoeForwardEuler.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
+			EulerEquationRoeExplicit.prototype.buildEigenstate[this.eigenDecomposition].calcAll.call(this,
 				this.interfaceMatrix[ix],
 				this.interfaceEigenvalues[ix], 
 				this.interfaceEigenvectors[ix], 
@@ -967,10 +968,10 @@ var EulerEquationRoeForwardEuler = makeClass({
 	}
 });
 
-var EulerEquationHLLForwardEuler = makeClass({
+var EulerEquationHLLExplicit = makeClass({
 	super : EulerEquationGodunovSolver,
 	initStep : function() {
-		EulerEquationHLLForwardEuler.superProto.initStep.apply(this, arguments);
+		EulerEquationHLLExplicit.superProto.initStep.apply(this, arguments);
 	},
 	calcDerivative : function(dt, dq_dt) {
 /*
@@ -998,7 +999,7 @@ answer: don't employ flux limiters, just use the jacobian matrix
 			this.pressure[i] = pressure;
 	
 			//calculate eigenvalues at cell center
-			EulerEquationHLLForwardEuler.superProto.buildEigenstate[this.eigenDecomposition].calcEigenvalues.call(this,
+			EulerEquationHLLExplicit.superProto.buildEigenstate[this.eigenDecomposition].calcEigenvalues.call(this,
 				this.eigenvalues[i], velocity, speedOfSound);
 		}
 		
@@ -1086,12 +1087,12 @@ answer: don't employ flux limiters, just use the jacobian matrix
 
 var hdSimulation = {
 	methods : {
-		'Burgers / Forward Euler' : EulerEquationBurgersForwardEuler.prototype,
+		'Burgers / Explicit' : EulerEquationBurgersExplicit.prototype,
 		'Burgers / Backward Euler via Gauss Seidel' : EulerEquationBurgersBackwardEulerGaussSeidel.prototype,
 		//'Burgers / Backward Euler via Block Tridiagonal' : EulerEquationBurgersBackwardEulerTridiagonal.prototype,
-		'Godunov / Forward Euler' : EulerEquationGodunovForwardEuler.prototype,
-		'Roe / Forward Euler' : EulerEquationRoeForwardEuler.prototype,
-		'HLL / Forward Euler' : EulerEquationHLLForwardEuler.prototype
+		'Godunov / Explicit' : EulerEquationGodunovExplicit.prototype,
+		'Roe / Explicit' : EulerEquationRoeExplicit.prototype,
+		'HLL / Explicit' : EulerEquationHLLExplicit.prototype
 	},
 	initialConditions : {
 		Sod : function() {
@@ -1210,10 +1211,10 @@ function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 	mat33invert(eigenvectorsInverse, eigenvectors);
 }
 
-var ADMGodunovForwardEuler = makeClass({
+var ADMGodunovExplicit = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
-		ADMGodunovForwardEuler.superProto.initStep.apply(this, arguments);
+		ADMGodunovExplicit.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 2; ix < this.nx-1; ++ix) {
@@ -1248,7 +1249,7 @@ var ADMGodunovForwardEuler = makeClass({
 		//how about those boundary eigenstates?
 	},
 	step : function(dt) {
-		var deriv = ADMGodunovForwardEuler.prototype.calcDerivative;
+		var deriv = ADMGodunovExplicit.prototype.calcDerivative;
 		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
@@ -1258,7 +1259,7 @@ var ADMGodunovForwardEuler = makeClass({
 
 var admSimulation = {
 	methods : {
-		'Godunov / Forward Euler' : ADMGodunovForwardEuler.prototype
+		'Godunov / Explicit' : ADMGodunovExplicit.prototype
 	},
 	initialConditions : {
 		GaugeShock : function() {
@@ -1322,10 +1323,10 @@ function mhdBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvectorsInver
 }
 
 
-var MHDGodunovForwardEuler = makeClass({
+var MHDGodunovExplicit = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
-		MHDGodunovForwardEuler.superProto.initStep.apply(this, arguments);
+		MHDGodunovExplicit.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
 		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 2; ix < this.nx-1; ++ix) {
@@ -1360,7 +1361,7 @@ var MHDGodunovForwardEuler = makeClass({
 		//how about those boundary eigenstates?
 	},
 	step : function(dt) {
-		var deriv = MHDGodunovForwardEuler.prototype.calcDerivative;
+		var deriv = MHDGodunovExplicit.prototype.calcDerivative;
 		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
@@ -1375,7 +1376,7 @@ var MHDGodunovForwardEuler = makeClass({
 
 var mhdSimulation = {
 	methods : {
-		'Godunov / Forward Euler' : MHDGodunovForwardEuler.prototype
+		'Godunov / Explicit' : MHDGodunovExplicit.prototype
 	},
 	initialConditions : {
 		Sod : function() {
@@ -1477,10 +1478,10 @@ var srhdBuildEigenstate = function(matrix, eigenvalues, eigenvectors, eigenvecto
 	}
 }
 
-var SRHDGodunovForwardEuler = makeClass({
+var SRHDGodunovExplicit = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
-		SRHDGodunovForwardEuler.superProto.initStep.apply(this, arguments);
+		SRHDGodunovExplicit.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
 		
 		var prims = [];
@@ -1509,7 +1510,7 @@ var SRHDGodunovForwardEuler = makeClass({
 		//how about those boundary eigenstates?
 	},
 	step : function(dt) {
-		var deriv = SRHDGodunovForwardEuler.prototype.calcDerivative;
+		var deriv = SRHDGodunovExplicit.prototype.calcDerivative;
 		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
@@ -1549,7 +1550,7 @@ http://relativity.livingreviews.org/Articles/lrr-2003-7/download/lrr-2003-7Color
 */
 var srhdSimulation = {
 	methods : {
-		'Godunov / Forward Euler' : SRHDGodunovForwardEuler.prototype
+		'Godunov / Explicit' : SRHDGodunovExplicit.prototype
 	},
 	initialConditions : {
 		Sod : function() {
@@ -1719,9 +1720,9 @@ var HydroState = makeClass({
 		this.boundaryMethod = 'mirror';
 		this.fluxMethod = 'superbee';
 		this.simulation = 'Euler';
-		this.algorithm = 'Roe / Forward Euler';
+		this.algorithm = 'Roe / Explicit';
 		this.eigenDecomposition = 'Analytic';
-		this.explicitMethod = 'Euler';
+		this.explicitMethod = 'RK4';
 	},
 	boundary : function() {
 		boundaryMethods[this.boundaryMethod](this.nx, this.q);

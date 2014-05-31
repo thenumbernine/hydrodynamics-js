@@ -20,25 +20,23 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 - render as a good ol fashioned white line with circles or boxes or x's or something as gridpoints
 	- add a toggle for what variable is displayed
 	- overlay exact solution
+- HLL - incorporate flux limiter so it works at all
+- AMR - isn't working unless we specifically set the flux limiter to .. (donor cell?).  the book says to use HLL, so get that working?
+
 
 2D:
-- remove pressure source from Roe version
 - custom inflow boundary conditions
-	- Von Karman vortex street demo
+	- Von Karman vortex street demo (need viscousity, i.e. Navier-Stokes, first)
 - mouse input for velocity and for boundary painting
 - FBO-based advection or particle simulation for streamline tracing
 - implicit Gauss-Seidel ... and then add arbitrary boundaries to it
 
 2D-GPU
-- remove pressure source from Roe version
-- GPU accuracy issues compared to CPU
-	- check out source:hvidtfeldts.net/WebGL-DP/webgl.html
+- solid: get cylinder working with Roe version
 - mirror boundary conditions
 	- then enable hydrostatic pressure
 - constant boundary options at all
-- Riemann solver is unstable -- eigenbasis accuracy issues
 - Riemann solver arbitrary boundaries
-- looks like the speed of sound isn't dying down like it is in the CPU version.
 - implicit Jacobi solver
 
 2D unstructured? 3D? 3D-GPU? 3D-unstructured? 3D-GPU-unstructured?
@@ -48,9 +46,6 @@ all:
 - Entropy fix.
 	- CFD codes has this in euler_solver_v0.f90, Toro describes it on p.364
 - Artificial viscosity
-- Roe solvers are not supposed to have flux limiters directly applied to them (but rather slope limiters?), but I'm doing this, and seeing oscillations.  I should fix it.
-	- Dullemond describes this in section 7.5, and cites Toro who describes how to do this on p.433
-- slope limiters (and two neighbors over) correctly working with arbitrary boundaries.  I've got an initial pass at this.
 - swappable equations of state
 	- MHD
 	- ADM

@@ -180,7 +180,7 @@ var addMulState = function(to, from, scalar) {
 };
 
 var boundaryMethods = {
-	none : {top : function() {}, left : function() {}, right : function() {}, bottom : function() {}},
+	//none : {top : function() {}, left : function() {}, right : function() {}, bottom : function() {}},
 	periodic : {
 		bottom : function(nx,q) {
 			for (var i = 0; i < nx; ++i) {
