@@ -532,9 +532,9 @@ var EulerEquationBurgersExplicit = makeClass({
 							this.flux[fluxIndex] = ui * qR; 
 						}
 						var delta = phi * (qR - qL);
-						this.flux[fluxIndex] += delta * .5
+						this.flux[fluxIndex] += delta * .5 * .5
 							* Math.abs(ui)
-							* (1 - Math.abs(ui * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
+							* (1 - Math.abs(ui * dt / dxi[side]));
 					}
 				}
 			}
@@ -780,7 +780,7 @@ var EulerEquationBurgersBackwardEulerGaussSeidel = makeClass({
 								this.flux[fluxIndex] = this.ui[uiIndex] * this.q[qIndexR];
 							}
 							var delta = phi * (this.q[qIndexR] - this.q[qIndexL]);
-							this.flux[fluxIndex] += delta * .5
+							this.flux[fluxIndex] += delta * .5 * .5
 								* Math.abs(this.ui[uiIndex])
 								* (1 - Math.abs(this.ui[uiIndex] * dt / dxi[side]));//* volume / (dxi[side] * dxi[side])));
 						}
@@ -1135,7 +1135,7 @@ var GodunovSolver = makeClass({
 						var phi = fluxMethods[this.fluxMethod](this.rTilde[state + 4 * interfaceIndex]);
 						var epsilon = eigenvalue * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
 						var deltaFluxTilde = eigenvalue * this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
-						fluxTilde[state] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+						fluxTilde[state] = -.5 * deltaFluxTilde * (theta + .5 * phi * (epsilon - theta));
 					}
 				
 					//reproject fluxTilde back into q

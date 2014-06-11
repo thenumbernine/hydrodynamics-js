@@ -1645,16 +1645,7 @@ void main() {
 	vec4 phi = fluxMethod(r);
 	vec4 delta = phi * (qR - qL);
 	
-	//compact:
-	//gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
-
-	//written out:
-	if (ui >= 0.) {
-		gl_FragColor = ui * qL;
-	} else {
-		gl_FragColor = ui * qR;
-	}
-	gl_FragColor += delta * .5 * abs(ui) * (1. - abs(ui * dt_dx));
+	gl_FragColor += delta * .5 * .5 * abs(ui) * (1. - abs(ui * dt_dx));
 }			
 */}).replace(/\$side/g, i),
 					uniforms : {
@@ -2064,7 +2055,7 @@ void main() {
 	vec4 theta = step(0., eigenvalues) * 2. - 1.;
 	vec4 epsilon = eigenvalues * dt_dx;
 	vec4 deltaFluxTilde = eigenvalues * dqTilde;
-	vec4 fluxTilde = fluxAvgTilde - .5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
+	vec4 fluxTilde = fluxAvgTilde - .5 * deltaFluxTilde * (theta + .5 * phi * (epsilon - theta));
 	gl_FragColor = eigenvectorMat * fluxTilde;
 }
 */}).replace(/\$side/g, i),
