@@ -1575,11 +1575,11 @@ void main() {
 		qR2[$side+1] = -qR2[$side+1];
 	}
 	if (solidL1 > .5) {
-		qL1 = qL1;
+		qL1 = -qR1;
 		qL1[$side+1] = -qL1[$side+1];
 	}
 	if (solidR1 > .5) {
-		qR1 = qR1;
+		qR1 = -qL1;
 		qR1[$side+1] = -qR1[$side+1];
 	}
 	
