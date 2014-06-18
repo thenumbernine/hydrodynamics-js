@@ -48,7 +48,7 @@ Here's what I've got so far:<br>
 	<li type='square'>Supports gravity / external forces.</li>
 	<li type='square'>Compressible Euler fluid equation simulation with the following:
 		<ul>Initial Conditions:
-			<li type='circle'>Sod shock tube test extened to two dimensions</li>
+			<li type='circle'>Sod shock tube test extended to two dimensions</li>
 			<li type='circle'>Sod shock tube test with a cylinder obstacle</li>
 			<li type='circle'>simple bell curve perturbation</li>
 			<li type='circle'>Kelvin-Hemholtz instability demo (left and right boundaries must be set to "periodic" to best observe the phenomenon)</li>
@@ -68,7 +68,7 @@ Here's what I've got so far:<br>
 	<li type='square'>Supports a number of flux limiters.</li>
 	<li type='square'>Compressible Euler fluid equation simulation with the following:
 		<ul>Initial Conditions:
-			<li type='circle'>Sod shock tube test extened to two dimensions</li>
+			<li type='circle'>Sod shock tube test extended to two dimensions</li>
 			<li type='circle'>Sod shock tube test with a cylinder obstacle (currently only works with the Burgers solver)</li>
 			<li type='circle'>simple bell curve perturbation</li>
 			<li type='circle'>Kelvin-Hemholtz instability demo (currently only works with Burgers solver)</li>
@@ -81,7 +81,23 @@ Here's what I've got so far:<br>
 </ul>
 <b>1D, 2D, and 3D CFD</b> - <a href='https://github.com/thenumbernine/Hydrodynamics'>GitHub</a><br>
 <br>
-<b>2D CFD via OpenCL</b> - <a href='https://github.com/thenumbernine/HydrodynamicsGPU'>GitHub</a><br>
+<b>2D, 3D CFD via OpenCL</b> - <a href='https://github.com/thenumbernine/HydrodynamicsGPU'>GitHub</a><br>
+<ul style='padding-left:20px'>
+	<li type='square'>Superbee flux limiter.</li>
+	<li type='square'>Supports mirror, periodic, and free-flow boundary conditions per-side of the grid.</li>
+	<li type='square'>Supports self-gravitation via discrete Poisson equation.</li>
+	<li type='square'>Compressible Euler fluid equation.</li>
+	<ul>Initial Conditions:
+		<li type='circle'>Sod shock tube test extended to two dimensions</li>
+		<li type='circle'>Circular shock wave test</li>
+		<li type='circle'>Kelvin-Hemoltz instability test</li>
+		<li type='circle'>Rayleigh-Taylor instability test</li>
+	</ul>
+	<ul>Solvers:
+		<li type='circle'>Burgers / Explicit Integration</li>
+		<li type='circle'>Roe / Explicit Integration</li>
+	</ul>
+</ul>
 </div>
 <br>
 <br>
