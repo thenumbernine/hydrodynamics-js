@@ -1006,7 +1006,12 @@ var EulerEquationHLLExplicit = makeClass({
 			this.interfaceEigenvalues[ix][2] = velocity + speedOfSound;
 		}
 	},
+	step : function(dt) {
+		var deriv = EulerEquationHLLExplicit.prototype.calcDerivative;
+		explicitMethods[this.explicitMethod].call(this, dt, deriv);
+	},
 	calcDerivative : function(dt, dq_dt) {
+		var nx = this.nx;
 		for (var i = 2; i < nx - 1; ++i) {
 			var qL = this.q[i-1];
 			var densityL = qL[0];
@@ -1234,13 +1239,13 @@ var ADMGodunovExplicit = makeClass({
 			var alpha_L = Math.exp(ln_alpha_L);
 
 			//q_ix,1 = d/dx ln g
-			var ln_g_L = (this.q[ixL+1][0] - this.q[ixL-1][0]) / (2 * dx);
+			var ln_g_L = (this.q[ixL+1][1] - this.q[ixL-1][1]) / (2 * dx);
 			var g_L = Math.exp(ln_g_L);
 
 			var ln_alpha_R = (this.q[ixR+1][0] - this.q[ixR-1][0]) / (2 * dx);
 			var alpha_R = Math.exp(ln_alpha_R);
 			
-			var ln_g_R = (this.q[ixR+1][0] - this.q[ixR-1][0]) / (2 * dx);
+			var ln_g_R = (this.q[ixR+1][1] - this.q[ixR-1][1]) / (2 * dx);
 			var g_R = Math.exp(ln_g_R);
 
 			var alpha = .5 * (alpha_L + alpha_R);

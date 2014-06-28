@@ -24,6 +24,6 @@ var fluxMethods = {
 	'monotonized central' : function(r) { return Math.max(0, Math.min(2, .5 * (1 + r), 2 * r)); },
 	superbee : function(r) { return Math.max(0,Math.min(1,2*r),Math.min(2,r)); },
 
-	'Barth-Jespersen' : function(r) {.5 * (r + 1) * Math.min(1, 4*r/(r+1), 4/(r+1)); }
+	'Barth-Jespersen' : function(r) { return .5 * (r + 1) * Math.min(1, 4*r/(r+1), 4/(r+1)); }
 };
 
