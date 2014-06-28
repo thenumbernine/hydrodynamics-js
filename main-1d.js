@@ -37,7 +37,9 @@ function mat33invert(out, a) {
 				console.log('a('+i+','+j+') = '+a[j][i]);
 			}
 		}
-		throw 'singular!';
+		console.log('singular!');
+		return;
+		//throw 'singular!';
 	}
 	var invDet = 1 / det;
 	for (var j = 0; j < 3; ++j) {
@@ -1103,9 +1105,9 @@ var hdSimulation = {
 		'Burgers / Explicit' : EulerEquationBurgersExplicit.prototype,
 		'Burgers / Backward Euler via Gauss Seidel' : EulerEquationBurgersBackwardEulerGaussSeidel.prototype,
 		//'Burgers / Backward Euler via Block Tridiagonal' : EulerEquationBurgersBackwardEulerTridiagonal.prototype,
-		'Godunov / Explicit' : EulerEquationGodunovExplicit.prototype,
-		'Roe / Explicit' : EulerEquationRoeExplicit.prototype,
-		'HLL / Explicit' : EulerEquationHLLExplicit.prototype
+		//'Godunov / Explicit' : EulerEquationGodunovExplicit.prototype,
+		'HLL / Explicit' : EulerEquationHLLExplicit.prototype,
+		'Roe / Explicit' : EulerEquationRoeExplicit.prototype
 	},
 	initialConditions : {
 		Sod : function() {
@@ -1266,7 +1268,22 @@ var ADMGodunovExplicit = makeClass({
 		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
-		return this.q[i];
+		var dx = (xmax - xmin) / this.nx;
+		var nx = this.nx;
+		
+		var iL = i <= 0 ? 0 : i - 1;
+		var iR = i >= nx-1 ? nx-1 : i + 1;
+		
+		var ln_alpha = (this.q[iR][0] - this.q[iL][0]) / (2 * dx);
+		var alpha = Math.exp(ln_alpha);
+
+		//q_i,1 = d/dx ln g
+		var ln_g = (this.q[iR][1] - this.q[iL][1]) / (2 * dx);
+		var g = Math.exp(ln_g);
+
+		var K = this.q[i][2] * Math.sqrt(g);
+		
+		return [alpha, g, K];
 	}
 });
 
