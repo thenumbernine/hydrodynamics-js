@@ -2194,9 +2194,8 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	try {
-		GL.init(canvas);	//uses plugins
-		renderer = GL.canvasRenderer;
-		gl = renderer.gl;
+		renderer = new GL.CanvasRenderer({canvas:canvas});
+		gl = renderer.context;
 	} catch (e) {
 		panel.remove();
 		$(canvas).remove();
@@ -2211,12 +2210,13 @@ $(document).ready(function(){
 	renderer.view.fovY = 125 / 200 * (xmax - xmin);
 
 	colorSchemes.Heat = new GL.GradientTexture({
-		width:256, 
-		colors:[
-			[0,0,0],
-			[0,0,1],
-			[1,1,0],
-			[1,0,0],
+		context : gl,
+		width : 256, 
+		colors : [
+			[0, 0, 0],
+			[0, 0, 1],
+			[1, 1, 0],
+			[1, 0, 0],
 		],
 		dontRepeat : true
 	});
@@ -2227,6 +2227,7 @@ $(document).ready(function(){
 		isobarData[i] = 255;
 	}
 	colorSchemes['B&W'] = new GL.Texture2D({
+		context : gl,
 		width : isobarSize,
 		height : 1,
 		format : gl.LUMINANCE,
@@ -2258,6 +2259,7 @@ $(document).ready(function(){
 	});
 
 	var shader = new GL.ShaderProgram({
+		context : gl,
 		vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
 attribute float state;
@@ -2283,11 +2285,13 @@ void main() {
 	//make grid
 	hydro.update();
 	waveVtxBuf = new GL.ArrayBuffer({
+		context : gl,
 		dim : 2,
 		data : hydro.vertexPositions,
 		usage : gl.DYNAMIC_DRAW
 	});
 	waveStateBuf = new GL.ArrayBuffer({
+		context : gl,
 		dim : 1,
 		data : hydro.vertexStates,
 		usage : gl.DYNAMIC_DRAW
@@ -2299,8 +2303,13 @@ void main() {
 			indexes.push(i + (j+1)*hydro.state.nx);
 		}
 		sceneObjects.push(new GL.SceneObject({
+			context : gl,
+			scene : renderer.scene,
 			mode : gl.TRIANGLE_STRIP,
-			indexes : new GL.ElementArrayBuffer({data : new Uint32Array(indexes)}),
+			indexes : new GL.ElementArrayBuffer({
+				context : gl,
+				data : new Uint32Array(indexes)
+			}),
 			attrs : {
 				vertex : waveVtxBuf,
 				state : waveStateBuf

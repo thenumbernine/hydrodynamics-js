@@ -108,6 +108,7 @@ GL.oninit.push(function() {
 
 			if (!KernelShader.prototype.kernelVertexShader) {
 				KernelShader.prototype.kernelVertexShader = new GL.VertexShader({
+					context : gl,
 					code : 
 						GL.vertexPrecision + 
 						varyingCodePrefix +
@@ -122,6 +123,7 @@ void main() {
 				});	
 			}
 
+			args.context = gl;
 			args.vertexShader = KernelShader.prototype.kernelVertexShader;
 			args.fragmentCode = GL.fragmentPrecision + varyingCodePrefix + fragmentCodePrefix + args.code;
 			delete args.code;
@@ -755,6 +757,7 @@ var HydroState = makeClass({
 
 		//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
 		encodeTempTex = new GL.Texture2D({
+			context : gl,
 			internalFormat : gl.RGBA,
 			format : gl.RGBA,
 			type : gl.UNSIGNED_BYTE,
@@ -769,6 +772,7 @@ var HydroState = makeClass({
 		});
 
 		this.noiseTex = new GL.Texture2D({
+			context : gl,
 			internalFormat : gl.RGBA,
 			format : gl.RGBA,
 			type : gl.FLOAT,
@@ -1300,20 +1304,20 @@ $(document).ready(function(){
 	}).prependTo(document.body).get(0);
 	$(canvas).disableSelection()
 	
-	try {
-		GL.init(canvas, {debug:true});
-		renderer = GL.canvasRenderer;
-		gl = renderer.gl;
-	} catch (e) {
+	//try {
+		renderer = new GL.CanvasRenderer({canvas:canvas});
+		gl = renderer.context;
+	/*} catch (e) {
 		$(canvas).remove();
 		$('#webglfail').show();
 		throw e;
-	}
+	}*/
 
 	FloatTexture2D = makeClass({
 		super : GL.Texture2D,
 		init : function(width, height) {
 			var args = {};
+			args.context = gl;
 			args.width = width;
 			args.height = height;
 			args.internalFormat = gl.RGBA;
@@ -1330,19 +1334,21 @@ $(document).ready(function(){
 	});
 
 	lineObj = new GL.SceneObject({
+		context : gl,
+		scene : renderer.scene,
 		mode : gl.LINES,
 		attrs : {
 			vertex : new GL.ArrayBuffer({
+				context : gl,
 				dim : 2,
 				data : [0, 0, 1, 1],
-				usage : gl.DYNAMIC_DRAW,
-				keep : true
+				usage : gl.DYNAMIC_DRAW
 			}),
 			texCoord : new GL.ArrayBuffer({
+				context : gl,
 				dim : 2,
 				data : [0, 0, 1, 1],
-				usage : gl.DYNAMIC_DRAW,
-				keep : true
+				usage : gl.DYNAMIC_DRAW
 			})
 		},
 		parent : null,
@@ -1350,13 +1356,17 @@ $(document).ready(function(){
 	});
 
 	quadObj = new GL.SceneObject({
+		context : gl,
+		scene : renderer.scene,
 		mode : gl.TRIANGLE_STRIP,
 		attrs : {
 			vertex : new GL.ArrayBuffer({
+				context : gl,
 				dim : 2,
 				data : [-1,-1, 1,-1, -1,1, 1,1]
 			}),
 			texCoord : new GL.ArrayBuffer({
+				context : gl,
 				dim : 2,
 				data : [0,0, 1,0, 0,1, 1,1]
 			})
@@ -2281,11 +2291,13 @@ void main() {
 		});
 
 		fbo = new GL.Framebuffer({
+			context : gl,
 			width : this.nx,
 			height : this.nx
 		});
 	
 	var drawToScreenVertexShader = new GL.VertexShader({
+		context : gl,
 		code : GL.vertexPrecision + mlstr(function(){/*
 attribute vec2 vertex;
 varying vec2 pos; 
@@ -2300,6 +2312,7 @@ void main() {
 
 	$.each(drawToScreenMethods, function(drawToScreenMethodName, drawToScreenMethodCode) {
 		drawToScreenShader[drawToScreenMethodName] = new GL.ShaderProgram({
+			context : gl,
 			vertexShader : drawToScreenVertexShader,
 			fragmentCode : mlstr(function(){/*
 #extension GL_OES_standard_derivatives : enable
@@ -2497,12 +2510,13 @@ void main() {
 	renderer.view.pos[1] = .5;
 
 	colorSchemes.Heat = new GL.GradientTexture({
-		width:256, 
-		colors:[
-			[0,0,0],
-			[0,0,1],
-			[1,1,0],
-			[1,0,0],
+		context : gl,
+		width : 256, 
+		colors : [
+			[0, 0, 0],
+			[0, 0, 1],
+			[1, 1, 0],
+			[1, 0, 0],
 		],
 		dontRepeat : true
 	});
@@ -2513,6 +2527,7 @@ void main() {
 		isobarData[i] = 255;
 	}
 	colorSchemes['B&W'] = new GL.Texture2D({
+		context : gl,
 		width : isobarSize,
 		height : 1,
 		format : gl.LUMINANCE,

@@ -1788,10 +1788,10 @@ var Hydro = makeClass({
 		
 		//geometry buffers
 		this.vertexXBuffer = new GL.ArrayBuffer({
+			context : gl,
 			dim : 1,
 			count : size,
-			usage : gl.DYNAMIC_DRAW,
-			keep : true
+			usage : gl.DYNAMIC_DRAW
 		});
 
 		var colors = [[1,0,0,1], [0,1,0,1], [0,.5,1,1], [1,1,1,1]];
@@ -1800,15 +1800,17 @@ var Hydro = makeClass({
 		this.stateGraphObjs = [];
 		for (var i = 0; i < 3; ++i) {
 			var stateBuffer = new GL.ArrayBuffer({
+				context : gl,
 				dim : 1,
 				count : size,
-				usage : gl.DYNAMIC_DRAW,
-				keep : true
+				usage : gl.DYNAMIC_DRAW
 			});
 			this.primitiveBuffers.push(stateBuffer);
 	
 			//make graphs
 			var stateGraphObj = new GL.SceneObject({
+				context : gl,
+				scene : renderer.scene,
 				mode : gl.LINE_STRIP,
 				attrs : {
 					vertex : this.vertexXBuffer,
@@ -1899,7 +1901,7 @@ $(document).ready(function(){
 	
 	try {
 		renderer = new GL.CanvasRenderer({canvas:canvas});
-		gl = renderer.gl;
+		gl = renderer.context;
 	} catch (e) {
 		$('panel').remove();
 		$(canvas).remove();
@@ -1915,6 +1917,7 @@ $(document).ready(function(){
 	renderer.view.fovY = ymax - ymin;
 
 	plainShader = new GL.ShaderProgram({
+		context : gl,
 		vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
 uniform mat4 mvMat;
@@ -1938,6 +1941,7 @@ void main() {
 	});
 
 	graphShader = new GL.ShaderProgram({
+		context : gl,
 		vertexCode : mlstr(function(){/*
 attribute float vertex;
 attribute float state;
@@ -2082,9 +2086,15 @@ void main() {
 
 	var axisColor = [.75, .75, .75, 1];
 	(new GL.SceneObject({
+		context : gl,
+		scene : renderer.scene,
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({dim : 2, data : [xmin, 0, xmax, 0]})
+			vertex : new GL.ArrayBuffer({
+				context : gl,
+				dim : 2, 
+				data : [xmin, 0, xmax, 0]
+			})
 		},
 		shader : plainShader,
 		uniforms : {
@@ -2093,9 +2103,15 @@ void main() {
 	})).prependTo(renderer.scene.root);
 
 	(new GL.SceneObject({
+		context : gl,
+		scene : renderer.scene,
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({dim : 2, data : [0, ymin, 0, ymax]})
+			vertex : new GL.ArrayBuffer({
+				context : gl,
+				dim : 2, 
+				data : [0, ymin, 0, ymax]
+			})
 		},
 		shader : plainShader,
 		uniforms : {
@@ -2126,9 +2142,15 @@ void main() {
 		grid.push(j);
 	}
 	gridObj = new GL.SceneObject({
+		context : gl,
+		scene : renderer.scene,
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({data:grid, dim:2})
+			vertex : new GL.ArrayBuffer({
+				context : gl,
+				data : grid, 
+				dim : 2
+			})
 		},
 		shader : plainShader,
 		uniforms : {
