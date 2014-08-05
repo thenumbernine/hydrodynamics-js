@@ -1214,7 +1214,7 @@ function update() {
 	if (gl.getExtension('OES_texture_float_linear')) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 	currentColorScheme.bind(2);
 
-	GL.unitQuad.draw({
+	renderer.unitQuad.draw({
 		shader : drawToScreenShader[hydro.state.drawToScreenMethod],
 		uniforms : {
 			lastMin : hydro.lastDataMin,
