@@ -5,6 +5,8 @@
 2D unstructured
 */
 
+var gl;
+var renderer;
 var panel;
 var canvas;
 var xmin = -1;
@@ -683,7 +685,7 @@ var EulerEquationGodunovSolver = makeClass({
 				matrix[0][2] = -velocity * (gamma * eTotal + (1 - gamma) * velocity * velocity); 
 				matrix[1][0] = 1;
 				matrix[1][1] = (3 - gamma) * velocity;
-				matrix[1][2] = hTotal - (gamma - 1) * velocity * velocity;
+				matrix[1][2] = hTotal + (1 - gamma) * velocity * velocity;
 				matrix[2][0] = 0;
 				matrix[2][1] = gamma - 1;
 				matrix[2][2] = gamma * velocity;
@@ -1226,12 +1228,11 @@ function admEquationsBuildEigenstate(matrix, eigenvalues, eigenvectors, eigenvec
 	mat33invert(eigenvectorsInverse, eigenvectors);
 }
 
-var ADMGodunovExplicit = makeClass({
+var ADMRoeExplicit = makeClass({
 	super : GodunovSolver,
 	initStep : function() {
-		ADMGodunovExplicit.superProto.initStep.apply(this, arguments);
+		ADMRoeExplicit.superProto.initStep.apply(this, arguments);
 		var dx = (xmax - xmin) / this.nx;
-		//same idea as Godunov but with Roe weighting: sqrt(rho)
 		for (var ix = 2; ix < this.nx-1; ++ix) {
 			var ixL = ix-1;
 			var ixR = ix;
@@ -1250,6 +1251,7 @@ var ADMGodunovExplicit = makeClass({
 			var ln_g_R = (this.q[ixR+1][1] - this.q[ixR-1][1]) / (2 * dx);
 			var g_R = Math.exp(ln_g_R);
 
+			//TODO pick a better weighting value
 			var alpha = .5 * (alpha_L + alpha_R);
 			var g = .5 * (g_L + g_R);
 
@@ -1262,10 +1264,6 @@ var ADMGodunovExplicit = makeClass({
 				alpha, g);
 		}
 		//how about those boundary eigenstates?
-	},
-	step : function(dt) {
-		var deriv = ADMGodunovExplicit.prototype.calcDerivative;
-		explicitMethods[this.explicitMethod].call(this, dt, deriv);
 	},
 	getPrimitives : function(i) {
 		var dx = (xmax - xmin) / this.nx;
@@ -1281,7 +1279,8 @@ var ADMGodunovExplicit = makeClass({
 		var ln_g = (this.q[iR][1] - this.q[iL][1]) / (2 * dx);
 		var g = Math.exp(ln_g);
 
-		var K = this.q[i][2] * Math.sqrt(g);
+		var KTilde = this.q[i][2];
+		var K = KTilde / Math.sqrt(g);
 		
 		return [alpha, g, K];
 	}
@@ -1289,7 +1288,7 @@ var ADMGodunovExplicit = makeClass({
 
 var admSimulation = {
 	methods : {
-		'Godunov / Explicit' : ADMGodunovExplicit.prototype
+		'Roe / Explicit' : ADMRoeExplicit.prototype
 	},
 	initialConditions : {
 		GaugeShock : function() {
@@ -1863,15 +1862,15 @@ function update() {
 	//iterate
 	if (!pause) hydro.update();
 	//draw
-	GL.draw();
+	renderer.draw();
 	requestAnimFrame(update);
 }
 
 function onresize() {
-	GL.canvas.width = window.innerWidth;
-	GL.canvas.height = window.innerHeight;
+	renderer.canvas.width = window.innerWidth;
+	renderer.canvas.height = window.innerHeight;
 	$('#content').height(window.innerHeight - 50);
-	GL.resize();
+	renderer.resize();
 }
 
 function buildSelect(id, key, map) {
@@ -1899,20 +1898,21 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	try {
-		gl = GL.init(canvas);
+		renderer = new GL.CanvasRenderer({canvas:canvas});
+		gl = renderer.gl;
 	} catch (e) {
-		panel.remove();
+		$('panel').remove();
 		$(canvas).remove();
 		$('#webglfail').show();
 		throw e;
 	}
 
-	GL.view.ortho = true;
-	GL.view.zNear = -1;
-	GL.view.zFar = 1;
-	GL.view.pos[0] = 0;//(xmax + xmin) / 2;
-	GL.view.pos[1] = 0;//(ymax + ymin) / 2;
-	GL.view.fovY = ymax - ymin;
+	renderer.view.ortho = true;
+	renderer.view.zNear = -1;
+	renderer.view.zFar = 1;
+	renderer.view.pos[0] = 0;//(xmax + xmin) / 2;
+	renderer.view.pos[1] = 0;//(ymax + ymin) / 2;
+	renderer.view.fovY = ymax - ymin;
 
 	plainShader = new GL.ShaderProgram({
 		vertexCode : mlstr(function(){/*
@@ -2090,7 +2090,7 @@ void main() {
 		uniforms : {
 			color : axisColor
 		}
-	})).prependTo(GL.root);
+	})).prependTo(renderer.scene.root);
 
 	(new GL.SceneObject({
 		mode : gl.LINES,
@@ -2101,7 +2101,7 @@ void main() {
 		uniforms : {
 			color : axisColor
 		}
-	})).prependTo(GL.root);
+	})).prependTo(renderer.scene.root);
 
 
 	//make static grid
@@ -2135,7 +2135,7 @@ void main() {
 			color : [.25,.25,.25,1]
 		}
 	});
-	gridObj.prependTo(GL.root);
+	gridObj.prependTo(renderer.scene.root);
 	
 
 
@@ -2149,15 +2149,15 @@ void main() {
 		move : function(dx,dy) {
 			dragging = true;
 			var aspectRatio = canvas.width / canvas.height;
-			GL.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * GL.view.fovY);
-			GL.view.pos[1] += dy / canvas.height * 2 * GL.view.fovY;
-			GL.updateProjection();
+			renderer.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * renderer.view.fovY);
+			renderer.view.pos[1] += dy / canvas.height * 2 * renderer.view.fovY;
+			renderer.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
 			var scale = Math.exp(-zoomFactor * zoomChange);
-			GL.view.fovY *= scale 
-			GL.updateProjection();
+			renderer.view.fovY *= scale 
+			renderer.updateProjection();
 		}
 	});
 	

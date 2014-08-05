@@ -14,6 +14,8 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does 
 if (!Float64Array) Float64Array = Array;
 if (!Float32Array) Float32Array = Array;
 
+var gl;
+var renderer;
 var panel;
 var canvas;
 
@@ -2013,7 +2015,7 @@ function update() {
 	waveVtxBuf.updateData(hydro.vertexPositions);
 	waveStateBuf.updateData(hydro.vertexStates);
 	//draw
-	GL.draw();
+	renderer.draw();
 	requestAnimFrame(update);
 }
 
@@ -2021,7 +2023,7 @@ function onresize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
 	$('#content').height(window.innerHeight - 50);
-	GL.resize();
+	renderer.resize();
 }
 
 function buildSelect(id, key, map) {
@@ -2192,7 +2194,9 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	try {
-		gl = GL.init(canvas);
+		GL.init(canvas);	//uses plugins
+		renderer = GL.canvasRenderer;
+		gl = renderer.gl;
 	} catch (e) {
 		panel.remove();
 		$(canvas).remove();
@@ -2201,10 +2205,10 @@ $(document).ready(function(){
 	}
 
 	gl.enable(gl.DEPTH_TEST);
-	GL.view.ortho = true;
-	GL.view.zNear = -1;
-	GL.view.zFar = 1;
-	GL.view.fovY = 125 / 200 * (xmax - xmin);
+	renderer.view.ortho = true;
+	renderer.view.zNear = -1;
+	renderer.view.zFar = 1;
+	renderer.view.fovY = 125 / 200 * (xmax - xmin);
 
 	colorSchemes.Heat = new GL.GradientTexture({
 		width:256, 
@@ -2318,15 +2322,15 @@ void main() {
 		move : function(dx,dy) {
 			dragging = true;
 			var aspectRatio = canvas.width / canvas.height;
-			GL.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * GL.view.fovY);
-			GL.view.pos[1] += dy / canvas.height * 2 * GL.view.fovY;
-			GL.updateProjection();
+			renderer.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * renderer.view.fovY);
+			renderer.view.pos[1] += dy / canvas.height * 2 * renderer.view.fovY;
+			renderer.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
 			var scale = Math.exp(-zoomFactor * zoomChange);
-			GL.view.fovY *= scale 
-			GL.updateProjection();
+			renderer.view.fovY *= scale 
+			renderer.updateProjection();
 		}
 	});
 	

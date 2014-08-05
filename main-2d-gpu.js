@@ -9,6 +9,8 @@ lots of accuracy issues with the GPU version ... or bugs I'm not finding
 in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding 
 */
 
+var gl;
+var renderer;
 var panel;
 var canvas;
 
@@ -1197,10 +1199,10 @@ function update() {
 	*/
 
 	//reset viewport
-	gl.viewport(0, 0, GL.canvas.width, GL.canvas.height);
+	gl.viewport(0, 0, renderer.canvas.width, renderer.canvas.height);
 	
 	//draw
-	GL.draw();
+	renderer.draw();
 
 	hydro.state.qTex.bind(0);
 	if (gl.getExtension('OES_texture_float_linear')) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -1233,7 +1235,7 @@ function onresize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
 	$('#content').height(window.innerHeight - 50);
-	GL.resize();
+	renderer.resize();
 }
 
 function buildSelect(id, key, map) {
@@ -1299,7 +1301,9 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	try {
-		gl = GL.init(canvas, {debug:true});
+		GL.init(canvas, {debug:true});
+		renderer = GL.canvasRenderer;
+		gl = renderer.gl;
 	} catch (e) {
 		$(canvas).remove();
 		$('#webglfail').show();
@@ -2485,12 +2489,12 @@ void main() {
 
 	//init gl stuff
 
-	GL.view.ortho = true;
-	GL.view.zNear = -1;
-	GL.view.zFar = 1;
-	GL.view.fovY = 125 / 200 * (xmax - xmin);
-	GL.view.pos[0] = .5;
-	GL.view.pos[1] = .5;
+	renderer.view.ortho = true;
+	renderer.view.zNear = -1;
+	renderer.view.zFar = 1;
+	renderer.view.fovY = 125 / 200 * (xmax - xmin);
+	renderer.view.pos[0] = .5;
+	renderer.view.pos[1] = .5;
 
 	colorSchemes.Heat = new GL.GradientTexture({
 		width:256, 
@@ -2598,15 +2602,15 @@ void main() {
 		move : function(dx,dy) {
 			dragging = true;
 			var aspectRatio = canvas.width / canvas.height;
-			GL.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * GL.view.fovY);
-			GL.view.pos[1] += dy / canvas.height * 2 * GL.view.fovY;
-			GL.updateProjection();
+			renderer.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * renderer.view.fovY);
+			renderer.view.pos[1] += dy / canvas.height * 2 * renderer.view.fovY;
+			renderer.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
 			var scale = Math.exp(-zoomFactor * zoomChange);
-			GL.view.fovY *= scale 
-			GL.updateProjection();
+			renderer.view.fovY *= scale 
+			renderer.updateProjection();
 		}
 	});
 	
