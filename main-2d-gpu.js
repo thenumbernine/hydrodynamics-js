@@ -10,7 +10,7 @@ in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-D
 */
 
 var gl;
-var renderer;
+var glutil;
 var panel;
 var canvas;
 
@@ -70,9 +70,10 @@ var roeUpdateStateShader;
 var encodeTempTex;
 var encodeShader = [];	//[channel]
 
-GL.oninit.push(function() {
-	KernelShader = makeClass({
-		super : GL.ShaderProgram,
+GLUtil.prototype.oninit.push(function() {
+	var glutil = this;
+	glutil.KernelShader = makeClass({
+		super : glutil.ShaderProgram,
 		init : function(args) {
 			
 			var varyingCodePrefix = 'varying vec2 pos;\n';
@@ -106,11 +107,10 @@ GL.oninit.push(function() {
 			}
 
 
-			if (!KernelShader.prototype.kernelVertexShader) {
-				KernelShader.prototype.kernelVertexShader = new GL.VertexShader({
-					context : gl,
+			if (!glutil.KernelShader.prototype.kernelVertexShader) {
+				glutil.KernelShader.prototype.kernelVertexShader = new glutil.VertexShader({
 					code : 
-						GL.vertexPrecision + 
+						glutil.vertexPrecision + 
 						varyingCodePrefix +
 						mlstr(function(){/*
 attribute vec2 vertex;
@@ -123,12 +123,11 @@ void main() {
 				});	
 			}
 
-			args.context = gl;
-			args.vertexShader = KernelShader.prototype.kernelVertexShader;
-			args.fragmentCode = GL.fragmentPrecision + varyingCodePrefix + fragmentCodePrefix + args.code;
+			args.vertexShader = glutil.KernelShader.prototype.kernelVertexShader;
+			args.fragmentCode = glutil.fragmentPrecision + varyingCodePrefix + fragmentCodePrefix + args.code;
 			delete args.code;
 			args.uniforms = uniforms;	
-			KernelShader.super.call(this, args);
+			glutil.KernelShader.super.call(this, args);
 		}
 	});
 });
@@ -756,8 +755,7 @@ var HydroState = makeClass({
 		});
 
 		//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
-		encodeTempTex = new GL.Texture2D({
-			context : gl,
+		encodeTempTex = new glutil.Texture2D({
 			internalFormat : gl.RGBA,
 			format : gl.RGBA,
 			type : gl.UNSIGNED_BYTE,
@@ -771,8 +769,7 @@ var HydroState = makeClass({
 			}
 		});
 
-		this.noiseTex = new GL.Texture2D({
-			context : gl,
+		this.noiseTex = new glutil.Texture2D({
 			internalFormat : gl.RGBA,
 			format : gl.RGBA,
 			type : gl.FLOAT,
@@ -1203,10 +1200,10 @@ function update() {
 	*/
 
 	//reset viewport
-	gl.viewport(0, 0, renderer.canvas.width, renderer.canvas.height);
+	gl.viewport(0, 0, glutil.canvas.width, glutil.canvas.height);
 	
 	//draw
-	renderer.draw();
+	glutil.draw();
 
 	hydro.state.qTex.bind(0);
 	if (gl.getExtension('OES_texture_float_linear')) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -1214,7 +1211,7 @@ function update() {
 	if (gl.getExtension('OES_texture_float_linear')) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 	currentColorScheme.bind(2);
 
-	renderer.unitQuad.draw({
+	glutil.unitQuad.draw({
 		shader : drawToScreenShader[hydro.state.drawToScreenMethod],
 		uniforms : {
 			lastMin : hydro.lastDataMin,
@@ -1239,7 +1236,7 @@ function onresize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
 	$('#content').height(window.innerHeight - 50);
-	renderer.resize();
+	glutil.resize();
 }
 
 function buildSelect(id, key, map) {
@@ -1305,8 +1302,8 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	//try {
-		renderer = new GL.CanvasRenderer({canvas:canvas});
-		gl = renderer.context;
+		glutil = new GLUtil({canvas:canvas});
+		gl = glutil.context;
 	/*} catch (e) {
 		$(canvas).remove();
 		$('#webglfail').show();
@@ -1314,10 +1311,9 @@ $(document).ready(function(){
 	}*/
 
 	FloatTexture2D = makeClass({
-		super : GL.Texture2D,
+		super : glutil.Texture2D,
 		init : function(width, height) {
 			var args = {};
-			args.context = gl;
 			args.width = width;
 			args.height = height;
 			args.internalFormat = gl.RGBA;
@@ -1333,19 +1329,16 @@ $(document).ready(function(){
 		}
 	});
 
-	lineObj = new GL.SceneObject({
-		context : gl,
-		scene : renderer.scene,
+	lineObj = new glutil.SceneObject({
+		scene : glutil.scene,
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({
-				context : gl,
+			vertex : new glutil.ArrayBuffer({
 				dim : 2,
 				data : [0, 0, 1, 1],
 				usage : gl.DYNAMIC_DRAW
 			}),
-			texCoord : new GL.ArrayBuffer({
-				context : gl,
+			texCoord : new glutil.ArrayBuffer({
 				dim : 2,
 				data : [0, 0, 1, 1],
 				usage : gl.DYNAMIC_DRAW
@@ -1355,18 +1348,14 @@ $(document).ready(function(){
 		static : true
 	});
 
-	quadObj = new GL.SceneObject({
-		context : gl,
-		scene : renderer.scene,
+	quadObj = new glutil.SceneObject({
 		mode : gl.TRIANGLE_STRIP,
 		attrs : {
-			vertex : new GL.ArrayBuffer({
-				context : gl,
+			vertex : new glutil.ArrayBuffer({
 				dim : 2,
 				data : [-1,-1, 1,-1, -1,1, 1,1]
 			}),
-			texCoord : new GL.ArrayBuffer({
-				context : gl,
+			texCoord : new glutil.ArrayBuffer({
 				dim : 2,
 				data : [0,0, 1,0, 0,1, 1,1]
 			})
@@ -1377,7 +1366,7 @@ $(document).ready(function(){
 
 	//init shaders before init hydro (so it can call the resetSod or whatever)
 	
-		resetSodShader = new KernelShader({
+		resetSodShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1408,7 +1397,7 @@ void main() {
 			texs : ['randomTex']
 		});
 
-		resetSodCylinderSolidShader = new KernelShader({
+		resetSodCylinderSolidShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1429,7 +1418,7 @@ void main() {
 			texs : ['randomTex']
 		});
 
-		resetWaveShader = new KernelShader({
+		resetWaveShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1456,7 +1445,7 @@ void main() {
 			texs : ['randomTex']
 		});
 
-		resetKelvinHemholtzShader = new KernelShader({
+		resetKelvinHemholtzShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1492,7 +1481,7 @@ void main() {
 			//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
 		});
 
-		burgersComputeCFLShader = new KernelShader({
+		burgersComputeCFLShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -1527,7 +1516,7 @@ void main() {
 			texs : ['qTex', 'solidTex']
 		});
 
-		burgersComputeInterfaceVelocityShader = new KernelShader({
+		burgersComputeInterfaceVelocityShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec2 dposx = vec2(dpos.x, 0.);
@@ -1559,7 +1548,7 @@ void main() {
 		});
 
 		$.each(coordNames, function(i, coordName) {
-			burgersComputeFluxSlopeShader[i] = new KernelShader({
+			burgersComputeFluxSlopeShader[i] = new glutil.KernelShader({
 				code : mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1618,7 +1607,7 @@ void main() {
 		$.each(fluxMethods, function(methodName,fluxMethodCode) {
 			burgersComputeFluxShader[methodName] = [];
 			$.each(coordNames, function(i, coordName) {
-				burgersComputeFluxShader[methodName][i] = new KernelShader({
+				burgersComputeFluxShader[methodName][i] = new glutil.KernelShader({
 					code : mlstr(function(){/*
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
@@ -1671,7 +1660,7 @@ void main() {
 			});
 		});
 
-		burgersUpdateStateShader = new KernelShader({
+		burgersUpdateStateShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -1699,7 +1688,7 @@ void main() {
 
 		//used for Riemann
 
-		roeComputeCFLShader = new KernelShader({
+		roeComputeCFLShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec4 eigenvalueXN = texture2D(eigenvalueXTex, pos);
@@ -1727,7 +1716,7 @@ void main() {
 		});
 
 		$.each(coordNames, function(i,coordName) {
-			roeComputeRoeValueShader[i] = new KernelShader({
+			roeComputeRoeValueShader[i] = new glutil.KernelShader({
 				code : mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1788,7 +1777,7 @@ void main() {
 		});
 
 		$.each(coordNames, function(i,coordName) {	
-			roeComputeEigenvalueShader[i] = new KernelShader({
+			roeComputeEigenvalueShader[i] = new glutil.KernelShader({
 				code : mlstr(function(){/*
 void main() {
 	vec4 roeValues = texture2D(roeValueTex, pos);
@@ -1857,7 +1846,7 @@ void main() {
 		$.each(coordNames, function(i,coordName) {	
 			roeComputeEigenvectorColumnShader[i] = [];
 			$.each(roeComputeEigenvectorColumnCode, function(j,code) {
-				roeComputeEigenvectorColumnShader[i][j] = new KernelShader({
+				roeComputeEigenvectorColumnShader[i][j] = new glutil.KernelShader({
 					code : mlstr(function(){/*
 void main() {
 	vec4 roeValues = texture2D(roeValueTex, pos);
@@ -1926,7 +1915,7 @@ void main() {
 		$.each(coordNames, function(i,coordName) {	
 			roeComputeEigenvectorInverseColumnShader[i] = [];
 			$.each(roeComputeEigenvectorInverseColumnCode, function(j,code) {
-				roeComputeEigenvectorInverseColumnShader[i][j] = new KernelShader({
+				roeComputeEigenvectorInverseColumnShader[i][j] = new glutil.KernelShader({
 					code : mlstr(function(){/*
 void main() {
 	vec4 roeValues = texture2D(roeValueTex, pos);
@@ -1952,7 +1941,7 @@ void main() {
 		});
 
 		$.each(coordNames, function(i, coordName) {
-			roeComputeDeltaQTildeShader[i] = new KernelShader({
+			roeComputeDeltaQTildeShader[i] = new glutil.KernelShader({
 				code : mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1989,7 +1978,7 @@ void main() {
 		});	
 
 		$.each(coordNames, function(i,coordName) {
-			roeComputeFluxSlopeShader[i] = new KernelShader({
+			roeComputeFluxSlopeShader[i] = new glutil.KernelShader({
 				code : (mlstr(function(){/*
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -2022,7 +2011,7 @@ void main() {
 		$.each(fluxMethods, function(methodName,fluxMethodCode) {
 			roeComputeFluxShader[methodName] = [];
 			$.each(coordNames, function(i,coordName) {
-				roeComputeFluxShader[methodName][i] = new KernelShader({
+				roeComputeFluxShader[methodName][i] = new glutil.KernelShader({
 					code : mlstr(function(){/*
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
@@ -2102,7 +2091,7 @@ void main() {
 		//pressure shaders
 		
 
-		burgersComputePressureShader = new KernelShader({
+		burgersComputePressureShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -2132,7 +2121,7 @@ void main() {
 			texs : ['qTex', 'solidTex']
 		});
 
-		burgersApplyPressureToMomentumShader = new KernelShader({
+		burgersApplyPressureToMomentumShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -2180,7 +2169,7 @@ void main() {
 			texs : ['qTex', 'solidTex', 'pressureTex']
 		});
 		
-		burgersApplyPressureToWorkShader = new KernelShader({
+		burgersApplyPressureToWorkShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	float solid = texture2D(solidTex, pos).x;
@@ -2245,7 +2234,7 @@ void main() {
 			texs : ['qTex', 'solidTex', 'pressureTex']
 		});
 
-		solidShader = new KernelShader({
+		solidShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	gl_FragColor = color;
@@ -2256,7 +2245,7 @@ void main() {
 			}
 		});
 
-		copyShader = new KernelShader({
+		copyShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	gl_FragColor = texture2D(srcTex, pos + offset);
@@ -2268,7 +2257,7 @@ void main() {
 			texs : ['srcTex']
 		});
 
-		minReduceShader = new KernelShader({
+		minReduceShader = new glutil.KernelShader({
 			code : mlstr(function(){/*
 void main() {
 	vec2 intPos = pos * viewsize - .5;
@@ -2290,15 +2279,13 @@ void main() {
 			texs : ['srcTex']
 		});
 
-		fbo = new GL.Framebuffer({
-			context : gl,
+		fbo = new glutil.Framebuffer({
 			width : this.nx,
 			height : this.nx
 		});
 	
-	var drawToScreenVertexShader = new GL.VertexShader({
-		context : gl,
-		code : GL.vertexPrecision + mlstr(function(){/*
+	var drawToScreenVertexShader = new glutil.VertexShader({
+		code : glutil.vertexPrecision + mlstr(function(){/*
 attribute vec2 vertex;
 varying vec2 pos; 
 uniform mat4 mvMat;
@@ -2311,8 +2298,7 @@ void main() {
 	});
 
 	$.each(drawToScreenMethods, function(drawToScreenMethodName, drawToScreenMethodCode) {
-		drawToScreenShader[drawToScreenMethodName] = new GL.ShaderProgram({
-			context : gl,
+		drawToScreenShader[drawToScreenMethodName] = new glutil.ShaderProgram({
 			vertexShader : drawToScreenVertexShader,
 			fragmentCode : mlstr(function(){/*
 #extension GL_OES_standard_derivatives : enable
@@ -2502,15 +2488,14 @@ void main() {
 
 	//init gl stuff
 
-	renderer.view.ortho = true;
-	renderer.view.zNear = -1;
-	renderer.view.zFar = 1;
-	renderer.view.fovY = 125 / 200 * (xmax - xmin);
-	renderer.view.pos[0] = .5;
-	renderer.view.pos[1] = .5;
+	glutil.view.ortho = true;
+	glutil.view.zNear = -1;
+	glutil.view.zFar = 1;
+	glutil.view.fovY = 125 / 200 * (xmax - xmin);
+	glutil.view.pos[0] = .5;
+	glutil.view.pos[1] = .5;
 
-	colorSchemes.Heat = new GL.GradientTexture({
-		context : gl,
+	colorSchemes.Heat = new glutil.GradientTexture({
 		width : 256, 
 		colors : [
 			[0, 0, 0],
@@ -2526,8 +2511,7 @@ void main() {
 	for (var i = 1; i < isobarSize; i += 2) {
 		isobarData[i] = 255;
 	}
-	colorSchemes['B&W'] = new GL.Texture2D({
-		context : gl,
+	colorSchemes['B&W'] = new glutil.Texture2D({
 		width : isobarSize,
 		height : 1,
 		format : gl.LUMINANCE,
@@ -2557,7 +2541,7 @@ void main() {
 
 	//http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
 	for (var channel = 0; channel < 4; ++channel) {
-		encodeShader[channel] = new KernelShader({
+		encodeShader[channel] = new glutil.KernelShader({
 			code : mlstr(function(){/*
 float shift_right(float v, float amt) {
 	v = floor(v) + 0.5;
@@ -2617,15 +2601,15 @@ void main() {
 		move : function(dx,dy) {
 			dragging = true;
 			var aspectRatio = canvas.width / canvas.height;
-			renderer.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * renderer.view.fovY);
-			renderer.view.pos[1] += dy / canvas.height * 2 * renderer.view.fovY;
-			renderer.updateProjection();
+			glutil.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * glutil.view.fovY);
+			glutil.view.pos[1] += dy / canvas.height * 2 * glutil.view.fovY;
+			glutil.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
 			var scale = Math.exp(-zoomFactor * zoomChange);
-			renderer.view.fovY *= scale 
-			renderer.updateProjection();
+			glutil.view.fovY *= scale 
+			glutil.updateProjection();
 		}
 	});
 	
@@ -2636,7 +2620,7 @@ void main() {
 
 
 	//check ...	
-	var checkCoordAccuracyShader = new KernelShader({
+	var checkCoordAccuracyShader = new glutil.KernelShader({
 		code : mlstr(function(){/*
 void main() {
 	gl_FragColor = vec4(gl_FragCoord.xy*dpos, dpos);

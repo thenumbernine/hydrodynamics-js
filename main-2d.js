@@ -15,7 +15,7 @@ if (!Float64Array) Float64Array = Array;
 if (!Float32Array) Float32Array = Array;
 
 var gl;
-var renderer;
+var glutil;
 var panel;
 var canvas;
 
@@ -2015,7 +2015,7 @@ function update() {
 	waveVtxBuf.updateData(hydro.vertexPositions);
 	waveStateBuf.updateData(hydro.vertexStates);
 	//draw
-	renderer.draw();
+	glutil.draw();
 	requestAnimFrame(update);
 }
 
@@ -2023,7 +2023,7 @@ function onresize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
 	$('#content').height(window.innerHeight - 50);
-	renderer.resize();
+	glutil.resize();
 }
 
 function buildSelect(id, key, map) {
@@ -2194,8 +2194,8 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	try {
-		renderer = new GL.CanvasRenderer({canvas:canvas});
-		gl = renderer.context;
+		glutil = new GLUtil({canvas:canvas});
+		gl = glutil.context;
 	} catch (e) {
 		panel.remove();
 		$(canvas).remove();
@@ -2204,13 +2204,12 @@ $(document).ready(function(){
 	}
 
 	gl.enable(gl.DEPTH_TEST);
-	renderer.view.ortho = true;
-	renderer.view.zNear = -1;
-	renderer.view.zFar = 1;
-	renderer.view.fovY = 125 / 200 * (xmax - xmin);
+	glutil.view.ortho = true;
+	glutil.view.zNear = -1;
+	glutil.view.zFar = 1;
+	glutil.view.fovY = 125 / 200 * (xmax - xmin);
 
-	colorSchemes.Heat = new GL.GradientTexture({
-		context : gl,
+	colorSchemes.Heat = new glutil.GradientTexture({
 		width : 256, 
 		colors : [
 			[0, 0, 0],
@@ -2226,8 +2225,7 @@ $(document).ready(function(){
 	for (var i = 1; i < isobarSize; i += 2) {
 		isobarData[i] = 255;
 	}
-	colorSchemes['B&W'] = new GL.Texture2D({
-		context : gl,
+	colorSchemes['B&W'] = new glutil.Texture2D({
 		width : isobarSize,
 		height : 1,
 		format : gl.LUMINANCE,
@@ -2258,8 +2256,7 @@ $(document).ready(function(){
 		});
 	});
 
-	var shader = new GL.ShaderProgram({
-		context : gl,
+	var shader = new glutil.ShaderProgram({
 		vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
 attribute float state;
@@ -2284,14 +2281,12 @@ void main() {
 	
 	//make grid
 	hydro.update();
-	waveVtxBuf = new GL.ArrayBuffer({
-		context : gl,
+	waveVtxBuf = new glutil.ArrayBuffer({
 		dim : 2,
 		data : hydro.vertexPositions,
 		usage : gl.DYNAMIC_DRAW
 	});
-	waveStateBuf = new GL.ArrayBuffer({
-		context : gl,
+	waveStateBuf = new glutil.ArrayBuffer({
 		dim : 1,
 		data : hydro.vertexStates,
 		usage : gl.DYNAMIC_DRAW
@@ -2302,12 +2297,9 @@ void main() {
 			indexes.push(i + j*hydro.state.nx);
 			indexes.push(i + (j+1)*hydro.state.nx);
 		}
-		sceneObjects.push(new GL.SceneObject({
-			context : gl,
-			scene : renderer.scene,
+		sceneObjects.push(new glutil.SceneObject({
 			mode : gl.TRIANGLE_STRIP,
-			indexes : new GL.ElementArrayBuffer({
-				context : gl,
+			indexes : new glutil.ElementArrayBuffer({
 				data : new Uint32Array(indexes)
 			}),
 			attrs : {
@@ -2331,15 +2323,15 @@ void main() {
 		move : function(dx,dy) {
 			dragging = true;
 			var aspectRatio = canvas.width / canvas.height;
-			renderer.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * renderer.view.fovY);
-			renderer.view.pos[1] += dy / canvas.height * 2 * renderer.view.fovY;
-			renderer.updateProjection();
+			glutil.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * glutil.view.fovY);
+			glutil.view.pos[1] += dy / canvas.height * 2 * glutil.view.fovY;
+			glutil.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
 			var scale = Math.exp(-zoomFactor * zoomChange);
-			renderer.view.fovY *= scale 
-			renderer.updateProjection();
+			glutil.view.fovY *= scale 
+			glutil.updateProjection();
 		}
 	});
 	

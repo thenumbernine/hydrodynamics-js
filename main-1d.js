@@ -6,7 +6,7 @@
 */
 
 var gl;
-var renderer;
+var glutil;
 var panel;
 var canvas;
 var xmin = -1;
@@ -1787,8 +1787,7 @@ var Hydro = makeClass({
 		});
 		
 		//geometry buffers
-		this.vertexXBuffer = new GL.ArrayBuffer({
-			context : gl,
+		this.vertexXBuffer = new glutil.ArrayBuffer({
 			dim : 1,
 			count : size,
 			usage : gl.DYNAMIC_DRAW
@@ -1799,8 +1798,7 @@ var Hydro = makeClass({
 		this.primitiveBuffers = [];
 		this.stateGraphObjs = [];
 		for (var i = 0; i < 3; ++i) {
-			var stateBuffer = new GL.ArrayBuffer({
-				context : gl,
+			var stateBuffer = new glutil.ArrayBuffer({
 				dim : 1,
 				count : size,
 				usage : gl.DYNAMIC_DRAW
@@ -1808,9 +1806,7 @@ var Hydro = makeClass({
 			this.primitiveBuffers.push(stateBuffer);
 	
 			//make graphs
-			var stateGraphObj = new GL.SceneObject({
-				context : gl,
-				scene : renderer.scene,
+			var stateGraphObj = new glutil.SceneObject({
 				mode : gl.LINE_STRIP,
 				attrs : {
 					vertex : this.vertexXBuffer,
@@ -1864,15 +1860,15 @@ function update() {
 	//iterate
 	if (!pause) hydro.update();
 	//draw
-	renderer.draw();
+	glutil.draw();
 	requestAnimFrame(update);
 }
 
 function onresize() {
-	renderer.canvas.width = window.innerWidth;
-	renderer.canvas.height = window.innerHeight;
+	glutil.canvas.width = window.innerWidth;
+	glutil.canvas.height = window.innerHeight;
 	$('#content').height(window.innerHeight - 50);
-	renderer.resize();
+	glutil.resize();
 }
 
 function buildSelect(id, key, map) {
@@ -1900,8 +1896,8 @@ $(document).ready(function(){
 	$(canvas).disableSelection()
 	
 	try {
-		renderer = new GL.CanvasRenderer({canvas:canvas});
-		gl = renderer.context;
+		glutil = new GLUtil({canvas:canvas});
+		gl = glutil.context;
 	} catch (e) {
 		$('panel').remove();
 		$(canvas).remove();
@@ -1909,15 +1905,14 @@ $(document).ready(function(){
 		throw e;
 	}
 
-	renderer.view.ortho = true;
-	renderer.view.zNear = -1;
-	renderer.view.zFar = 1;
-	renderer.view.pos[0] = 0;//(xmax + xmin) / 2;
-	renderer.view.pos[1] = 0;//(ymax + ymin) / 2;
-	renderer.view.fovY = ymax - ymin;
+	glutil.view.ortho = true;
+	glutil.view.zNear = -1;
+	glutil.view.zFar = 1;
+	glutil.view.pos[0] = 0;//(xmax + xmin) / 2;
+	glutil.view.pos[1] = 0;//(ymax + ymin) / 2;
+	glutil.view.fovY = ymax - ymin;
 
-	plainShader = new GL.ShaderProgram({
-		context : gl,
+	plainShader = new glutil.ShaderProgram({
 		vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
 uniform mat4 mvMat;
@@ -1940,8 +1935,7 @@ void main() {
 		}
 	});
 
-	graphShader = new GL.ShaderProgram({
-		context : gl,
+	graphShader = new glutil.ShaderProgram({
 		vertexCode : mlstr(function(){/*
 attribute float vertex;
 attribute float state;
@@ -2085,13 +2079,10 @@ void main() {
 
 
 	var axisColor = [.75, .75, .75, 1];
-	(new GL.SceneObject({
-		context : gl,
-		scene : renderer.scene,
+	(new glutil.SceneObject({
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({
-				context : gl,
+			vertex : new glutil.ArrayBuffer({
 				dim : 2, 
 				data : [xmin, 0, xmax, 0]
 			})
@@ -2100,15 +2091,12 @@ void main() {
 		uniforms : {
 			color : axisColor
 		}
-	})).prependTo(renderer.scene.root);
+	})).prependTo(glutil.scene.root);
 
-	(new GL.SceneObject({
-		context : gl,
-		scene : renderer.scene,
+	(new glutil.SceneObject({
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({
-				context : gl,
+			vertex : new glutil.ArrayBuffer({
 				dim : 2, 
 				data : [0, ymin, 0, ymax]
 			})
@@ -2117,7 +2105,7 @@ void main() {
 		uniforms : {
 			color : axisColor
 		}
-	})).prependTo(renderer.scene.root);
+	})).prependTo(glutil.scene.root);
 
 
 	//make static grid
@@ -2141,13 +2129,10 @@ void main() {
 		grid.push(xmax);
 		grid.push(j);
 	}
-	gridObj = new GL.SceneObject({
-		context : gl,
-		scene : renderer.scene,
+	gridObj = new glutil.SceneObject({
 		mode : gl.LINES,
 		attrs : {
-			vertex : new GL.ArrayBuffer({
-				context : gl,
+			vertex : new glutil.ArrayBuffer({
 				data : grid, 
 				dim : 2
 			})
@@ -2157,7 +2142,7 @@ void main() {
 			color : [.25,.25,.25,1]
 		}
 	});
-	gridObj.prependTo(renderer.scene.root);
+	gridObj.prependTo(glutil.scene.root);
 	
 
 
@@ -2171,15 +2156,15 @@ void main() {
 		move : function(dx,dy) {
 			dragging = true;
 			var aspectRatio = canvas.width / canvas.height;
-			renderer.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * renderer.view.fovY);
-			renderer.view.pos[1] += dy / canvas.height * 2 * renderer.view.fovY;
-			renderer.updateProjection();
+			glutil.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * glutil.view.fovY);
+			glutil.view.pos[1] += dy / canvas.height * 2 * glutil.view.fovY;
+			glutil.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
 			var scale = Math.exp(-zoomFactor * zoomChange);
-			renderer.view.fovY *= scale 
-			renderer.updateProjection();
+			glutil.view.fovY *= scale 
+			glutil.updateProjection();
 		}
 	});
 	
