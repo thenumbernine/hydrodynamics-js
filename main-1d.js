@@ -1608,10 +1608,10 @@ var srhdSimulation = {
 
 //hmm, maybe I should combine all of these into one list, and have them individuall state who they belong to
 var simulations = {
-	Euler : hdSimulation,
+	Euler : hdSimulation
 	//MHD : mhdSimulation,
-	SRHD : srhdSimulation,
-	ADM : admSimulation
+	//SRHD : srhdSimulation,
+	//ADM : admSimulation
 };
 
 var HydroState = makeClass({ 
