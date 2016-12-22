@@ -1,6 +1,7 @@
 ### Learning Hydrodynamics ###
 
 ![screenshot](http://christopheremoore.net/hydrodynamics/images/finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png)
+Screenshot is from a 2048x2048 Roe scheme with superbee flux limiter of a square Sod shock tube test.
 
 Learning about donor cell advection, slope and flux limiters.
 I currently have a Burgers and Roe solver with flux limiter implemented.
