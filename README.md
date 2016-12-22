@@ -1,18 +1,19 @@
-learning hydrodynamics 
-http://christopheremoore.net/hydrodynamics/images/finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png
+### Learning Hydrodynamics ###
 
-learning about donor cell advection, slope and flux limiters, Burger's eqns vs Riemann eqns.
-Almost got a Roe solver, or I do but I know I still have to iron some kinks out (like how/if a flux limiter applies to a Roe solver, or if only slope limiters do?)
+![screenshot](http://christopheremoore.net/hydrodynamics/images/finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png)
 
-sources: 
-the "Hydrodynamics II" book found online here: http://www.mpia-hd.mpg.de/homes/dullemon/lectures/hydrodynamicsII/ 
-http://www.cfdbooks.com/cfdcodes.html 
-"Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro
-http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
+Learning about donor cell advection, slope and flux limiters.
+I currently have a Burgers and Roe solver with flux limiter implemented.
+
+Sources: 
+* Duellemond, 2009. Lecture on Hydrodynamics II http://www.mpia-hd.mpg.de/homes/dullemon/lectures/hydrodynamicsII/ 
+* http://www.cfdbooks.com/cfdcodes.html 
+* Toro, 1999, "Riemann Solvers and Numerical Methods for Fluid Dynamics"
+* http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf
 
 
 
-	TODO
+### TODO ###
 
 1D:
 - finish 'Backward Euler + Gauss-Seidel' & 'Riemann / Roe'
