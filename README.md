@@ -1,3 +1,5 @@
+[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=KYWUWS86GSFGL)
+
 ### Learning Hydrodynamics ###
 
 ![screenshot](http://christopheremoore.net/hydrodynamics/images/finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png)
