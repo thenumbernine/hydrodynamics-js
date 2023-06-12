@@ -11,28 +11,28 @@ http://www.cfdbooks.com/cfdcodes.html
 http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does not
 */
 
-var panel;
-var canvas;
+let panel;
+let canvas;
 
-var xmin = -.5;
-var xmax = .5; 
-var ymin = -.5;
-var ymax = .5;
+let xmin = -.5;
+let xmax = .5; 
+let ymin = -.5;
+let ymax = .5;
 
-var useNoise = true;
-var noiseAmplitude = .01;
+let useNoise = true;
+let noiseAmplitude = .01;
 
-var useCFL = true;
-var fixedDT = .2;
-var gaussSeidelIterations = 20;
+let useCFL = true;
+let fixedDT = .2;
+let gaussSeidelIterations = 20;
 
-var mouse;
+let mouse;
 
-var externalForceX = 0;
-var externalForceY = 0;
+let externalForceX = 0;
+let externalForceY = 0;
 
 //interface directions
-var dirs = [[1,0], [0,1]];
+let dirs = [[1,0], [0,1]];
 
 /*
 output:
@@ -52,12 +52,12 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	}
 
 	//calculate matrix & eigenvalues & vectors at interface from state at interface
-	var speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)));
-	var tangentX = -normalY;
-	var tangentY = normalX;
-	var velocityN = velocityX * normalX + velocityY * normalY;
-	var velocityT = velocityX * tangentX + velocityY * tangentY;
-	var velocitySq = velocityX * velocityX + velocityY * velocityY;	
+	let speedOfSound = Math.sqrt((gamma - 1) * (hTotal - .5 * (velocityX * velocityX + velocityY * velocityY)));
+	let tangentX = -normalY;
+	let tangentY = normalX;
+	let velocityN = velocityX * normalX + velocityY * normalY;
+	let velocityT = velocityX * tangentX + velocityY * tangentY;
+	let velocitySq = velocityX * velocityX + velocityY * velocityY;	
 	
 	//eigenvalues: min, mid, max
 	eigenvalues[0 + 4 * offset] = velocityN - speedOfSound;
@@ -111,13 +111,13 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	eigenvectorsInverse[3 + 4 * (3 + 4 * offset)] = (gamma - 1) / (2 * speedOfSound * speedOfSound);
 
 	//calculate matrix
-	var identCheck = [];
-	var identBad = false;
-	for (var i = 0; i < 4; ++i) {
-		for (var j = 0; j < 4; ++j) {
-			var s = 0;
-			var d = 0;
-			for (var k = 0; k < 4; ++k) {
+	let identCheck = [];
+	let identBad = false;
+	for (let i = 0; i < 4; ++i) {
+		for (let j = 0; j < 4; ++j) {
+			let s = 0;
+			let d = 0;
+			for (let k = 0; k < 4; ++k) {
 				/** /
 				s += eigenvectorsInverse[i + 4 * (k + 4 * offset)] * eigenvectors[k + 4 * (j + 4 * offset)] * eigenvalues[k + 4 * offset];
 				identCheck += eigenvectorsInverse[i + 4 * (k + 4 * offset)] * eigenvectors[k + 4 * (j + 4 * offset)];
@@ -128,7 +128,7 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 			}
 			matrix[i + 4 * (j + 4 * offset)] = s;
 			identCheck[i + 4 * j] = d;
-			var epsilon = 1e-5;
+			let epsilon = 1e-5;
 			if (Math.abs(d - (i == j ? 1 : 0)) > epsilon) identBad = true;
 		}
 	}
@@ -137,8 +137,8 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	}
 	/** /	
 	function f32subset(a, o, s) {
-		var d = new Float64Array(s);
-		for (var i = 0; i < s; ++i) {
+		let d = new Float64Array(s);
+		for (let i = 0; i < s; ++i) {
 			d[i] = a[i+o];
 		}
 		return d;
@@ -158,13 +158,13 @@ function buildEigenstate(offset, matrix, eigenvalues, eigenvectors, eigenvectors
 	/**/
 }
 
-var drawToScreenMethods = {
+let drawToScreenMethods = {
 	Density : function() {
-		var dataMin = this.state.cells[0].q[0];
-		var dataMax = dataMin + 1e-9;
-		var lastDataRange = this.lastDataMax - this.lastDataMin;
-		for (var i = 0; i < this.state.cells.length; ++i) {	
-			var s = this.state.cells[i].q[0];
+		let dataMin = this.state.cells[0].q[0];
+		let dataMax = dataMin + 1e-9;
+		let lastDataRange = this.lastDataMax - this.lastDataMin;
+		for (let i = 0; i < this.state.cells.length; ++i) {	
+			let s = this.state.cells[i].q[0];
 			if (s < dataMin) dataMin = s;
 			if (s > dataMax) dataMax = s;
 			this.cellObj.attrs.state.data[i] = (s - this.lastDataMin) / lastDataRange;
@@ -172,18 +172,18 @@ var drawToScreenMethods = {
 		return [dataMin, dataMax];
 	},
 	Velocity : function() {
-		var rho0 = this.state.cells[0].q[0];
-		var u0 = this.state.cells[0].q[1] / rho0;
-		var v0 = this.state.cells[0].q[2] / rho0;
-		var dataMin = Math.sqrt(u0 * u0 + v0 * v0);
-		var dataMax = dataMin + 1e-9; 
-		var lastDataRange = this.lastDataMax - this.lastDataMin;
-		for (var i = 0; i < this.state.cells.length; ++i) {
-			var cell = this.state.cells[i];
-			var rho = cell.q[0];
-			var mx = cell.q[1];
-			var my = cell.q[2];
-			var s = Math.sqrt(mx * mx + my * my) / rho;
+		let rho0 = this.state.cells[0].q[0];
+		let u0 = this.state.cells[0].q[1] / rho0;
+		let v0 = this.state.cells[0].q[2] / rho0;
+		let dataMin = Math.sqrt(u0 * u0 + v0 * v0);
+		let dataMax = dataMin + 1e-9; 
+		let lastDataRange = this.lastDataMax - this.lastDataMin;
+		for (let i = 0; i < this.state.cells.length; ++i) {
+			let cell = this.state.cells[i];
+			let rho = cell.q[0];
+			let mx = cell.q[1];
+			let my = cell.q[2];
+			let s = Math.sqrt(mx * mx + my * my) / rho;
 			if (s < dataMin) dataMin = s;
 			if (s > dataMax) dataMax = s;
 			this.cellObj.attrs.state.data[i] = (s - this.lastDataMin) / lastDataRange;
@@ -191,13 +191,13 @@ var drawToScreenMethods = {
 		return [dataMin, dataMax];
 	},
 	Energy : function() {
-		var q0 = this.state.cells[0].q;
-		var dataMin = q0[3] / q0[0]; 
-		var dataMax = dataMin + 1e-9; 
-		var lastDataRange = this.lastDataMax - this.lastDataMin;
-		for (var i = 0; i < this.state.cells.length; ++i) {
-			var cell = this.state.cells[i];
-			var s = cell.q[3] / cell.q[0];
+		let q0 = this.state.cells[0].q;
+		let dataMin = q0[3] / q0[0]; 
+		let dataMax = dataMin + 1e-9; 
+		let lastDataRange = this.lastDataMax - this.lastDataMin;
+		for (let i = 0; i < this.state.cells.length; ++i) {
+			let cell = this.state.cells[i];
+			let s = cell.q[3] / cell.q[0];
 			if (s < dataMin) dataMin = s;
 			if (s > dataMax) dataMax = s;
 			this.cellObj.attrs.state.data[i] = (s - this.lastDataMin) / lastDataRange;
@@ -205,12 +205,12 @@ var drawToScreenMethods = {
 		return [dataMin, dataMax];
 	},
 	Pressure : function() {
-		var pressure = this.state.cells[0].pressure;
-		var dataMin = pressure[0];
-		var dataMax = dataMin + 1e-9;
-		var lastDataRange = this.lastDataMax - this.lastDataMin;
-		for (var i = 0; i < this.state.cells.length; ++i) {
-			var s = this.state.cells[i].pressure;
+		let pressure = this.state.cells[0].pressure;
+		let dataMin = pressure[0];
+		let dataMax = dataMin + 1e-9;
+		let lastDataRange = this.lastDataMax - this.lastDataMin;
+		for (let i = 0; i < this.state.cells.length; ++i) {
+			let s = this.state.cells[i].pressure;
 			if (s < dataMin) dataMin = s;
 			if (s > dataMax) dataMax = s;
 			this.cellObj.attrs.state.data[i] = (s - this.lastDataMin) / lastDataRange;
@@ -218,24 +218,24 @@ var drawToScreenMethods = {
 		return [dataMin, dataMax];
 	}/*,
 	Curl : function() {
-		var nx = this.state.nx;
-		var q = this.state.q;
-		var dataMin = undefined; 
-		var dataMax = undefined; 
-		var lastDataRange = this.lastDataMax - this.lastDataMin;
-		var e = 0;
-		var dx = (xmax - xmin) / nx;
-		var dy = (ymax - ymin) / nx;
-		for (var j = 0; j < nx; ++j) {
-			for (var i = 0; i < nx; ++i) {
-				var rho = q[0 + 4 * e];
-				var mx = q[1 + 4 * e];
-				var my = q[2 + 4 * e];
-				var mxPrev = this.state.q[1 + 4 * ( ((i+nx-1)%nx) + nx * j )];
-				var myPrev = this.state.q[1 + 4 * ( i + nx * ((j+nx-1)%nx) )];
-				var dmx = mx - mxPrev;
-				var dmy = my - myPrev;
-				var s = (dmx / dy - dmy / dx) / rho;
+		let nx = this.state.nx;
+		let q = this.state.q;
+		let dataMin = undefined; 
+		let dataMax = undefined; 
+		let lastDataRange = this.lastDataMax - this.lastDataMin;
+		let e = 0;
+		let dx = (xmax - xmin) / nx;
+		let dy = (ymax - ymin) / nx;
+		for (let j = 0; j < nx; ++j) {
+			for (let i = 0; i < nx; ++i) {
+				let rho = q[0 + 4 * e];
+				let mx = q[1 + 4 * e];
+				let my = q[2 + 4 * e];
+				let mxPrev = this.state.q[1 + 4 * ( ((i+nx-1)%nx) + nx * j )];
+				let myPrev = this.state.q[1 + 4 * ( i + nx * ((j+nx-1)%nx) )];
+				let dmx = mx - mxPrev;
+				let dmy = my - myPrev;
+				let s = (dmx / dy - dmy / dx) / rho;
 				if (dataMin === undefined || s < dataMin) dataMin = s;
 				if (dataMax === undefined || s > dataMax) dataMax = s;
 				this.vertexStates[e] = (s - this.lastDataMin) / lastDataRange;
@@ -246,56 +246,56 @@ var drawToScreenMethods = {
 	}*/
 };
 
-var integrationMethods = {
+let integrationMethods = {
 	'Forward Euler' : {
 		advect : {
 			Burgers : function(dt) {
 				/**/
-				for (var i = 0; i < this.edges.length; ++i) {
+				for (let i = 0; i < this.edges.length; ++i) {
 					//TODO weight averages by distances from edge ... or volume ... or something
-					var edge = this.edges[i];
+					let edge = this.edges[i];
 					if (edge.cells.length == 1) {
 						//zero boundaries
-						var cell = this.cells[edge.cells[0]];
+						let cell = this.cells[edge.cells[0]];
 						edge.u = 0;
 					} else {
-						var cellA = this.cells[edge.cells[0]];
-						var cellB = this.cells[edge.cells[1]];
-						var rhoA = cellA.q[0];
-						var uA = cellA.q[1] / rhoA;
-						var vA = cellA.q[2] / rhoA;
-						var rhoB = cellB.q[0];
-						var uB = cellB.q[1] / rhoB;
-						var vB = cellB.q[2] / rhoB;
+						let cellA = this.cells[edge.cells[0]];
+						let cellB = this.cells[edge.cells[1]];
+						let rhoA = cellA.q[0];
+						let uA = cellA.q[1] / rhoA;
+						let vA = cellA.q[2] / rhoA;
+						let rhoB = cellB.q[0];
+						let uB = cellB.q[1] / rhoB;
+						let vB = cellB.q[2] / rhoB;
 						edge.u = .5 * ((uA + uB) * edge.normal[0] + (vA + vB) * edge.normal[1]);
 					}
 					//if (edge.u !== edge.u) throw 'nan';
 				}
 
 				//compute flux and advect for each state vector
-				for (var i = 0; i < this.edges.length; ++i) {
-					var edge = this.edges[i];
+				for (let i = 0; i < this.edges.length; ++i) {
+					let edge = this.edges[i];
 					//TODO slope calc
-					for (var j = 0; j < 4; ++j) {
+					for (let j = 0; j < 4; ++j) {
 						edge.r[j] = 0;
 					}
 				}
 
 				//construct flux:
-				for (var i = 0; i < this.edges.length; ++i) {
-					var edge = this.edges[i];
+				for (let i = 0; i < this.edges.length; ++i) {
+					let edge = this.edges[i];
 					if (edge.cells.length == 1) {
 						//TODO boundary reflection?
 						edge.flux[0] = edge.flux[1] = edge.flux[2] = edge.flux[3] = 0;
 					} else {
-						var cellA = this.cells[edge.cells[0]];
-						var cellB = this.cells[edge.cells[1]];
+						let cellA = this.cells[edge.cells[0]];
+						let cellB = this.cells[edge.cells[1]];
 						if (edge.u >= 0) {	//pull from cell B
-							for (var j = 0; j < 4; ++j) {
+							for (let j = 0; j < 4; ++j) {
 								edge.flux[j] = edge.u * cellB.q[j];
 							}
 						} else {
-							for (var j = 0; j < 4; ++j) {
+							for (let j = 0; j < 4; ++j) {
 								edge.flux[j] = edge.u * cellA.q[j];
 							}
 						}
@@ -304,16 +304,16 @@ var integrationMethods = {
 				}
 
 				//if (dt !== dt) throw 'nan';
-				for (var i = 0; i < this.cells.length; ++i) {
-					var cell = this.cells[i];
-					for (var j = 0; j < cell.edges.length; ++j) {
-						var edge = this.edges[cell.edges[j]];
-						var dx = edge.x[0] - cell.x[0];
-						var dy = edge.x[1] - cell.x[1];
-						var ds = Math.sqrt(dx * dx + dy * dy);
+				for (let i = 0; i < this.cells.length; ++i) {
+					let cell = this.cells[i];
+					for (let j = 0; j < cell.edges.length; ++j) {
+						let edge = this.edges[cell.edges[j]];
+						let dx = edge.x[0] - cell.x[0];
+						let dy = edge.x[1] - cell.x[1];
+						let ds = Math.sqrt(dx * dx + dy * dy);
 						//if (ds !== ds) throw 'nan';
 						if (ds === 0) throw 'divide by zero for cell ' + i + ' and edge ' + cell.edges[j];
-						for (var k = 0; k < 4; ++k) {
+						for (let k = 0; k < 4; ++k) {
 							//if (cell.q[k] !== cell.q[k]) throw 'nan';
 							//if (edge.flux[k] !== edge.flux[k]) throw 'nan';
 							cell.q[k] -= dt / ds * edge.flux[k];
@@ -324,29 +324,29 @@ var integrationMethods = {
 				/**/
 				
 				//compute pressure
-				for (var i = 0; i < this.cells.length; ++i) {
-					var cell = this.cells[i];
+				for (let i = 0; i < this.cells.length; ++i) {
+					let cell = this.cells[i];
 					//if (cell.q[0] !== cell.q[0]) throw 'nan';
 					//if (cell.q[1] !== cell.q[1]) throw 'nan';
 					//if (cell.q[2] !== cell.q[2]) throw 'nan';
 					//if (cell.q[0] === 0) throw 'divide by zero error';
-					var x = cell.x[0];
-					var y = cell.x[1];
-					var rho = cell.q[0];
-					var u = cell.q[1] / rho;
-					var v = cell.q[2] / rho;
-					var energyTotal = cell.q[3] / rho;
-					var energyKinetic = .5 * (u * u + v * v);
-					var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-					var energyThermal = energyTotal - energyKinetic - energyPotential;
+					let x = cell.x[0];
+					let y = cell.x[1];
+					let rho = cell.q[0];
+					let u = cell.q[1] / rho;
+					let v = cell.q[2] / rho;
+					let energyTotal = cell.q[3] / rho;
+					let energyKinetic = .5 * (u * u + v * v);
+					let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+					let energyThermal = energyTotal - energyKinetic - energyPotential;
 					cell.pressure = (this.gamma - 1) * rho * energyThermal;
 					//if (cell.pressure !== cell.pressure) throw 'nan';
 				}
 
 				//apply external force
-				for (var i = 0; i < this.cells.length; ++i) {
-					var cell = this.cells[i];
-					var rho = cell.q[0];
+				for (let i = 0; i < this.cells.length; ++i) {
+					let cell = this.cells[i];
+					let rho = cell.q[0];
 					cell.q[3] -= dt * (externalForceX * cell.q[1] + externalForceY * cell.q[2]);
 					cell.q[1] -= dt * rho * externalForceX;
 					cell.q[2] -= dt * rho * externalForceY;
@@ -354,15 +354,15 @@ var integrationMethods = {
 
 				//apply momentum diffusion = pressure
 				/* per-edge method */
-				for (var i = 0; i < this.edges.length; ++i) {
-					var edge = this.edges[i];
+				for (let i = 0; i < this.edges.length; ++i) {
+					let edge = this.edges[i];
 					if (edge.cells.length == 2) {	//one neighbor means ghost cell mirror means matching energies means zero gradient.
-						var cellA = this.cells[edge.cells[0]];
-						var cellB = this.cells[edge.cells[1]];
-						var dPressure = cellA.pressure - cellB.pressure;	//direction of normal
-						var dx = cellA.x[0] - cellB.x[0];
-						var dy = cellA.x[1] - cellB.x[1];
-						var ds = Math.sqrt(dx * dx + dy * dy);
+						let cellA = this.cells[edge.cells[0]];
+						let cellB = this.cells[edge.cells[1]];
+						let dPressure = cellA.pressure - cellB.pressure;	//direction of normal
+						let dx = cellA.x[0] - cellB.x[0];
+						let dy = cellA.x[1] - cellB.x[1];
+						let ds = Math.sqrt(dx * dx + dy * dy);
 						
 						cellA.q[1] -= dt * dPressure / ds * edge.normal[0];
 						cellA.q[2] -= dt * dPressure / ds * edge.normal[1];
@@ -372,19 +372,19 @@ var integrationMethods = {
 					}
 				}
 				/**/
-				/*for (var i = 0; i < this.cells.length; ++i) {
-					var cell = this.cells[i];
-					var total_dPressure_times_dx = 0;
-					var total_dPressure_times_dy = 0;
-					var total_dx = 0;
-					var total_dy = 0;
-					for (var j = 0; j < cell.edges.length; ++j) {
-						var edge = this.edges[cell.edges[j]];
+				/*for (let i = 0; i < this.cells.length; ++i) {
+					let cell = this.cells[i];
+					let total_dPressure_times_dx = 0;
+					let total_dPressure_times_dy = 0;
+					let total_dx = 0;
+					let total_dy = 0;
+					for (let j = 0; j < cell.edges.length; ++j) {
+						let edge = this.edges[cell.edges[j]];
 						if (edge.cells.length != 2) continue;
-						var cellB = edge.getOpposing(cell);
-						var this_dPressure = cell.pressure - cellB.pressure;
-						var dx = cell.x[0] - cellB.x[0];
-						var dy = cell.x[1] - cellB.x[1];
+						let cellB = edge.getOpposing(cell);
+						let this_dPressure = cell.pressure - cellB.pressure;
+						let dx = cell.x[0] - cellB.x[0];
+						let dy = cell.x[1] - cellB.x[1];
 						
 						if (dx < 0) {
 							total_dx -= dx;
@@ -402,8 +402,8 @@ var integrationMethods = {
 							total_dPressure_times_dy += this_dPressure;
 						}
 					}
-					var total_dPressure_dx = total_dPressure_times_dx / total_dx;
-					var total_dPressure_dy = total_dPressure_times_dy / total_dy;
+					let total_dPressure_dx = total_dPressure_times_dx / total_dx;
+					let total_dPressure_dy = total_dPressure_times_dy / total_dy;
 					
 					cell.q[1] -= dt * total_dPressure_dx;
 					cell.q[2] -= dt * total_dPressure_dy;
@@ -411,45 +411,45 @@ var integrationMethods = {
 				*/
 
 				//apply work diffusion = momentum
-				for (var i = 0; i < this.edges.length; ++i) {
-					var edge = this.edges[i];
+				for (let i = 0; i < this.edges.length; ++i) {
+					let edge = this.edges[i];
 					if (edge.cells.length == 1) {
-						var cellA = this.cells[edge.cells[0]];
+						let cellA = this.cells[edge.cells[0]];
 
-						var dx = 2 * (cellA.x[0] - edge.x[0]);
-						var dy = 2 * (cellA.x[1] - edge.x[1]);
-						var ds = Math.sqrt(dx * dx + dy * dy);
+						let dx = 2 * (cellA.x[0] - edge.x[0]);
+						let dy = 2 * (cellA.x[1] - edge.x[1]);
+						let ds = Math.sqrt(dx * dx + dy * dy);
 
-						var rhoA = cellA.q[0];
-						var uA = cellA.q[1] / rhoA;
-						var vA = cellA.q[2] / rhoA;
-						var pressureA = cellA.pressure;
+						let rhoA = cellA.q[0];
+						let uA = cellA.q[1] / rhoA;
+						let vA = cellA.q[2] / rhoA;
+						let pressureA = cellA.pressure;
 						
-						var rhoB = rhoA;
-						var uB = -uA;
-						var vB = -vA;
-						var pressureB = pressureA;	
-						var dWork = pressureA * (uA * edge.normal[0] + vA * edge.normal[1])
+						let rhoB = rhoA;
+						let uB = -uA;
+						let vB = -vA;
+						let pressureB = pressureA;	
+						let dWork = pressureA * (uA * edge.normal[0] + vA * edge.normal[1])
 								- pressureB * (uB * edge.normal[0] + vB * edge.normal[1]);
 
 						cellA.q[3] -= dt * dWork / ds; 
 					} else {
-						var cellA = this.cells[edge.cells[0]];
-						var cellB = this.cells[edge.cells[1]];
+						let cellA = this.cells[edge.cells[0]];
+						let cellB = this.cells[edge.cells[1]];
 						
-						var dx = cellA.x[0] - cellB.x[0];
-						var dy = cellA.x[1] - cellB.x[1];
-						var ds = Math.sqrt(dx * dx + dy * dy);
+						let dx = cellA.x[0] - cellB.x[0];
+						let dy = cellA.x[1] - cellB.x[1];
+						let ds = Math.sqrt(dx * dx + dy * dy);
 				
-						var rhoA = cellA.q[0];
-						var uA = cellA.q[1] / rhoA;
-						var vA = cellA.q[2] / rhoA;
+						let rhoA = cellA.q[0];
+						let uA = cellA.q[1] / rhoA;
+						let vA = cellA.q[2] / rhoA;
 						
-						var rhoB = cellB.q[0];
-						var uB = cellB.q[1] / rhoB;
-						var vB = cellB.q[2] / rhoB;
+						let rhoB = cellB.q[0];
+						let uB = cellB.q[1] / rhoB;
+						let vB = cellB.q[2] / rhoB;
 
-						var dWork = cellA.pressure * (uA * edge.normal[0] + vA * edge.normal[1])
+						let dWork = cellA.pressure * (uA * edge.normal[0] + vA * edge.normal[1])
 								- cellB.pressure * (uB * edge.normal[0] + vB * edge.normal[1]);
 
 						cellA.q[3] -= dt * dWork / ds; 
@@ -459,19 +459,19 @@ var integrationMethods = {
 
 			},
 			'Riemann / Roe' : function(dt) {
-				var qLs = [];
-				var qRs = [];
-				for (var j = 1; j < this.nx; ++j) {
-					for (var i = 1; i < this.nx; ++i) {
-						for (var side = 0; side < 2; ++side) {
-							var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR = i + this.nx * j;
-							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
-							var solidL = this.solid[indexL];
-							var solidR = this.solid[indexR];
-							for (var k = 0; k < 4; ++k) {
-								var qL = this.q[k + 4 * indexL];
-								var qR = this.q[k + 4 * indexR];
+				let qLs = [];
+				let qRs = [];
+				for (let j = 1; j < this.nx; ++j) {
+					for (let i = 1; i < this.nx; ++i) {
+						for (let side = 0; side < 2; ++side) {
+							let indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+							let indexR = i + this.nx * j;
+							let interfaceIndex = side + 2 * (i + (this.nx+1) * j);
+							let solidL = this.solid[indexL];
+							let solidR = this.solid[indexR];
+							for (let k = 0; k < 4; ++k) {
+								let qL = this.q[k + 4 * indexL];
+								let qR = this.q[k + 4 * indexR];
 								if (solidL && !solidR) {
 									qL = qR;
 									if (k == side+1) qL = -qL;
@@ -482,10 +482,10 @@ var integrationMethods = {
 								qLs[k] = qL;
 								qRs[k] = qR;
 							}
-							for (var state = 0; state < 4; ++state) {
+							for (let state = 0; state < 4; ++state) {
 								//find state change across interface in the basis of the eigenspace at the interface
-								var sum = 0;
-								for (var k = 0; k < 4; ++k) {
+								let sum = 0;
+								for (let k = 0; k < 4; ++k) {
 										//reproject into interface eigenspace
 									sum += this.interfaceEigenvectorsInverse[state + 4 * (k + 4 * interfaceIndex)]
 										//flux difference
@@ -498,9 +498,9 @@ var integrationMethods = {
 				}
 				
 				//boundary zero
-				for (var j = 0; j < this.nghost-1; ++j) {
-					for (var i = 0; i <= this.nx; ++i) {
-						for (var state = 0; state < 4; ++state) {
+				for (let j = 0; j < this.nghost-1; ++j) {
+					for (let i = 0; i <= this.nx; ++i) {
+						for (let state = 0; state < 4; ++state) {
 							//left boundary, left and top sides, zero vector
 							this.interfaceDeltaQTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
 							//right boundary, left and top sides, zero vector
@@ -513,28 +513,28 @@ var integrationMethods = {
 					}
 				}
 
-				for (var j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
-					for (var i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
-						for (var side = 0; side < 2; ++side) {
-							var indexL2 = i - 2 * dirs[side][0] + this.nx * (j - 2 * dirs[side][1]);
-							var indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR1 = i + this.nx * j;
-							var indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]); 
+				for (let j = this.nghost; j < this.nx + this.nghost - 3; ++j) {
+					for (let i = this.nghost; i < this.nx + this.nghost - 3; ++i) {
+						for (let side = 0; side < 2; ++side) {
+							let indexL2 = i - 2 * dirs[side][0] + this.nx * (j - 2 * dirs[side][1]);
+							let indexL1 = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+							let indexR1 = i + this.nx * j;
+							let indexR2 = i + dirs[side][0] + this.nx * (j + dirs[side][1]); 
 							
-							var solidL2 = this.solid[indexL2];
-							var solidL1 = this.solid[indexL1];
-							var solidR1 = this.solid[indexR1];
-							var solidR2 = this.solid[indexR2];
+							let solidL2 = this.solid[indexL2];
+							let solidL1 = this.solid[indexL1];
+							let solidR1 = this.solid[indexR1];
+							let solidR2 = this.solid[indexR2];
 							
-							var interfaceIndexL = side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1]));
-							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
-							var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+							let interfaceIndexL = side + 2 * (i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1]));
+							let interfaceIndex = side + 2 * (i + (this.nx+1) * j);
+							let interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
 							
-							for (var state = 0; state < 4; ++state) {
+							for (let state = 0; state < 4; ++state) {
 								
-								var interfaceDeltaQTildeL = this.interfaceDeltaQTilde[state + 4 * interfaceIndexL];
-								var interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
-								var interfaceDeltaQTildeR = this.interfaceDeltaQTilde[state + 4 * interfaceIndexR];
+								let interfaceDeltaQTildeL = this.interfaceDeltaQTilde[state + 4 * interfaceIndexL];
+								let interfaceDeltaQTilde = this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
+								let interfaceDeltaQTildeR = this.interfaceDeltaQTilde[state + 4 * interfaceIndexR];
 
 								//TODO is this right? 
 								if (solidL2) {
@@ -563,9 +563,9 @@ var integrationMethods = {
 				}
 		
 				//..and keep the boundary rTilde's zero	
-				for (var j = 0; j < this.nghost; ++j) {
-					for (var i = 0; i <= this.nx; ++i) {
-						for (var state = 0; state < 4; ++state) {
+				for (let j = 0; j < this.nghost; ++j) {
+					for (let i = 0; i <= this.nx; ++i) {
+						for (let state = 0; state < 4; ++state) {
 							//left
 							this.rTilde[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
 							//right
@@ -578,30 +578,30 @@ var integrationMethods = {
 					}
 				}
 			
-				var fluxAvg = [];	//4
-				var fluxTilde = [];	//4
-				var dxi = [];
+				let fluxAvg = [];	//4
+				let fluxTilde = [];	//4
+				let dxi = [];
 				//transform cell q's into cell qTilde's (eigenspace)
-				for (var j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
-					for (var i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
-						var dx = this.xi[0 + 2 * (i + (this.nx+1) * j)] 
+				for (let j = this.nghost-1; j < this.nx+this.nghost-2; ++j) {
+					for (let i = this.nghost-1; i < this.nx+this.nghost-2; ++i) {
+						let dx = this.xi[0 + 2 * (i + (this.nx+1) * j)] 
 							- this.xi[0 + 2 * (i-dirs[0][0] + (this.nx+1) * (j-dirs[0][1]))];
-						var dy = this.xi[1 + 2 * (i + (this.nx+1) * j)] 
+						let dy = this.xi[1 + 2 * (i + (this.nx+1) * j)] 
 							- this.xi[1 + 2 * (i-dirs[1][0] + (this.nx+1) * (j-dirs[1][1]))];
-						var volume = dx * dy;
+						let volume = dx * dy;
 						dxi[0] = dx;
 						dxi[1] = dy;
-						for (var side = 0; side < 2; ++side) {
+						for (let side = 0; side < 2; ++side) {
 
-							var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-							var indexR = i + this.nx * j;
-							var solidL = this.solid[indexL];
-							var solidR = this.solid[indexR];
-							var interfaceIndex = side + 2 * (i + (this.nx+1) * j);
+							let indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+							let indexR = i + this.nx * j;
+							let solidL = this.solid[indexL];
+							let solidR = this.solid[indexR];
+							let interfaceIndex = side + 2 * (i + (this.nx+1) * j);
 							
-							for (var k = 0; k < 4; ++k) {
-								var qL = this.q[k + 4 * indexL];
-								var qR = this.q[k + 4 * indexR];
+							for (let k = 0; k < 4; ++k) {
+								let qL = this.q[k + 4 * indexL];
+								let qR = this.q[k + 4 * indexR];
 								if (solidL && !solidR) {
 									qL = qR;
 									if (k == side+1) qL = -qL;
@@ -615,9 +615,9 @@ var integrationMethods = {
 							
 							//simplification: rather than E * L * E^-1 * q, just do A * q for A the original matrix
 							//...and use that on the flux L & R avg (which doesn't get scaled in eigenvector basis space
-							for (var state = 0; state < 4; ++state) {
-								var sum = 0;
-								for (var k = 0; k < 4; ++k) {
+							for (let state = 0; state < 4; ++state) {
+								let sum = 0;
+								for (let k = 0; k < 4; ++k) {
 									sum += this.interfaceMatrix[state + 4 * (k + 4 * interfaceIndex)]
 										* (qRs[k] + qLs[k]);
 								}
@@ -625,25 +625,25 @@ var integrationMethods = {
 							}
 
 							//calculate flux
-							for (var state = 0; state < 4; ++state) {
-								var theta = 0;
-								var eigenvalue = this.interfaceEigenvalues[state + 4 * interfaceIndex];
+							for (let state = 0; state < 4; ++state) {
+								let theta = 0;
+								let eigenvalue = this.interfaceEigenvalues[state + 4 * interfaceIndex];
 								if (eigenvalue >= 0) {
 									theta = 1;
 								} else {
 									theta = -1;
 								}
 							
-								var phi = fluxMethods[this.fluxMethod](this.rTilde[state + 4 * interfaceIndex]);
-								var epsilon = eigenvalue * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
-								var deltaFluxTilde = eigenvalue * this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
+								let phi = fluxMethods[this.fluxMethod](this.rTilde[state + 4 * interfaceIndex]);
+								let epsilon = eigenvalue * dt / dxi[side];//* volume / (dxi[side] * dxi[side]); 
+								let deltaFluxTilde = eigenvalue * this.interfaceDeltaQTilde[state + 4 * interfaceIndex];
 								fluxTilde[state] = -.5 * deltaFluxTilde * (theta + phi * (epsilon - theta));
 							}
 						
 							//reproject fluxTilde back into q
-							for (var state = 0; state < 4; ++state) {
-								var sum = 0;
-								for (var k = 0; k < 4; ++k) {
+							for (let state = 0; state < 4; ++state) {
+								let sum = 0;
+								for (let k = 0; k < 4; ++k) {
 									sum += fluxTilde[k] * this.interfaceEigenvectors[state + 4 * (k + 4 * interfaceIndex)];
 								}
 								this.flux[state + 4 * interfaceIndex] = fluxAvg[state] + sum;
@@ -654,9 +654,9 @@ var integrationMethods = {
 			
 				//zero boundary flux
 				//..and keep the boundary r's zero	
-				for (var j = 0; j < this.nghost-1; ++j) {
-					for (var i = 0; i <= this.nx; ++i) {
-						for (var state = 0; state < 4; ++state) {
+				for (let j = 0; j < this.nghost-1; ++j) {
+					for (let i = 0; i <= this.nx; ++i) {
+						for (let state = 0; state < 4; ++state) {
 							//left
 							this.flux[state + 4 * (0 + 2 * (j + (this.nx+1) * i))] = 0;
 							//right
@@ -670,29 +670,29 @@ var integrationMethods = {
 				}
 
 				//update cells
-				for (var j = this.nghost; j < this.nx-this.nghost; ++j) {
-					for (var i = this.nghost; i < this.nx-this.nghost; ++i) {
+				for (let j = this.nghost; j < this.nx-this.nghost; ++j) {
+					for (let i = this.nghost; i < this.nx-this.nghost; ++i) {
 						if (this.solid[i + this.nx * j]) continue;
 						
-						var xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
-						var xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
-						var dx = this.xi[xiIndexR] - this.xi[xiIndexL];
+						let xiIndexR = 0 + 2 * (i + dirs[0][0] + (this.nx+1) * (j + dirs[0][1]));
+						let xiIndexL = 0 + 2 * (i + (this.nx+1) * j);
+						let dx = this.xi[xiIndexR] - this.xi[xiIndexL];
 						
-						var xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
-						var xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
-						var dy = this.xi[xiIndexR] - this.xi[xiIndexL];
+						let xiIndexR = 1 + 2 * (i + dirs[1][0] + (this.nx+1) * (j + dirs[1][1]));
+						let xiIndexL = 1 + 2 * (i + (this.nx+1) * j);
+						let dy = this.xi[xiIndexR] - this.xi[xiIndexL];
 						
-						var volume = dx * dy;
+						let volume = dx * dy;
 						dxi[0] = dx;
 						dxi[1] = dy;
 						
-						for (var side = 0; side < 2; ++side) {
-							var interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
-							var interfaceIndexL = side + 2 * (i + (this.nx+1) * j);
-							for (var state = 0; state < 4; ++state) {
-								var interfaceFluxIndexR = state + 4 * interfaceIndexR;
-								var interfaceFluxIndexL = state + 4 * interfaceIndexL;
-								var df = this.flux[interfaceFluxIndexR] - this.flux[interfaceFluxIndexL];
+						for (let side = 0; side < 2; ++side) {
+							let interfaceIndexR = side + 2 * (i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1]));
+							let interfaceIndexL = side + 2 * (i + (this.nx+1) * j);
+							for (let state = 0; state < 4; ++state) {
+								let interfaceFluxIndexR = state + 4 * interfaceIndexR;
+								let interfaceFluxIndexL = state + 4 * interfaceIndexL;
+								let df = this.flux[interfaceFluxIndexR] - this.flux[interfaceFluxIndexL];
 								this.q[state + 4 * (i + this.nx * j)] -= dt * df / dxi[side];//* volume / (dxi[side] * dxi[side]);
 							}
 						}
@@ -704,31 +704,31 @@ var integrationMethods = {
 };
 
 //called with 'this' the HydroState
-var advectMethods = {
+let advectMethods = {
 	Burgers : {
 		initStep : function() {},
 		calcCFLTimestep : function() {
-			var mindum = undefined;
-			for (var i = 0; i < this.cells.length; ++i) {
-				var cell = this.cells[i];
-				var x = cell.x[0];
-				var y = cell.x[1];
-				var rho = cell.q[0];
-				var u = cell.q[1] / rho;
-				var v = cell.q[2] / rho; 
-				var energyTotal = cell.q[3] / rho; 
-				var energyKinetic = .5 * (u * u + v * v);
-				var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-				var energyThermal = energyTotal - energyKinetic - energyPotential;
-				var speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
+			let mindum = undefined;
+			for (let i = 0; i < this.cells.length; ++i) {
+				let cell = this.cells[i];
+				let x = cell.x[0];
+				let y = cell.x[1];
+				let rho = cell.q[0];
+				let u = cell.q[1] / rho;
+				let v = cell.q[2] / rho; 
+				let energyTotal = cell.q[3] / rho; 
+				let energyKinetic = .5 * (u * u + v * v);
+				let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+				let energyThermal = energyTotal - energyKinetic - energyPotential;
+				let speedOfSound = Math.sqrt(this.gamma * (this.gamma - 1) * energyThermal);
 				
 				//TODO fixme ... make this match Roe and run it across interface velocities?
-				var dx = (xmax - xmin) / this.nx;
-				var dy = (ymax - ymin) / this.ny;
+				let dx = (xmax - xmin) / this.nx;
+				let dy = (ymax - ymin) / this.ny;
 				
-				var dum = dx / (speedOfSound + Math.abs(u));
+				let dum = dx / (speedOfSound + Math.abs(u));
 				if (mindum === undefined || dum < mindum) mindum = dum;
-				var dum = dy / (speedOfSound + Math.abs(v));
+				let dum = dy / (speedOfSound + Math.abs(v));
 				if (mindum === undefined || dum < mindum) mindum = dum;
 			}
 			return this.cfl * mindum;
@@ -736,69 +736,69 @@ var advectMethods = {
 	},
 	'Riemann / Roe' : {
 		initStep : function() {
-			for (var j = 1; j < this.nx; ++j) {
-				for (var i = 1; i < this.nx; ++i) {
-					for (var side = 0; side < 2; ++side) {
-						var xL = side == 0 ? this.xi[0 + 2 * (i + (this.nx+1) * j)] : this.x[0 + 2 * (i + this.nx * j)];
-						var xR = side == 0 ? this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] : this.x[0 + 2 * (i + this.nx * j)];
-						var yL = side == 1 ? this.xi[1 + 2 * (i + (this.nx+1) * j)] : this.x[1 + 2 * (i + this.nx * j)];
-						var yR = side == 1 ? this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] : this.x[1 + 2 * (i + this.nx * j)];
+			for (let j = 1; j < this.nx; ++j) {
+				for (let i = 1; i < this.nx; ++i) {
+					for (let side = 0; side < 2; ++side) {
+						let xL = side == 0 ? this.xi[0 + 2 * (i + (this.nx+1) * j)] : this.x[0 + 2 * (i + this.nx * j)];
+						let xR = side == 0 ? this.xi[0 + 2 * (i+1 + (this.nx+1) * j)] : this.x[0 + 2 * (i + this.nx * j)];
+						let yL = side == 1 ? this.xi[1 + 2 * (i + (this.nx+1) * j)] : this.x[1 + 2 * (i + this.nx * j)];
+						let yR = side == 1 ? this.xi[1 + 2 * (i + (this.nx+1) * (j+1))] : this.x[1 + 2 * (i + this.nx * j)];
 				
-						var normalX = dirs[side][0];
-						var normalY = dirs[side][1];
+						let normalX = dirs[side][0];
+						let normalY = dirs[side][1];
 
-						var indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
-						var qIndexL = 4 * indexL;
-						var solidL = this.solid[indexL];
-						var densityL = this.q[0 + qIndexL];
-						var velocityXL = this.q[1 + qIndexL] / densityL;
-						var velocityYL = this.q[2 + qIndexL] / densityL;
-						var energyTotalL = this.q[3 + qIndexL] / densityL;
+						let indexL = i - dirs[side][0] + this.nx * (j - dirs[side][1]);
+						let qIndexL = 4 * indexL;
+						let solidL = this.solid[indexL];
+						let densityL = this.q[0 + qIndexL];
+						let velocityXL = this.q[1 + qIndexL] / densityL;
+						let velocityYL = this.q[2 + qIndexL] / densityL;
+						let energyTotalL = this.q[3 + qIndexL] / densityL;
 						
-						var indexR = i + this.nx * j;
-						var qIndexR = 4 * indexR;
-						var solidR = this.solid[indexR];
-						var densityR = this.q[0 + qIndexR];
-						var velocityXR = this.q[1 + qIndexR] / densityR;
-						var velocityYR = this.q[2 + qIndexR] / densityR;
-						var energyTotalR = this.q[3 + qIndexR] / densityR;					
+						let indexR = i + this.nx * j;
+						let qIndexR = 4 * indexR;
+						let solidR = this.solid[indexR];
+						let densityR = this.q[0 + qIndexR];
+						let velocityXR = this.q[1 + qIndexR] / densityR;
+						let velocityYR = this.q[2 + qIndexR] / densityR;
+						let energyTotalR = this.q[3 + qIndexR] / densityR;					
 						
 						if (solidL && !solidR) {	//right cell has a wall on the left
 							densityL = densityR;
 							//reflect along normal
-							var velocityNR = normalX * velocityXR + normalY * velocityYR;
+							let velocityNR = normalX * velocityXR + normalY * velocityYR;
 							velocityXL = velocityXR - 2 * normalX * velocityNR;
 							velocityYL = velocityYR - 2 * normalY * velocityNR;
 							energyTotalL = energyTotalR;
 						} else if (!solidL && solidR) {	//left cell has a wall on the right
 							densityR = densityL;
 							//reflect along normal
-							var velocityNL = normalX * velocityXL + normalY * velocityYL;
+							let velocityNL = normalX * velocityXL + normalY * velocityYL;
 							velocityXR = velocityXL - 2 * normalX * velocityNL;
 							velocityYR = velocityYL - 2 * normalY * velocityNL;
 							energyTotalR = energyTotalL;
 						}
 					
-						var energyKineticL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
-						var energyPotentialL = (xL - xmin) * externalForceX + (yL - ymin) * externalForceY;
-						var energyThermalL = energyTotalL - energyKineticL - energyPotentialL;
-						var pressureL = (this.gamma - 1) * densityL * energyThermalL;
-						var speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
-						var hTotalL = energyTotalL + pressureL / densityL;
-						var roeWeightL = Math.sqrt(densityL);
+						let energyKineticL = .5 * (velocityXL * velocityXL + velocityYL * velocityYL);
+						let energyPotentialL = (xL - xmin) * externalForceX + (yL - ymin) * externalForceY;
+						let energyThermalL = energyTotalL - energyKineticL - energyPotentialL;
+						let pressureL = (this.gamma - 1) * densityL * energyThermalL;
+						let speedOfSoundL = Math.sqrt(this.gamma * pressureL / densityL);
+						let hTotalL = energyTotalL + pressureL / densityL;
+						let roeWeightL = Math.sqrt(densityL);
 					
-						var energyKineticR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
-						var energyPotentialR = (xR - xmin) * externalForceX + (yR - ymin) * externalForceY;
-						var energyThermalR = energyTotalR - energyKineticR - energyPotentialR;
-						var pressureR = (this.gamma - 1) * densityR * energyThermalR;
-						var speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
-						var hTotalR = energyTotalR + pressureR / densityR;
-						var roeWeightR = Math.sqrt(densityR);
+						let energyKineticR = .5 * (velocityXR * velocityXR + velocityYR * velocityYR);
+						let energyPotentialR = (xR - xmin) * externalForceX + (yR - ymin) * externalForceY;
+						let energyThermalR = energyTotalR - energyKineticR - energyPotentialR;
+						let pressureR = (this.gamma - 1) * densityR * energyThermalR;
+						let speedOfSoundR = Math.sqrt(this.gamma * pressureR / densityR);
+						let hTotalR = energyTotalR + pressureR / densityR;
+						let roeWeightR = Math.sqrt(densityR);
 
-						var denom = roeWeightL + roeWeightR;
-						var velocityX = (roeWeightL * velocityXL + roeWeightR * velocityXR) / denom;
-						var velocityY = (roeWeightL * velocityYL + roeWeightR * velocityYR) / denom;
-						var hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
+						let denom = roeWeightL + roeWeightR;
+						let velocityX = (roeWeightL * velocityXL + roeWeightR * velocityXR) / denom;
+						let velocityY = (roeWeightL * velocityYL + roeWeightR * velocityYR) / denom;
+						let hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) / denom;
 						
 						buildEigenstate(
 							 //index into interface element.  
@@ -817,24 +817,24 @@ var advectMethods = {
 			}
 		},
 		calcCFLTimestep : function() {
-			var mindum = undefined;
-			for (var j = 1; j < this.nx; ++j) {
-				for (var i = 1; i < this.nx; ++i) {
+			let mindum = undefined;
+			for (let j = 1; j < this.nx; ++j) {
+				for (let i = 1; i < this.nx; ++i) {
 					if (this.solid[i + this.nx * j]) continue;
-					for (var side = 0; side < 2; ++side) {
-						var maxLambda = Math.max(0, 
+					for (let side = 0; side < 2; ++side) {
+						let maxLambda = Math.max(0, 
 							this.interfaceEigenvalues[0+4*(side+2*(i+(this.nx+1)*j))],
 							this.interfaceEigenvalues[1+4*(side+2*(i+(this.nx+1)*j))],
 							this.interfaceEigenvalues[2+4*(side+2*(i+(this.nx+1)*j))],
 							this.interfaceEigenvalues[3+4*(side+2*(i+(this.nx+1)*j))]);
-						var minLambda = Math.min(0, 
+						let minLambda = Math.min(0, 
 							this.interfaceEigenvalues[0+4*(side+2*(i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])))],
 							this.interfaceEigenvalues[1+4*(side+2*(i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])))],
 							this.interfaceEigenvalues[2+4*(side+2*(i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])))],
 							this.interfaceEigenvalues[3+4*(side+2*(i + dirs[side][0] + (this.nx+1) * (j + dirs[side][1])))]);
-						var dx = this.xi[side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][1]))] 
+						let dx = this.xi[side + 2 * (i+dirs[side][0] + (this.nx+1) * (j+dirs[side][1]))] 
 							- this.xi[side + 2 * (i + (this.nx+1) * j)];
-						var dum = dx / (maxLambda - minLambda);
+						let dum = dx / (maxLambda - minLambda);
 						if (mindum === undefined || dum < mindum) mindum = dum;
 					}
 				}
@@ -844,17 +844,17 @@ var advectMethods = {
 	}
 };
 
-var HydroCell = function(args) {
+let HydroCell = function(args) {
 	this.state = args.state;
 	this.edges = args.edges;
 	this.q = new Float64Array(4);	//state: rho, rho u, rho v, rho e
 	this.pressure = 0;
 
 	this.x = [0,0];
-	for (var i = 0; i < this.edges.length; ++i) {
-		var edge = this.state.edges[this.edges[i]];
-		for (var j = 0; j < 2; ++j) {
-			var vertex = this.state.vertexes[edge.vertexes[j]];
+	for (let i = 0; i < this.edges.length; ++i) {
+		let edge = this.state.edges[this.edges[i]];
+		for (let j = 0; j < 2; ++j) {
+			let vertex = this.state.vertexes[edge.vertexes[j]];
 			this.x[0] += vertex[0];
 			this.x[1] += vertex[1];
 		}
@@ -863,22 +863,22 @@ var HydroCell = function(args) {
 	this.x[1] /= 2 * this.edges.length;
 };
 
-var HydroEdge = function(args) {
+let HydroEdge = function(args) {
 	this.state = args.state;
 	this.vertexes = args.vertexes;
 	
-	var va = this.state.vertexes[this.vertexes[0]];
-	var vb = this.state.vertexes[this.vertexes[1]];
+	let va = this.state.vertexes[this.vertexes[0]];
+	let vb = this.state.vertexes[this.vertexes[1]];
 
 	this.x = [
 		.5 * (va[0] + vb[0]),
 		.5 * (va[1] + vb[1])
 	];
 
-	var dx = vb[0] - va[0];
-	var dy = vb[1] - va[1];
+	let dx = vb[0] - va[0];
+	let dy = vb[1] - va[1];
 	//normalize
-	var ds = Math.sqrt(dx * dx + dy * dy);
+	let ds = Math.sqrt(dx * dx + dy * dy);
 	dx /= ds;
 	dy /= ds;
 	
@@ -908,10 +908,10 @@ var HydroEdge = function(args) {
 	this.eigenvalues = new Float64Array(4);
 	this.eigenvectors = new Float64Array(4 * 4);
 	this.eigenvectorsInverse = new Float64Array(4 * 4);
-	for (var j = 0; j < 4; ++j) {
+	for (let j = 0; j < 4; ++j) {
 		this.eigenvalues[i] = 1;
-		for (var i = 0; i < 4; ++i) {
-			var delta_ij = i == j ? 1 : 0;
+		for (let i = 0; i < 4; ++i) {
+			let delta_ij = i == j ? 1 : 0;
 			this.jacobian[i + 4 * j] = delta_ij;
 			this.eigenvectors[i + 4 * j] = delta_ij;
 			this.eigenvetorsInverse[i + 4 * j] = delta_ij
@@ -930,16 +930,16 @@ HydroEdge.prototype = {
 		if (this.cells.length < 1) throw "too few cells";
 		if (this.cells.length > 2) throw "too many cells";
 		if (this.cells.length == 2) {
-			var cellAX = this.state.cells[this.cells[0]].x;
-			var cellBX = this.state.cells[this.cells[1]].x;
-			var dax = [cellAX[0] - this.x[0], cellAX[1] - this.x[1]];
-			var dbx = [cellBX[0] - this.x[0], cellBX[1] - this.x[1]];
-			var aforward = dax[0] * this.normal[0] + dax[1] * this.normal[1] > 0;
-			var bforward = dbx[0] * this.normal[0] + dbx[1] * this.normal[1] > 0;
+			let cellAX = this.state.cells[this.cells[0]].x;
+			let cellBX = this.state.cells[this.cells[1]].x;
+			let dax = [cellAX[0] - this.x[0], cellAX[1] - this.x[1]];
+			let dbx = [cellBX[0] - this.x[0], cellBX[1] - this.x[1]];
+			let aforward = dax[0] * this.normal[0] + dax[1] * this.normal[1] > 0;
+			let bforward = dbx[0] * this.normal[0] + dbx[1] * this.normal[1] > 0;
 			if (aforward && bforward) throw "both cells in front of normal";
 			if (!aforward && !bforward) throw "both cells behind normal";
 			if (!aforward && bforward) {
-				var tmp = this.cells[0];
+				let tmp = this.cells[0];
 				this.cells[0] = this.cells[1];
 				this.cells[1] = tmp;
 			}
@@ -951,7 +951,7 @@ HydroEdge.prototype = {
 	}
 };
 
-var HydroState = makeClass({ 
+let HydroState = makeClass({ 
 	init : function(args) {
 		this.nx = args.size;
 		this.cfl =.5;
@@ -961,10 +961,10 @@ var HydroState = makeClass({
 		
 		this.vertexes = [];
 
-		for (var j = 0; j <= this.nx; ++j) {
-			for (var i = 0; i <= this.nx; ++i) {
-				var x = i / this.nx * (xmax - xmin) + xmin;
-				var y = j / this.nx * (ymax - ymin) + ymin;
+		for (let j = 0; j <= this.nx; ++j) {
+			for (let i = 0; i <= this.nx; ++i) {
+				let x = i / this.nx * (xmax - xmin) + xmin;
+				let y = j / this.nx * (ymax - ymin) + ymin;
 				this.vertexes.push([x, y]);
 			}
 		}
@@ -976,11 +976,11 @@ var HydroState = makeClass({
 		//x_{i-1/2},{j-1/2},dim: interface positions
 		//0 <= i,j < this.nx+1
 		//0 <= dim < 2
-		for (var j = 0; j <= this.nx; ++j) {
-			for (var i = 0; i <= this.nx; ++i) {
-				for (var side = 0; side < 2; ++side) {
+		for (let j = 0; j <= this.nx; ++j) {
+			for (let i = 0; i <= this.nx; ++i) {
+				for (let side = 0; side < 2; ++side) {
 					if ((side == 0 && i > 0) || (side == 1 && j > 0)) {
-						var vertexes = [];
+						let vertexes = [];
 						vertexes.push(i + (this.nx+1) * j);
 						vertexes.push(i - dirs[side][0] + (this.nx+1) * (j - dirs[side][1]));
 						this.edges.push(new HydroEdge({
@@ -998,14 +998,14 @@ var HydroState = makeClass({
 
 		//x_i,j,dim: cell positions
 		//0 <= i < this.nx
-		var thiz = this;
-		for (var j = 0; j < this.nx; ++j) {
-			for (var i = 0; i < this.nx; ++i) {
-				var edges = [];
-				var cellIndex = this.cells.length;
-				var addEdgeWithVertexes = function(a,b) {
-					for (var edgeIndex = 0; edgeIndex < thiz.edges.length; ++edgeIndex) {
-						var edge = thiz.edges[edgeIndex];
+		let thiz = this;
+		for (let j = 0; j < this.nx; ++j) {
+			for (let i = 0; i < this.nx; ++i) {
+				let edges = [];
+				let cellIndex = this.cells.length;
+				let addEdgeWithVertexes = function(a,b) {
+					for (let edgeIndex = 0; edgeIndex < thiz.edges.length; ++edgeIndex) {
+						let edge = thiz.edges[edgeIndex];
 						if ((edge.vertexes[0] == a && edge.vertexes[1] == b) ||
 							(edge.vertexes[0] == b && edge.vertexes[1] == a)) 
 						{
@@ -1028,7 +1028,7 @@ var HydroState = makeClass({
 		}
 
 		//init after we've added cells to interfaces
-		for (var i = 0; i < this.edges.length; ++i) {
+		for (let i = 0; i < this.edges.length; ++i) {
 			this.edges[i].initAux();
 		}
 	
@@ -1036,10 +1036,10 @@ var HydroState = makeClass({
 		
 		//qiTilde_{i-1/2},{j-1/2},side,state	
 		this.interfaceDeltaQTilde = new Float64Array((this.nx+1) * (this.nx+1) * 2 * 4);
-		for (var j = 0; j <= this.nx; ++j) {
-			for (var i = 0; i <= this.nx; ++i) {
-				for (var side = 0; side < 2; ++side) {
-					for (var state = 0; state < 4; ++state) {
+		for (let j = 0; j <= this.nx; ++j) {
+			for (let i = 0; i <= this.nx; ++i) {
+				for (let side = 0; side < 2; ++side) {
+					for (let state = 0; state < 4; ++state) {
 						this.interfaceDeltaQTilde[state + 4 * (side + 2 * (i + (this.nx+1) * j))] = 0;
 					}
 				}
@@ -1053,21 +1053,21 @@ var HydroState = makeClass({
 		this.drawToScreenMethod = 'Density';
 	},
 	resetSod : function() {
-		for (var i = 0; i < this.cells.length; ++i) {
-			var cell = this.cells[i];
-			var x = cell.x[0];
-			var y = cell.x[1];
-			var rho = ((x < (.7 * xmin + .3 * xmax) && y < (.7 * ymin + .3 * ymax)) ? 1 : .1);
-			var u = 0;
-			var v = 0;
+		for (let i = 0; i < this.cells.length; ++i) {
+			let cell = this.cells[i];
+			let x = cell.x[0];
+			let y = cell.x[1];
+			let rho = ((x < (.7 * xmin + .3 * xmax) && y < (.7 * ymin + .3 * ymax)) ? 1 : .1);
+			let u = 0;
+			let v = 0;
 			if (useNoise) {
 				u += (Math.random() - .5) * 2 * noiseAmplitude;
 				v += (Math.random() - .5) * 2 * noiseAmplitude;
 			}
-			var energyKinetic = .5 * (u * u + v * v);
-			var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-			var energyThermal = 1;
-			var energyTotal = energyKinetic + energyThermal + energyPotential;
+			let energyKinetic = .5 * (u * u + v * v);
+			let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+			let energyThermal = 1;
+			let energyTotal = energyKinetic + energyThermal + energyPotential;
 			cell.q[0] = rho;
 			cell.q[1] = rho * u; 
 			cell.q[2] = rho * v; 
@@ -1077,21 +1077,21 @@ var HydroState = makeClass({
 	},
 	resetSodCylinder : function() {
 		//TODO restructure the mesh to avoid the cylinder
-		for (var i = 0; i < this.cells.length; ++i) {
-			var cell = this.cells[i];
-			var x = cell.x[0];
-			var y = cell.x[1];
-			var rho = ((x < (.7 * xmin + .3 * xmax) && y < (.7 * ymin + .3 * ymax)) ? 1 : .1);
-			var u = 0;
-			var v = 0;
+		for (let i = 0; i < this.cells.length; ++i) {
+			let cell = this.cells[i];
+			let x = cell.x[0];
+			let y = cell.x[1];
+			let rho = ((x < (.7 * xmin + .3 * xmax) && y < (.7 * ymin + .3 * ymax)) ? 1 : .1);
+			let u = 0;
+			let v = 0;
 			if (useNoise) {
 				u += (Math.random() - .5) * 2 * noiseAmplitude;
 				v += (Math.random() - .5) * 2 * noiseAmplitude;
 			}
-			var energyKinetic = .5 * (u * u + v * v);
-			var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-			var energyThermal = 1;
-			var energyTotal = energyKinetic + energyThermal + energyPotential;
+			let energyKinetic = .5 * (u * u + v * v);
+			let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+			let energyThermal = 1;
+			let energyTotal = energyKinetic + energyThermal + energyPotential;
 			cell.q[0] = rho;
 			cell.q[1] = rho * u; 
 			cell.q[2] = rho * v; 
@@ -1099,26 +1099,26 @@ var HydroState = makeClass({
 		}
 	},
 	resetWave : function() {
-		var xmid = .5 * (xmin + xmax);
-		var ymid = .5 * (ymin + ymax);
-		var dg = .2 * (xmax - xmin);
-		for (var i = 0; i < this.cells.length; ++i) {
-			var cell = this.cells[i];
-			var x = cell.x[0];
-			var y = cell.y[0];
-			var dx = x - xmid;
-			var dy = y - ymid;
-			var rho = 3 * Math.exp(-(dx * dx + dy * dy) / (dg * dg)) + .1;
-			var u = 0; 
-			var v = 0;
+		let xmid = .5 * (xmin + xmax);
+		let ymid = .5 * (ymin + ymax);
+		let dg = .2 * (xmax - xmin);
+		for (let i = 0; i < this.cells.length; ++i) {
+			let cell = this.cells[i];
+			let x = cell.x[0];
+			let y = cell.y[0];
+			let dx = x - xmid;
+			let dy = y - ymid;
+			let rho = 3 * Math.exp(-(dx * dx + dy * dy) / (dg * dg)) + .1;
+			let u = 0; 
+			let v = 0;
 			if (useNoise) {
 				u += (Math.random() - .5) * 2 * noiseAmplitude;
 				v += (Math.random() - .5) * 2 * noiseAmplitude;
 			}
-			var energyKinetic = .5 * (u * u + v * v);
-			var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-			var energyThermal = 1;
-			var energyTotal = energyKinetic + energyThermal + energyPotential;
+			let energyKinetic = .5 * (u * u + v * v);
+			let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+			let energyThermal = 1;
+			let energyTotal = energyKinetic + energyThermal + energyPotential;
 			cell.q[0] = rho;
 			cell.q[1] = rho * u;
 			cell.q[2] = rho * v;
@@ -1127,15 +1127,15 @@ var HydroState = makeClass({
 	},
 	//http://www.astro.princeton.edu/~jstone/Athena/tests/kh/kh.html
 	resetKelvinHemholtz : function() {
-		var xmid = .5 * (xmin + xmax);
-		for (var i = 0; i < this.cells.length; ++i) {
-			var cell = this.cells[i];
-			var x = cell.x[0];
-			var y = cell.x[1];
-			var yInTheMiddle = y > (.75 * ymin + .25 * ymax) && y < (.25 * ymin + .75 * ymax);
-			var rho = yInTheMiddle ? 2 : 1;
-			var u = yInTheMiddle ? .5 : -.5;
-			var v = 0;
+		let xmid = .5 * (xmin + xmax);
+		for (let i = 0; i < this.cells.length; ++i) {
+			let cell = this.cells[i];
+			let x = cell.x[0];
+			let y = cell.x[1];
+			let yInTheMiddle = y > (.75 * ymin + .25 * ymax) && y < (.25 * ymin + .75 * ymax);
+			let rho = yInTheMiddle ? 2 : 1;
+			let u = yInTheMiddle ? .5 : -.5;
+			let v = 0;
 			if (useNoise) {
 				u += (Math.random() - .5) * 2 * noiseAmplitude;
 				v += (Math.random() - .5) * 2 * noiseAmplitude;
@@ -1144,10 +1144,10 @@ var HydroState = makeClass({
 			//eTotal = P / ((gamma - 1) rho) + eKinetic + ePotential
 			//eTotal = eThermal + eKinetic + ePotential
 			//eThermal = P / ((gamma - 1) rho)
-			var pressure = 2.5;
-			var energyKinetic = .5 * (u * u + v * v);
-			var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-			var energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic + energyPotential;
+			let pressure = 2.5;
+			let energyKinetic = .5 * (u * u + v * v);
+			let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+			let energyTotal = pressure / ((this.gamma - 1) * rho) + energyKinetic + energyPotential;
 			cell.q[0] = rho;
 			cell.q[1] = rho * u; 
 			cell.q[2] = rho * v;
@@ -1157,15 +1157,15 @@ var HydroState = makeClass({
 	},
 	//http://www.astro.virginia.edu/VITA/ATHENA/rt.html
 	resetRayleighTaylor : function() {
-		var ymid = .5 * (ymin + ymax);
-		for (var i = 0; i < this.cells.length; ++i) {
-			var cell = this.cells[i];
-			var x = cell.x[0 + 2 * e];
-			var y = cell.x[1 + 2 * e];
-			var yGreaterThanMid = y > ymid;
-			var rho = yGreaterThanMid ? 2 : 1;
-			var u = 0;
-			var v = 0;
+		let ymid = .5 * (ymin + ymax);
+		for (let i = 0; i < this.cells.length; ++i) {
+			let cell = this.cells[i];
+			let x = cell.x[0 + 2 * e];
+			let y = cell.x[1 + 2 * e];
+			let yGreaterThanMid = y > ymid;
+			let rho = yGreaterThanMid ? 2 : 1;
+			let u = 0;
+			let v = 0;
 			if (useNoise) {
 				u += (Math.random() - .5) * 2 * noiseAmplitude;
 				v += (Math.random() - .5) * 2 * noiseAmplitude;
@@ -1176,9 +1176,9 @@ var HydroState = makeClass({
 			//eTotal = P / ((gamma - 1) rho) + eKinetic + ePotential
 			//...but Bernoulli's equation says
 			//constant = P / rho * gamma / (gamma - 1) + eKinetic + ePotential
-			var energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
-			var pressure = 2.5 - rho * energyPotential; 
-			//var pressure = (this.gamma - 1) * rho * (2.5 - energyPotential);	//this fits with our non-external-force static ...
+			let energyPotential = (x - xmin) * externalForceX + (y - ymin) * externalForceY;
+			let pressure = 2.5 - rho * energyPotential; 
+			//let pressure = (this.gamma - 1) * rho * (2.5 - energyPotential);	//this fits with our non-external-force static ...
 			/*
 			pressure gradient zero ...
 			dPressure / dy + rho * externalForce[side] = 0
@@ -1186,12 +1186,12 @@ var HydroState = makeClass({
 			pressure + rho * externalForce.y * y = constant
 			pressure = constant - rho * externalForce.y = constant - rho * energyPotential
 			*/
-			var energyKinetic = .5 * (u * u + v * v);
+			let energyKinetic = .5 * (u * u + v * v);
 			/*
 			energyTotal = energyKinetic + energyPotential + energyThermal
 			energyTotal = .5 * (u*u + v*v) + energyPotential + pressure / (rho * (gamma - 1))
 			*/
-			var energyTotal = pressure / (rho * (this.gamma - 1)) + energyKinetic + energyPotential;
+			let energyTotal = pressure / (rho * (this.gamma - 1)) + energyKinetic + energyPotential;
 			cell.q[0] = rho;
 			cell.q[1] = rho * u;
 			cell.q[2] = rho * v;
@@ -1208,7 +1208,7 @@ var HydroState = makeClass({
 		advectMethods[this.advectMethod].initStep.call(this);
 		
 		//get timestep
-		var dt;
+		let dt;
 		if (useCFL) {
 			dt = advectMethods[this.advectMethod].calcCFLTimestep.call(this);
 		} else {
@@ -1222,18 +1222,18 @@ window.lastDT = dt;
 });
 
 
-var Hydro = makeClass({
+let Hydro = makeClass({
 	init : function() {
-		var size = Number($.url().param('size'));
+		let size = Number($.url().param('size'));
 		if (size === undefined || size !== size) size = 50;
-		var gamma = Number($.url().param('gamma'));
+		let gamma = Number($.url().param('gamma'));
 		if (gamma === undefined || gamma !== gamma) gamma = 7/5;
 		this.state = new HydroState({
 			size : size,
 			gamma : gamma
 		});
 
-		var plainShader = new GL.ShaderProgram({
+		let plainShader = new GL.ShaderProgram({
 			vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
 uniform mat4 mvMat;
@@ -1252,7 +1252,7 @@ void main() {
 			fragmentPrecision : 'best'
 		});
 
-		var stateShader = new GL.ShaderProgram({
+		let stateShader = new GL.ShaderProgram({
 			vertexCode : mlstr(function(){/*
 attribute vec2 vertex;
 attribute float state;
@@ -1277,13 +1277,13 @@ void main() {
 		});
 
 		//vertices
-		var vertexData = [];
-		for (var i = 0; i < this.state.vertexes.length; ++i) {
-			for (var j = 0; j < 2; ++j) {
+		let vertexData = [];
+		for (let i = 0; i < this.state.vertexes.length; ++i) {
+			for (let j = 0; j < 2; ++j) {
 				vertexData.push(this.state.vertexes[i][j]);
 			}
 		}
-		var vertexBuffer = new GL.ArrayBuffer({dim : 2, data : vertexData, keep : true});
+		let vertexBuffer = new GL.ArrayBuffer({dim : 2, data : vertexData, keep : true});
 		this.vertexObj = new GL.SceneObject({
 			mode : gl.POINTS,
 			attrs : {
@@ -1294,13 +1294,13 @@ void main() {
 		});
 	
 		//edges
-		var indexData = [];
-		for (var i = 0; i < this.state.edges.length; ++i) {
-			for (var j = 0; j < 2; ++j) {
+		let indexData = [];
+		for (let i = 0; i < this.state.edges.length; ++i) {
+			for (let j = 0; j < 2; ++j) {
 				indexData.push(this.state.edges[i].vertexes[j]);
 			}
 		}
-		var indexBuffer = new GL.ElementArrayBuffer({data : indexData})
+		let indexBuffer = new GL.ElementArrayBuffer({data : indexData})
 		this.edgeObj = new GL.SceneObject({
 			mode : gl.LINES,
 			indexes : indexBuffer,
@@ -1314,17 +1314,17 @@ void main() {
 		//cells
 		//points for now
 		//I should make polys out of the cells or something
-		var cellVertexData = [];
-		var cellStateData = [];
-		for (var i = 0; i < this.state.cells.length; ++i) {
-			var cell = this.state.cells[i];
-			for (var j = 0; j < 2; ++j) {
+		let cellVertexData = [];
+		let cellStateData = [];
+		for (let i = 0; i < this.state.cells.length; ++i) {
+			let cell = this.state.cells[i];
+			for (let j = 0; j < 2; ++j) {
 				cellVertexData.push(cell.x[j]);
 			}
 			cellStateData.push(0);
 		}
-		var cellVertexBuffer = new GL.ArrayBuffer({dim : 2, data : cellVertexData, keep : true});
-		var cellStateBuffer = new GL.ArrayBuffer({dim : 1, data : cellStateData, keep : true});
+		let cellVertexBuffer = new GL.ArrayBuffer({dim : 2, data : cellVertexData, keep : true});
+		let cellStateBuffer = new GL.ArrayBuffer({dim : 1, data : cellStateData, keep : true});
 		this.cellObj = new GL.SceneObject({
 			mode : gl.POINTS,
 			attrs : {
@@ -1346,14 +1346,14 @@ void main() {
 		this.state.update();
 
 		//update geometry z coordinate
-		var result = drawToScreenMethods[this.state.drawToScreenMethod].call(this);
-		var dataMin = result[0];
-		var dataMax = result[1];
+		let result = drawToScreenMethods[this.state.drawToScreenMethod].call(this);
+		let dataMin = result[0];
+		let dataMax = result[1];
 		
 		if (this.updateLastDataRange) {
 			this.lastDataMin = dataMin;
 			this.lastDataMax = dataMax;
-			var thisTick = Math.floor(Date.now() / 1000);
+			let thisTick = Math.floor(Date.now() / 1000);
 			if (this.lastDataRangeUpdateTime != thisTick) {
 				this.lastDataRangeUpdateTime = thisTick;
 				$('#dataRangeFixedMin').val(this.lastDataMin);
@@ -1366,7 +1366,7 @@ void main() {
 	}
 });
 
-var hydro;
+let hydro;
 function update() {
 	//iterate
 	hydro.update();
@@ -1382,9 +1382,9 @@ function onresize() {
 }
 
 function buildSelect(id, key, map) {
-	var select = $('#' + id);
-	for (var k in map) {
-		var option = $('<option>', {text : k});
+	let select = $('#' + id);
+	for (let k in map) {
+		let option = $('<option>', {text : k});
 		option.appendTo(select);
 		if (hydro.state[key] == k) {
 			option.attr('selected', 'true');
@@ -1396,7 +1396,7 @@ function buildSelect(id, key, map) {
 	return select;
 }
 
-var colorSchemes = {};
+let colorSchemes = {};
 
 $(document).ready(function(){
 	canvas = $('<canvas>', {
@@ -1423,7 +1423,7 @@ $(document).ready(function(){
 	
 	panel = $('#panel');	
 
-	var panelContent = $('#content');
+	let panelContent = $('#content');
 	$('#menu').click(function() {
 		if (panelContent.css('display') == 'none') {
 			panelContent.show();
@@ -1443,17 +1443,17 @@ $(document).ready(function(){
 	});
 
 	(function(){
-		var select = $('#gridsize');
+		let select = $('#gridsize');
 		$.each([20, 50, 100, 200, 500, 1000], function(i,gridsize){
-			var option = $('<option>', {text : gridsize});
+			let option = $('<option>', {text : gridsize});
 			if (hydro.state.nx == gridsize) option.attr('selected', 'true');
 			option.appendTo(select);
 		});
 		select.change(function(){
-			var params = $.url().param();
+			let params = $.url().param();
 			params.size = select.val();
-			var url = location.href.match('[^?]*');
-			var sep = '?';
+			let url = location.href.match('[^?]*');
+			let sep = '?';
 			for (k in params) {
 				if (k == '' && params[k] == '') continue;
 				url += sep;
@@ -1475,7 +1475,7 @@ $(document).ready(function(){
 	], function(i,varName) {
 		$('#'+varName).val(window[varName]);
 		$('#'+varName).change(function() {
-			var v = Number($(this).val());
+			let v = Number($(this).val());
 			if (v !== v) return;	//NaN
 			window[varName] = v;
 		});
@@ -1509,7 +1509,7 @@ $(document).ready(function(){
 	});
 	$('#timeStepCFL').val(hydro.state.cfl);
 	$('#timeStepCFL').change(function() {
-		var v = Number($(this).val());
+		let v = Number($(this).val());
 		if (v != v) return;
 		hydro.state.cfl = v;
 	});
@@ -1519,7 +1519,7 @@ $(document).ready(function(){
 	});
 	$('#timeStepValue').val(fixedDT);
 	$('#timeStepValue').change(function() {
-		var v = Number($(this).val());
+		let v = Number($(this).val());
 		if (v != v) return;	//stupid javascript ... convert anything it doesn't understand to NaNs...
 		fixedDT = v;
 	});
@@ -1541,9 +1541,9 @@ $(document).ready(function(){
 		dontRepeat : true
 	});
 
-	var isobarSize = 16;
-	var isobarData = new Uint8Array(isobarSize);
-	for (var i = 1; i < isobarSize; i += 2) {
+	let isobarSize = 16;
+	let isobarData = new Uint8Array(isobarSize);
+	for (let i = 1; i < isobarSize; i += 2) {
 		isobarData[i] = 255;
 	}
 	colorSchemes['B&W'] = new GL.Texture2D({
@@ -1560,9 +1560,9 @@ $(document).ready(function(){
 
 	colorSchemes.Heat.bind();
 
-	for (var colorSchemeName in colorSchemes) {
+	for (let colorSchemeName in colorSchemes) {
 		(function(){
-			var v = colorSchemes[colorSchemeName];
+			let v = colorSchemes[colorSchemeName];
 			$('#colorScheme').append($('<option>', {
 				value : colorSchemeName,
 				text : colorSchemeName
@@ -1570,12 +1570,12 @@ $(document).ready(function(){
 		})();
 	}
 	$('#colorScheme').change(function() {
-		var colorSchemeName = $(this).val();
+		let colorSchemeName = $(this).val();
 		gl.bindTexture(gl.TEXTURE_2D, colorSchemes[colorSchemeName].obj);
 	});
 
-	var zoomFactor = .0003;	// upon mousewheel
-	var dragging = false;
+	let zoomFactor = .0003;	// upon mousewheel
+	let dragging = false;
 	mouse = new Mouse3D({
 		pressObj : canvas,
 		mousedown : function() {
@@ -1583,14 +1583,14 @@ $(document).ready(function(){
 		},
 		move : function(dx,dy) {
 			dragging = true;
-			var aspectRatio = canvas.width / canvas.height;
+			let aspectRatio = canvas.width / canvas.height;
 			GL.view.pos[0] -= dx / canvas.width * 2 * (aspectRatio * GL.view.fovY);
 			GL.view.pos[1] += dy / canvas.height * 2 * GL.view.fovY;
 			GL.updateProjection();
 		},
 		zoom : function(zoomChange) {
 			dragging = true;
-			var scale = Math.exp(-zoomFactor * zoomChange);
+			let scale = Math.exp(-zoomFactor * zoomChange);
 			GL.view.fovY *= scale 
 			GL.updateProjection();
 		}

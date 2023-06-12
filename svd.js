@@ -9,8 +9,8 @@ function SIGN(a,b) { return ((b) >= 0.0 ? Math.abs(a) : -Math.abs(a)); }
 function pythag(a, b)
 /* compute (a2 + b2)^1/2 without destructive underflow or overflow */
 {
-	var absa=Math.abs(a);
-	var absb=Math.abs(b);
+	let absa=Math.abs(a);
+	let absb=Math.abs(b);
 	if (absa > absb) return absa*Math.sqrt(1.0+(absb/absa)*(absb/absa));
 	else return (absb == 0.0 ? 0.0 : absb*Math.sqrt(1.0+(absa/absb)*(absa/absb)));
 }
@@ -24,22 +24,22 @@ function svd(a, u, w, v)
  * the transpose VT) is output as v[1..n][1..n].
  * *******************************************************************************/
 {
-	var flag,i,its,j,jj,k,l,nm;
-	var anorm,c,f,g,h,s,scale,x,y,z,rv1;
+	let flag,i,its,j,jj,k,l,nm;
+	let anorm,c,f,g,h,s,scale,x,y,z,rv1;
 
-	var m = a.length;
-	var n = a[0].length;
+	let m = a.length;
+	let n = a[0].length;
 	
 	u.length = m;
-	for (var i = 0; i < m; ++i) {
+	for (let i = 0; i < m; ++i) {
 		if (u[i] === undefined) u[i] = [];
 		u[i].length = n;
-		for (var j = 0; j < n; ++j) {
+		for (let j = 0; j < n; ++j) {
 			u[i][j] = a[i][j];
 		}
 	}
 	v.length = n;
-	for (var i = 0; i < n; ++i) {
+	for (let i = 0; i < n; ++i) {
 		if (v[i] === undefined) v[i] = [];
 		v[i].length = n;
 	}
@@ -94,7 +94,7 @@ function svd(a, u, w, v)
 				for (k=l;k<n;k++) u[i][k] *= scale;
 			}
 		}
-		var dmaxarg2 = Math.abs(w[i]) + Math.abs(rv1[i]);
+		let dmaxarg2 = Math.abs(w[i]) + Math.abs(rv1[i]);
 		anorm = Math.max(anorm, dmaxarg2);
 	}
 	for (i=n-1;i>=0;i--) { /* Accumulation of right-hand transformations. */
@@ -221,3 +221,4 @@ function svd(a, u, w, v)
 	}
 }
 
+export {svd};

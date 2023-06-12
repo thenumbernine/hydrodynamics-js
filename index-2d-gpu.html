@@ -1,31 +1,8 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 	<head>
 		<title>Learning Hydrodynamics - 2D GPGPU CFD Solver in WebGL</title>
-		
-		<script type='text/javascript' src='/js/jquery-1.11.1.min.js'></script>
-		<script type='text/javascript' src='../js/purl.js'></script>
-		<script type='text/javascript' src='/js/util.js'></script>
-		<script type='text/javascript' src='/js/gl-matrix.2.2.0.min.js'></script>
-		<script type='text/javascript' src='/js/webgl-debug.js'></script>
-		<script type='text/javascript' src='/js/gl-util.js'></script>
-		<script type='text/javascript' src='/js/gl-util-gradient.js'></script>
-		<script type='text/javascript' src='/js/gl-util-unitquad.js'></script>
-		<script type='text/javascript' src='/js/gl-util-pingpong.js'></script>
-		<script type='text/javascript' src='/js/mouse3d.js'></script>
-		<script type='text/javascript' src='main-2d-gpu.js'></script>
-		
-<script type='text/javascript'>
-var _gaq = _gaq || [];
-_gaq.push(['_setAccount', 'UA-17312646-1']);
-_gaq.push(['_trackPageview']);
-(function() {
-	var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-	ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
-	var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-})();
-</script>
-
+		<script type='module' src='main-2d-gpu.js' defer></script>
 		<link type='text/css' rel='stylesheet' href='webgl.css'/>
 	</head>
 	<body style='margin:0px; overflow:hidden'>
@@ -85,21 +62,10 @@ _gaq.push(['_trackPageview']);
 		</div>
 		<div id='webglfail' style='display:none'>
 			Sorry, your browser does not support WebGL<br>
-			Try one of these other, better browsers:<br>
-			<a href='http://www.google.com/chrome'>Chrome</a><br>
-			<a href='http://www.mozilla.org/firefox'>Firefox</a><br>
-			<a href='http://www.apple.com/safari'>Safari</a><br>
-			<b>Opera Users:</b><br>
-			Enter "opera:config" in the address bar.<br>
-			In the "User Prefs" section set both "Enable Hardware Acceleration" and "Enable WebGL" to "1" and then click "Save".<br>
-			It is still buggy.<br>
-			<b>IE Users:</b><br>
-			Sorry guys, IE doesn't plan to support WebGL.<br>
-			Consider using a more <a href='http://www.w3schools.com/browsers/browsers_stats.asp'>standard compliant</a> browser.<br>
 			<br>
 			<center>
-				<a href='finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'>
-					<img src='finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'></img>
+				<a href='images/finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'>
+					<img src='images/finite_volume_superbee_limited_sod_shock_tube_test_2d_2048x2048.png'></img>
 				</a><br>
 			</center>
 		</div>
