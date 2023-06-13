@@ -6,12 +6,13 @@ http://www.cfdbooks.com/cfdcodes.html
 http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does not
 
 lots of accuracy issues with the GPU version ... or bugs I'm not finding
-in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding 
+in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding
 */
 import {DOM, getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
 import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
+import {makeFloatTexture2D} from '/js/gl-util-FloatTexture2D.js';
 import {Mouse3D} from '/js/mouse3d.js';
 
 const ids = getIDs();
@@ -25,7 +26,7 @@ let panel;
 let canvas;
 
 let xmin = -.5;
-let xmax = .5; 
+let xmax = .5;
 let ymin = -.5;
 let ymax = .5;
 
@@ -45,7 +46,7 @@ _G.externalForceY = 0;
 let fbo = undefined;
 
 let quadObj, lineObj;
-		
+
 let allShaders = [];
 
 let drawToScreenShader = {};
@@ -106,18 +107,18 @@ const fluxMethods = {
 	//HQUICK : function(r) { return Math.max(0, 2 * (r + Math.abs(r)) / (r + 3) ); },
 	//Koren : function(r) { return Math.max(0, Math.min(2*r, (1 + 2*r)/3 ,2) ); },
 	//minmod : function(r) { return Math.max(0, Math.min(r,1) ); },
-	//Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2	
+	//Oshker : function(r) { return Math.max(0, Math.min(r,1.5) ); },	//replace 1.5 with 1 <= beta <= 2
 	//ospre : function(r) { return .5 * (r*r + r) / (r*r + r + 1); },
 	//smart : function(r) { return Math.max(0, Math.min(2 * r, .25 + .75 * r, 4)); },
 	//Sweby : function(r) { return Math.max(0, Math.min(1.5 * r, 1), Math.min(r, 1.5)); },	//replace 1.5 with 1 <= beta <= 2
-	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },	
+	//UMIST : function(r) { return Math.max(0, Math.min(2*r, .75 + .25*r, .25 + .75*r, 2)); },
 	//'van Albada 1' : function(r) { return (r * r + r) / (r * r + 1); },
 	//'van Albada 2' : function(r) { return 2 * r / (r * r + 1); },
-	
-	'van Leer' : 'return (r + abs(r)) / (1. + abs(r));', 
+
+	'van Leer' : 'return (r + abs(r)) / (1. + abs(r));',
 	'monotonized central' : 'return max(vec4(0., 0., 0., 0.), min(vec4(2.), min(.5 * (1. + r), 2. * r)));',
 	superbee : 'return max(vec4(0., 0., 0., 0.), max(min(vec4(1.), 2. * r), min(vec4(2.), r)));'
-	
+
 	//'Barth-Jespersen' : function(r) {.5 * (r + 1) * Math.min(1, 4*r/(r+1), 4/(r+1)); }
 };
 
@@ -144,7 +145,7 @@ function drawBoundaries(color) {
 			1.5/nx, 0,
 			1.5/nx, 1
 		]
-	});	
+	});
 	//right
 	this.drawLine({
 		shader : solidShader,
@@ -186,7 +187,7 @@ function drawBoundaries(color) {
 			0, 1.5/nx,
 			1, 1.5/nx
 		]
-	});	
+	});
 	//top
 	this.drawLine({
 		shader : solidShader,
@@ -275,14 +276,14 @@ let advectMethods = {
 				},
 				texs : [this.qTex, this.solidTex]
 			});
-			fbo.unbind();	
+			fbo.unbind();
 			return this.reduceToDetermineCFL();
-		},	
-		advect : function(dt) {			
+		},
+		advect : function(dt) {
 			let dx = (xmax - xmin) / this.nx;
 			let dy = (ymax - ymin) / this.nx;
 			let dxi = [dx, dy];
-			
+
 			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.uiTex.obj, 0);
 			fbo.check();
@@ -305,7 +306,7 @@ let advectMethods = {
 						dpos : [1/this.nx, 1/this.nx]
 					},
 					texs : [
-						this.qTex, 
+						this.qTex,
 						this.solidTex,
 						this.uiTex
 					]
@@ -351,15 +352,15 @@ let advectMethods = {
 					]
 				},
 				texs : [
-					this.qTex, 
+					this.qTex,
 					this.solidTex,
-					this.fluxTex[0], 
+					this.fluxTex[0],
 					this.fluxTex[1]
 				]
 			});
 			fbo.unbind();
 			this.swapTexs('scratchTex', 'qTex');
-		
+
 			//boundary again
 			this.boundary();
 
@@ -412,8 +413,8 @@ let advectMethods = {
 				texs : [this.qTex, this.solidTex, this.pressureTex]
 			});
 			fbo.unbind();
-			this.swapTexs('scratchTex', 'qTex');	
-		
+			this.swapTexs('scratchTex', 'qTex');
+
 		}
 	},
 	'Riemann / Roe' : {
@@ -427,7 +428,7 @@ let advectMethods = {
 					texs : [this.qTex]
 				});
 				fbo.unbind();
-			
+
 				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.eigenvalueTex[side].obj, 0);
 				fbo.check();
@@ -475,7 +476,7 @@ let advectMethods = {
 			let dx = (xmax - xmin) / this.nx;
 			let dy = (ymax - ymin) / this.nx;
 			let dxi = [dx, dy];
-			
+
 			for (let side = 0; side < 2; ++side) {
 				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dqTildeTex[side].obj, 0);
@@ -483,7 +484,7 @@ let advectMethods = {
 				quadObj.draw({
 					shader : roeComputeDeltaQTildeShader[side],
 					texs : [
-						this.qTex, 
+						this.qTex,
 						this.eigenvectorInverseColumnTex[side][0],
 						this.eigenvectorInverseColumnTex[side][1],
 						this.eigenvectorInverseColumnTex[side][2],
@@ -506,7 +507,7 @@ let advectMethods = {
 				});
 				fbo.unbind();
 			}
-	
+
 			for (let side = 0; side < 2; ++side) {
 				fbo.bind();
 				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fluxTex[side].obj, 0);
@@ -547,9 +548,9 @@ let advectMethods = {
 					]
 				},
 				texs : [
-					this.qTex, 
+					this.qTex,
 					this.solidTex,
-					this.fluxTex[0], 
+					this.fluxTex[0],
 					this.fluxTex[1]
 				]
 			});
@@ -710,8 +711,9 @@ if (glutil.contextName == 'webgl2') {
 }
 glutil.import('Gradient', makeGradient);
 glutil.import('UnitQuad', makeUnitQuad);
+glutil.import('FloatTexture2D', makeFloatTexture2D);
 
-class HydroState { 
+class HydroState {
 	constructor(args) {
 		let thiz = this;
 
@@ -756,7 +758,7 @@ class HydroState {
 		});
 
 		this.noiseTex = new glutil.Texture2D({
-			internalFormat : gl.RGBA,
+			internalFormat : gl.RGBA32F,
 			format : gl.RGBA,
 			type : gl.FLOAT,
 			width : this.nx,
@@ -781,27 +783,27 @@ class HydroState {
 
 
 		//scratch target used for any double-buffered operations
-		this.allFloatTexs.push(this.scratchTex = new FloatTexture2D(this.nx, this.nx));
+		this.allFloatTexs.push(this.scratchTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx}));
 
 		//I'm skipping on x_i,j
 		//Instead just use the uniforms xmin, xmax, ymin, ymax
 
-		//I'm skipping on x_{i-1/2,j-1/2} because 
+		//I'm skipping on x_{i-1/2,j-1/2} because
 		//(1) you can reconstruct it from x
 		//(2) it is only used for calculating dx's
-		
+
 		//q_i,j,state: state vector, stored as q[state + 4 * (j + this.nx * i)]
 		//q_i,j,0: density: rho
 		//q_i,j,1: momentum: rho * u
 		//q_i,j,2: momentum: rho * v
 		//q_i,j,3: work: rho * e
-		this.qTex = new FloatTexture2D(this.nx, this.nx);	//rho, rho * u, rho * v, rho * e
+		this.qTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx});	//rho, rho * u, rho * v, rho * e
 		this.allFloatTexs.push(this.qTex);
-		
-		this.allFloatTexs.push(this.solidTex = new FloatTexture2D(this.nx, this.nx));
+
+		this.allFloatTexs.push(this.solidTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx}));
 
 		//p_i,j: pressure
-		this.pressureTex = new FloatTexture2D(this.nx, this.nx);
+		this.pressureTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 		this.allFloatTexs.push(this.pressureTex);
 
 		//TODO it is tempting to merge r, f, and ui into an edge structure
@@ -811,53 +813,53 @@ class HydroState {
 		//f_{i-1/2},{j-1/2},side,state: cell flux
 		this.fluxTex = [];
 		for (let side = 0; side < 2; ++side) {
-			this.fluxTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.fluxTex[side] = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 			this.allFloatTexs.push(this.fluxTex[side]);
 		}
 
-		this.cflReduceTex = new FloatTexture2D(this.nx, this.nx);
+		this.cflReduceTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 		this.allFloatTexs.push(this.cflReduceTex);
-		this.nextCFLReduceTex = new FloatTexture2D(this.nx, this.nx);
+		this.nextCFLReduceTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 		this.allFloatTexs.push(this.nextCFLReduceTex);
 
 
 		//used for Burgers
-		
-		
-		//r_{i-1/2},{j-1/2},side,state	
+
+
+		//r_{i-1/2},{j-1/2},side,state
 		this.rTex = [];
 		for (let side = 0; side < 2; ++side) {
-			this.rTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.rTex[side] = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 			this.allFloatTexs.push(this.rTex[side]);
 		}
-		
+
 		//only used with Burger's eqn advection code
 		//u_{i-1/2},{j-1/2},dim: interface velocity
-		this.uiTex = new FloatTexture2D(this.nx, this.nx);
+		this.uiTex = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 		this.allFloatTexs.push(this.uiTex);
 
 
 		//used for Riemann
-	
+
 
 		//v_{i-1/2},{j-1/2},side = [velocity.x, velocity.y, hTotal, speedOfSound]
 		this.roeValueTex = [];
 		for (let side = 0; side < 2; ++side) {
-			this.roeValueTex[side] = new FloatTexture2D(this.nx, this.nx);
+			this.roeValueTex[side] = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 			this.allFloatTexs.push(this.roeValueTex[side]);
 		}
 
 		//a_{i-1/2},{j-1/2},side,state,state
 		this.eigenvalueTex  = [];
 		for (let side = 0; side < 2; ++side) {
-			this.eigenvalueTex[side] = new FloatTexture2D(this.nx, this.nx); 
+			this.eigenvalueTex[side] = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 			this.allFloatTexs.push(this.eigenvalueTex[side]);
 		}
 		this.eigenvectorColumnTex = [];
 		for (let side = 0; side < 2; ++side) {
 			this.eigenvectorColumnTex[side] = [];
 			for (let state = 0; state < 4; ++state) {
-				this.eigenvectorColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx);
+				this.eigenvectorColumnTex[side][state] = new glutil.FloatTexture2D({width:this.nx, height:this.nx});
 				this.allFloatTexs.push(this.eigenvectorColumnTex[side][state]);
 			}
 		}
@@ -865,20 +867,20 @@ class HydroState {
 		for (let side = 0; side < 2; ++side) {
 			this.eigenvectorInverseColumnTex[side] = [];
 			for (let state = 0; state < 4; ++state) {
-				this.allFloatTexs.push(this.eigenvectorInverseColumnTex[side][state] = new FloatTexture2D(this.nx, this.nx));
+				this.allFloatTexs.push(this.eigenvectorInverseColumnTex[side][state] = new glutil.FloatTexture2D({width:this.nx, height:this.nx}));
 			}
 		}
-		
-		//qiTilde_{i-1/2},{j-1/2},side,state	
+
+		//qiTilde_{i-1/2},{j-1/2},side,state
 		this.dqTildeTex = [];
 		for (let side = 0; side < 2; ++side) {
-			this.allFloatTexs.push(this.dqTildeTex[side] = new FloatTexture2D(this.nx, this.nx));
+			this.allFloatTexs.push(this.dqTildeTex[side] = new glutil.FloatTexture2D({width:this.nx, height:this.nx}));
 		}
 
 		//rTilde_{i-1/2},{j-1/2},side,state
-		this.rTildeTex = []; 
+		this.rTildeTex = [];
 		for (let side = 0; side < 2; ++side) {
-			this.allFloatTexs.push(this.rTildeTex[side] = new FloatTexture2D(this.nx, this.nx)); 
+			this.allFloatTexs.push(this.rTildeTex[side] = new glutil.FloatTexture2D({width:this.nx, height:this.nx}));
 		}
 
 		//solver configuration
@@ -886,7 +888,7 @@ class HydroState {
 		this.fluxMethod = 'superbee';
 		this.advectMethod = 'Riemann / Roe';
 		this.drawToScreenMethod = 'Density';
-	
+
 		//initialize all textures to zero by default
 		//...except the noise tex, which isn't added to the 'allFloatTexs' list
 		gl.viewport(0, 0, this.nx, this.nx);
@@ -1009,7 +1011,7 @@ class HydroState {
 	step(dt) {
 		let dx = (xmax - xmin) / this.nx;
 		let dy = (ymax - ymin) / this.nx;
-		
+
 		//apply boundary conditions
 		this.boundary();
 
@@ -1019,7 +1021,7 @@ class HydroState {
 	update() {
 		gl.viewport(0, 0, this.nx, this.nx);
 		//fbo.bind();
-			
+
 		//do any pre-calcCFLTimestep preparation (Roe computes eigenvalues here)
 		advectMethods[this.advectMethod].initStep.call(this);
 
@@ -1033,7 +1035,7 @@ class HydroState {
 window.lastDT = dt;
 		//do the update
 		this.step(dt);
-			
+
 		//fbo.unbind();
 	}
 
@@ -1041,7 +1043,7 @@ window.lastDT = dt;
 		//swap
 		let tmp = this[texFieldA];
 		this[texFieldA] = this[texFieldB];
-		this[texFieldB] = tmp; 
+		this[texFieldB] = tmp;
 	}
 
 	//reduce to determine CFL
@@ -1050,11 +1052,11 @@ window.lastDT = dt;
 		while (size > 1) {
 			//console.log(getFloatTexData({srcTex:this.cflReduceTex})); fbo.bind();
 			//console.log('reducing...')
-			
+
 			size /= 2;
 			if (size !== Math.floor(size)) throw 'got a npo2 size '+this.nx;
 			gl.viewport(0, 0, size, size);
-			
+
 			fbo.bind();
 			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scratchTex.obj, 0);
 			fbo.check();
@@ -1062,7 +1064,7 @@ window.lastDT = dt;
 			quadObj.draw({
 				shader : minReduceShader,
 				uniforms : {
-					texsize : [this.nx, this.nx], 
+					texsize : [this.nx, this.nx],
 					viewsize : [size, size]
 				},
 				texs : [this.cflReduceTex]
@@ -1071,7 +1073,7 @@ window.lastDT = dt;
 
 			this.swapTexs('scratchTex', 'cflReduceTex');
 		}
-		
+
 		//now that the viewport is 1x1, run the encode shader on it
 		fbo.bind();
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, encodeTempTex.obj, 0);
@@ -1084,9 +1086,9 @@ window.lastDT = dt;
 
 		let cflUint8Result = new Uint8Array(4);
 		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cflUint8Result);
-		
+
 		fbo.unbind();
-		
+
 		let cflFloat32Result = new Float32Array(cflUint8Result.buffer);
 		gl.viewport(0, 0, this.nx, this.nx);
 		let result = cflFloat32Result[0] * this.cfl;
@@ -1119,14 +1121,14 @@ class Hydro {
 		if (!size || !isFinite(size)) size = 512;
 		let gamma = Number(urlparams.get('gamma'));
 		if (!gamma || !isFinite(gamma)) gamma = 7/5;
-		
+
 		this.state = new HydroState({
 			size : size,
 			gamma : gamma
 		});
 	}
 	update() {
-		
+
 		//todo adm or something
 		//update a copy of the grid and its once-refined
 		//...and a once-unrefined ... over mergeable cells only?
@@ -1160,7 +1162,7 @@ function update() {
 					eigenvectorInverses[row][column] = getFloatTexData({srcTex:hydro.state.eigenvectorInverseColumnTex[side][column], channel:row});
 				}
 			}
-		
+
 			//now test them all
 			for (let i = 0; i < 4; ++i) {
 				for (let j = 0; j < 4; ++j) {
@@ -1187,7 +1189,7 @@ function update() {
 
 	//reset viewport
 	gl.viewport(0, 0, glutil.canvas.width, glutil.canvas.height);
-	
+
 	//draw
 	glutil.draw();
 
@@ -1278,7 +1280,7 @@ let colorSchemes = {};
 
 class Kernel extends glutil.Program {
 	constructor(args) {
-		
+
 		let varyingCodePrefix = 'varying vec2 pos;\n';
 
 		let fragmentCodePrefix = '';
@@ -1319,38 +1321,20 @@ precision `+glutil.vertexBestPrec+` float;
 in vec2 vertex;
 in vec2 texCoord;
 void main() {
-	pos = texCoord; 
+	pos = texCoord;
 	gl_Position = vec4(vertex, 0., 1.);
 }
 `
-			});	
+			});
 		}
 
 		args.vertexShader = Kernel.prototype.kernelVertexShader;
-		args.fragmentCode = 
+		args.fragmentCode =
 varyingCodePrefix.replace(/varying/g, 'in')
 + fragmentCodePrefix
 + args.code;
 		delete args.code;
-		args.uniforms = uniforms;	
-		super(args);
-	}
-}
-
-class FloatTexture2D extends glutil.Texture2D {
-	constructor(width, height) {
-		let args = {};
-		args.width = width;
-		args.height = height;
-		args.internalFormat = gl.RGBA32F;
-		args.format = gl.RGBA;
-		args.type = gl.FLOAT;
-		args.minFilter = gl.NEAREST;
-		args.magFilter = gl.NEAREST;
-		args.wrap = {
-			s : gl.REPEAT,
-			t : gl.REPEAT
-		};
+		args.uniforms = uniforms;
 		super(args);
 	}
 }
@@ -1399,7 +1383,7 @@ void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	//I would use dpos functions, but it's only for initialization...
 	float rho;
-	if (gridPos.x < (.7 * rangeMin.x + .3 * rangeMax.x) 
+	if (gridPos.x < (.7 * rangeMin.x + .3 * rangeMax.x)
 		&& gridPos.y < (.7 * rangeMin.y + .3 * rangeMax.y))
 	{
 		rho = 1.;
@@ -1413,7 +1397,7 @@ void main() {
 	float energyThermal = 1.;
 	float energyTotal = energyKinetic + energyThermal + energyPotential;
 	fragColor = vec4(rho, rho * vel.x, rho * vel.y, rho * energyTotal);
-}		
+}
 `,
 		uniforms : {
 			rangeMin : ['vec2', [xmin, ymin]],
@@ -1437,7 +1421,7 @@ void main() {
 	} else {
 		fragColor = vec4(0., 0., 0., 0.);
 	}
-}		
+}
 `,
 		uniforms : {
 			rangeMin : ['vec2', [xmin, ymin]],
@@ -1463,7 +1447,7 @@ void main() {
 	float energyThermal = 1.;
 	float energyTotal = energyKinetic + energyThermal + energyPotential;
 	fragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
-}		
+}
 `,
 		uniforms : {
 			rangeMin : ['vec2', [xmin, ymin]],
@@ -1481,7 +1465,7 @@ void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
 	float rho = 1.;
 	vec2 vel = vec2(0., 0.);
-	if (gridPos.y > (.75 * rangeMin.y + .25 * rangeMax.y) && 
+	if (gridPos.y > (.75 * rangeMin.y + .25 * rangeMax.y) &&
 		gridPos.y < (.25 * rangeMin.y + .75 * rangeMax.y))
 	{
 		rho = 2.;
@@ -1496,9 +1480,9 @@ void main() {
 	float pressure = 2.5;
 	float energyKinetic = .5 * dot(vel, vel);
 	float energyPotential = dot(gridPos - rangeMin, externalForce);
-	float energyTotal = pressure / ((gamma - 1.) * rho) + energyKinetic + energyPotential; 
+	float energyTotal = pressure / ((gamma - 1.) * rho) + energyKinetic + energyPotential;
 	fragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
-}		
+}
 `,
 		uniforms : {
 			rangeMin : ['vec2', [xmin, ymin]],
@@ -1508,7 +1492,7 @@ void main() {
 			gamma : 'float'
 		},
 		texs : ['randomTex']
-		//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders	
+		//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders
 	});
 
 	burgersComputeCFLShader = new Kernel({
@@ -1571,7 +1555,7 @@ void main() {
 		.5 * (uR + uL),
 		.5 * (vR + vL),
 		0., 0.);
-}		
+}
 `,
 		uniforms : {
 			dpos : 'vec2'
@@ -1618,15 +1602,15 @@ void main() {
 		qR1 = -qL1;
 		qR1[$side+1] = -qR1[$side+1];
 	}
-	
+
 	//dq = q_i,j - q_{{i,j}-dirs[side]}
-	vec4 dq = qR1 - qL1; 
-	
+	vec4 dq = qR1 - qL1;
+
 	vec4 s = sign(dq);
 	s *= s;
-	
+
 	float ui = texture(uiTex, pos)[$side];
-	float uigz = step(0., ui); 
+	float uigz = step(0., ui);
 	fragColor = s * mix(qR2 - qR1, qL1 - qL2, uigz) / dq;
 }
 `.replace(/\$side/g, i),
@@ -1645,14 +1629,14 @@ void main() {
 				code : `
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
-}			
+}
 `.replace(/\$fluxMethodCode/g, fluxMethodCode)
 + `
 out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
-	
+
 	vec2 posL = pos - sidestep;
 	vec2 posR = pos;
 
@@ -1678,13 +1662,13 @@ void main() {
 	} else {
 		fragColor = ui * qR;
 	}
-	
+
 	vec4 r = texture(rTex, pos);
 	vec4 phi = fluxMethod(r);
 	vec4 delta = phi * (qR - qL);
-	
+
 	fragColor += delta * .5 * .5 * abs(ui) * (1. - abs(ui * dt_dx));
-}			
+}
 `.replace(/\$side/g, i),
 				uniforms : {
 					dpos : 'vec2',
@@ -1708,11 +1692,11 @@ void main() {
 		vec4 fluxXR = texture(fluxXTex, pos + vec2(dpos.x, 0.));
 		vec4 fluxYL = texture(fluxYTex, pos);
 		vec4 fluxYR = texture(fluxYTex, pos + vec2(0., dpos.y));
-		fragColor = q 
+		fragColor = q
 			- dt_dx.x * (fluxXR - fluxXL)
 			- dt_dx.y * (fluxYR - fluxYL);
 	}
-}		
+}
 `,
 		uniforms : {
 			dpos : 'vec2',
@@ -1732,12 +1716,12 @@ void main() {
 	vec4 eigenvalueXP = texture(eigenvalueXTex, pos + vec2(dpos.x, 0.));
 	float maxLambdaXN = max(0., max(max(eigenvalueXN.x, eigenvalueXN.y), max(eigenvalueXN.z, eigenvalueXN.w)));
 	float minLambdaXP = min(0., min(min(eigenvalueXP.x, eigenvalueXP.y), min(eigenvalueXP.z, eigenvalueXP.w)));
-	
+
 	vec4 eigenvalueYN = texture(eigenvalueYTex, pos);
 	vec4 eigenvalueYP = texture(eigenvalueYTex, pos + vec2(0., dpos.y));
 	float maxLambdaYN = max(0., max(max(eigenvalueYN.x, eigenvalueYN.y), max(eigenvalueYN.z, eigenvalueYN.w)));
 	float minLambdaYP = min(0., min(min(eigenvalueYP.x, eigenvalueYP.y), min(eigenvalueYP.z, eigenvalueYP.w)));
-	
+
 	vec2 dxi = (rangeMax - rangeMin) * dpos;
 	fragColor = vec4(
 		min( dxi.x / (maxLambdaXN - minLambdaXP), dxi.y / (maxLambdaYN - minLambdaYP)),
@@ -1759,13 +1743,13 @@ out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
-	
+
 	vec2 posL = pos - sidestep;
 	vec2 gridposL = rangeMin + posL * (rangeMax - rangeMin);
 	vec4 qL = texture(qTex, posL);
 	float densityL = qL.x;
 	float invDensityL = 1. / densityL;
-	vec2 velocityL = qL.yz * invDensityL; 
+	vec2 velocityL = qL.yz * invDensityL;
 	float energyTotalL = qL.w * invDensityL;
 	float energyKineticL = .5 * dot(velocityL, velocityL);
 	float energyPotentialL = dot(gridposL - rangeMin, externalForce);
@@ -1774,14 +1758,14 @@ void main() {
 	float speedOfSoundL = sqrt(gamma * pressureL * invDensityL);
 	float hTotalL = energyTotalL + pressureL * invDensityL;
 	float roeWeightL = sqrt(densityL);
-	
+
 	vec2 posR = pos;
 	vec2 gridposR = rangeMin + posR * (rangeMax - rangeMin);
 	vec4 qR = texture(qTex, posR);
-	float densityR = qR.x; 
+	float densityR = qR.x;
 	float invDensityR = 1. / densityR;
 	vec2 velocityR = qR.yz * invDensityR;
-	float energyTotalR = qR.w * invDensityR; 
+	float energyTotalR = qR.w * invDensityR;
 	float energyKineticR = .5 * dot(velocityR, velocityR);
 	float energyPotentialR = dot(gridposR - rangeMin, externalForce);
 	float energyThermalR = energyTotalR - energyKineticR - energyPotentialR;
@@ -1793,10 +1777,10 @@ void main() {
 	float invDenom = 1. / (roeWeightL + roeWeightR);
 	vec2 velocity = (roeWeightL * velocityL + roeWeightR * velocityR) * invDenom;
 	float hTotal = (roeWeightL * hTotalL + roeWeightR * hTotalR) * invDenom;
-	
+
 	float velocitySq = dot(velocity, velocity);
 	float speedOfSound = sqrt((gamma - 1.) * (hTotal - .5 * velocitySq));
-	
+
 	fragColor = vec4(
 		velocity,
 		hTotal,
@@ -1814,24 +1798,24 @@ void main() {
 		});
 	});
 
-	coordNames.forEach((coordName, i) => {	
+	coordNames.forEach((coordName, i) => {
 		roeComputeEigenvalueShader[i] = new Kernel({
 			code : `
 out vec4 fragColor;
 void main() {
 	vec4 roeValues = texture(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
-	float hTotal = roeValues.z; 
+	float hTotal = roeValues.z;
 	float speedOfSound = roeValues.w;
 
 	vec2 normal = vec2(0., 0.);
 	normal[$side] = 1.;
 	vec2 tangent = vec2(-normal.y, normal.x);
-	
+
 	float velocityN = dot(velocity, normal);
 	float velocityT = dot(velocity, tangent);
 	float velocitySq = dot(velocity, velocity);
-	
+
 	//eigenvalues: min, mid, max
 	fragColor = vec4(
 		velocityN - speedOfSound,
@@ -1882,7 +1866,7 @@ void main() {
 `
 	];
 
-	coordNames.forEach((coordName, i) => {	
+	coordNames.forEach((coordName, i) => {
 		roeComputeEigenvectorColumnShader[i] = [];
 		roeComputeEigenvectorColumnCode.forEach((code, j) => {
 			roeComputeEigenvectorColumnShader[i][j] = new Kernel({
@@ -1891,18 +1875,18 @@ out vec4 fragColor;
 void main() {
 	vec4 roeValues = texture(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
-	float hTotal = roeValues.z; 
+	float hTotal = roeValues.z;
 	float speedOfSound = roeValues.w;
 
 	vec2 normal = vec2(0., 0.);
 	normal[$side] = 1.;
 	vec2 tangent = vec2(-normal.y, normal.x);
-	
+
 	float velocityN = dot(velocity, normal);
 	float velocityT = dot(velocity, tangent);
 	float velocitySq = dot(velocity, velocity);
-	
-	
+
+
 `.replace(/\$side/g, i) + code + '\n}',
 				uniforms : {
 					gamma : 'float'
@@ -1914,7 +1898,7 @@ void main() {
 
 	/*
 	rows are min, mid normal, mid tangent, max
-	but I'm going to write these out in columns for easier reconstruction of the original matrix 
+	but I'm going to write these out in columns for easier reconstruction of the original matrix
 	... at least I think it'll be easier
 	*/
 	let roeComputeEigenvectorInverseColumnCode = [
@@ -1952,7 +1936,7 @@ void main() {
 `
 	];
 
-	coordNames.forEach((coordName, i) => {	
+	coordNames.forEach((coordName, i) => {
 		roeComputeEigenvectorInverseColumnShader[i] = [];
 		roeComputeEigenvectorInverseColumnCode.forEach((code, j) => {
 			roeComputeEigenvectorInverseColumnShader[i][j] = new Kernel({
@@ -1961,17 +1945,17 @@ out vec4 fragColor;
 void main() {
 	vec4 roeValues = texture(roeValueTex, pos);
 	vec2 velocity = roeValues.xy;
-	float hTotal = roeValues.z; 
+	float hTotal = roeValues.z;
 	float speedOfSound = roeValues.w;
 
 	vec2 normal = vec2(0., 0.);
 	normal[$side] = 1.;
 	vec2 tangent = vec2(-normal.y, normal.x);
-	
+
 	float velocityN = dot(velocity, normal);
 	float velocityT = dot(velocity, tangent);
 	float velocitySq = dot(velocity, velocity);
-	
+
 `.replace(/\$side/g, i) + code + '\n}',
 				uniforms : {
 					gamma : 'float'
@@ -2017,7 +2001,7 @@ void main() {
 				'eigenvectorInverseCol3Tex'
 			]
 		});
-	});	
+	});
 
 	coordNames.forEach((coordName, i) => {
 		roeComputeFluxSlopeShader[i] = new Kernel({
@@ -2026,9 +2010,9 @@ out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
 	sidestep[$side] = dpos[$side];
-	vec4 dqTildePrev = texture(dqTildeTex, pos - sidestep); 
-	vec4 dqTilde = texture(dqTildeTex, pos); 
-	vec4 dqTildeNext = texture(dqTildeTex, pos + sidestep); 
+	vec4 dqTildePrev = texture(dqTildeTex, pos - sidestep);
+	vec4 dqTilde = texture(dqTildeTex, pos);
+	vec4 dqTildeNext = texture(dqTildeTex, pos + sidestep);
 	vec4 eigenvalues = texture(eigenvalueTex, pos);
 ` + [0,1,2,3].map(function(j) {
 	return `
@@ -2043,7 +2027,7 @@ void main() {
 	}
 `.replace(/\$j/g, j);
 	}).join('')
-+ '}').replace(/\$side/g, i),			
++ '}').replace(/\$side/g, i),
 			uniforms : {
 				dpos : 'vec2'
 			},
@@ -2059,7 +2043,7 @@ void main() {
 				code : `
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
-}			
+}
 `.replace(/\$fluxMethodCode/g, fluxMethodCode)
 + `
 out vec4 fragColor;
@@ -2077,19 +2061,19 @@ void main() {
 	vec4 eigenvectorCol2 = texture(eigenvectorCol2Tex, pos);
 	vec4 eigenvectorCol3 = texture(eigenvectorCol3Tex, pos);
 	mat4 eigenvectorMat = mat4(
-		eigenvectorCol0, 
-		eigenvectorCol1, 
-		eigenvectorCol2, 
+		eigenvectorCol0,
+		eigenvectorCol1,
+		eigenvectorCol2,
 		eigenvectorCol3);
-	
+
 	vec4 eigenvectorInverseCol0 = texture(eigenvectorInverseCol0Tex, pos);
 	vec4 eigenvectorInverseCol1 = texture(eigenvectorInverseCol1Tex, pos);
 	vec4 eigenvectorInverseCol2 = texture(eigenvectorInverseCol2Tex, pos);
 	vec4 eigenvectorInverseCol3 = texture(eigenvectorInverseCol3Tex, pos);
 	mat4 eigenvectorInverseMat = mat4(
-		eigenvectorInverseCol0, 
-		eigenvectorInverseCol1, 
-		eigenvectorInverseCol2, 
+		eigenvectorInverseCol0,
+		eigenvectorInverseCol1,
+		eigenvectorInverseCol2,
 		eigenvectorInverseCol3);
 
 	vec4 qAvg = (q + qPrev) * .5;
@@ -2134,7 +2118,7 @@ void main() {
 
 
 	//pressure shaders
-	
+
 
 	burgersComputePressureShader = new Kernel({
 		code : `
@@ -2174,10 +2158,10 @@ void main() {
 	float solid = texture(solidTex, pos).x;
 	if (solid > .5) {
 		fragColor = vec4(0., 0., 0., 0.);
-	} else {	
+	} else {
 		vec2 dposx = vec2(dpos.x, 0.);
 		vec2 dposy = vec2(0., dpos.y);
-		
+
 		vec2 posXL = pos - dposx;
 		vec2 posXR = pos + dposx;
 		vec2 posYL = pos - dposy;
@@ -2196,8 +2180,8 @@ void main() {
 		float pressureYL = texture(pressureTex, posYL).x;
 		if (solidYL > .5) pressureYL = pressureC;
 		float pressureYR = texture(pressureTex, posYR).x;
-		if (solidYR > .5) pressureYR = pressureC; 
-	
+		if (solidYR > .5) pressureYR = pressureC;
+
 		vec2 dPressure = .5 * vec2(pressureXR - pressureXL, pressureYR - pressureYL);
 
 		vec4 q = texture(qTex, pos);
@@ -2215,7 +2199,7 @@ void main() {
 		},
 		texs : ['qTex', 'solidTex', 'pressureTex']
 	});
-	
+
 	burgersApplyPressureToWorkShader = new Kernel({
 		code : `
 out vec4 fragColor;
@@ -2226,7 +2210,7 @@ void main() {
 	} else {
 		vec2 dposx = vec2(dpos.x, 0.);
 		vec2 dposy = vec2(0., dpos.y);
-		
+
 		vec2 posXR = pos + dposx;
 		vec2 posXL = pos - dposx;
 		vec2 posYR = pos + dposy;
@@ -2245,7 +2229,7 @@ void main() {
 		float pressureYL = texture(pressureTex, posYL).x;
 		if (solidYL > .5) pressureYL = pressureC;
 		float pressureYR = texture(pressureTex, posYR).x;
-		if (solidYR > .5) pressureYR = pressureC; 
+		if (solidYR > .5) pressureYR = pressureC;
 
 		vec3 rho_C = texture(qTex, pos).xyz;
 		vec2 rho_u_XR = texture(qTex, posXR).xy;
@@ -2262,9 +2246,9 @@ void main() {
 		if (solidYR > .5) vYR = -uvC.y;
 		float vYL = rho_v_YL.y / rho_v_YL.x;
 		if (solidYL > .5) vYL = -uvC.y;
-		
+
 		vec2 dPressureTimesVelocity = .5 * vec2(
-			pressureXR * uXR - pressureXL * uXL, 
+			pressureXR * uXR - pressureXL * uXL,
 			pressureYR * vYR - pressureYL * vYL);
 
 		vec4 q = texture(qTex, pos);
@@ -2287,7 +2271,7 @@ void main() {
 out vec4 fragColor;
 void main() {
 	fragColor = color;
-}		
+}
 `,
 		uniforms : {
 			color : ['vec4', [0,0,0,0]]
@@ -2299,7 +2283,7 @@ void main() {
 out vec4 fragColor;
 void main() {
 	fragColor = texture(srcTex, pos + offset);
-}		
+}
 `,
 		uniforms : {
 			offset : ['vec2', [0,0]]
@@ -2312,7 +2296,7 @@ void main() {
 out vec4 fragColor;
 void main() {
 	vec2 intPos = pos * viewsize - .5;
-	
+
 	float a = texture(srcTex, (intPos * 2. + .5) / texsize).x;
 	float b = texture(srcTex, (intPos * 2. + vec2(1., 0.) + .5) / texsize).x;
 	float c = texture(srcTex, (intPos * 2. + vec2(0., 1.) + .5) / texsize).x;
@@ -2334,7 +2318,7 @@ let drawToScreenVertexShader = new glutil.VertexShader({
 	code : `#version 300 es
 precision `+glutil.vertexBestPrec+` float;
 in vec2 vertex;
-out vec2 pos; 
+out vec2 pos;
 uniform mat4 mvMat;
 uniform mat4 projMat;
 void main() {
@@ -2361,14 +2345,14 @@ uniform sampler2D gradientTex;
 ` + `
 float drawToScreenMethod() {
 	$drawToScreenMethodCode
-}			
+}
 `.replace(/\$drawToScreenMethodCode/g, drawToScreenMethodCode)
 + `
 out vec4 fragColor;
 void main() {
 	float v = (drawToScreenMethod() - lastMin) / (lastMax - lastMin);
-	fragColor = texture(gradientTex, vec2(v, .5)); 
-}	
+	fragColor = texture(gradientTex, vec2(v, .5));
+}
 `,
 		uniforms : {
 			qTex : 0,
@@ -2382,7 +2366,7 @@ void main() {
 //burgers
 allShaders.push(burgersComputeCFLShader);
 allShaders.push(burgersComputeInterfaceVelocityShader);
-allShaders = allShaders.concat(burgersComputeFluxSlopeShader);	
+allShaders = allShaders.concat(burgersComputeFluxSlopeShader);
 Object.values(burgersComputeFluxShader).forEach(fluxShaders => {
 	allShaders = allShaders.concat(fluxShaders);
 });
@@ -2423,7 +2407,7 @@ hydro = new Hydro();
 
 //init controls after hydro
 
-panel = ids.panel;	
+panel = ids.panel;
 let panelContent = ids.content;
 ids.menu.addEventListener('click', () => {
 	if (hidden(panelContent)) {
@@ -2471,7 +2455,7 @@ buildSelect('drawToScreenMethod', 'drawToScreenMethod', drawToScreenMethods);
 		let v = Number(o.value);
 		if (!isFinite(v)) return;	//NaN
 		_G[varName] = v;
-	
+
 		allShaders.forEach(shader => {
 			shader
 				.use()
@@ -2496,17 +2480,17 @@ if (ids.dataRangeScaleFixed) {
 	ids.dataRangeScaleFixed.addEventListener('change', () => {
 		if (!ids.dataRangeScaleFixed.checked) return;
 		hydro.updateLastDataRange = false;
-		hydro.lastDataMin = Number(ids.dataRangeFixedMin.value); 
-		hydro.lastDataMax = Number(ids.dataRangeFixedMax.value); 
+		hydro.lastDataMin = Number(ids.dataRangeFixedMin.value);
+		hydro.lastDataMax = Number(ids.dataRangeFixedMax.value);
 	});
 }
 ids.dataRangeFixedMin.addEventListener('change', () => {
 	if (hydro.updateLastDataRange) return;
-	hydro.lastDataMin = Number(ids.dataRangeFixedMin.value); 
+	hydro.lastDataMin = Number(ids.dataRangeFixedMin.value);
 });
 ids.dataRangeFixedMax.addEventListener('change', () => {
 	if (hydro.updateLastDataRange) return;
-	hydro.lastDataMax = Number(ids.dataRangeFixedMax.value); 
+	hydro.lastDataMax = Number(ids.dataRangeFixedMax.value);
 });
 
 ids.timeStepCFLBased.addEventListener('change', () => {
@@ -2540,7 +2524,7 @@ glutil.view.pos[0] = .5;
 glutil.view.pos[1] = .5;
 
 colorSchemes.Heat = new glutil.Gradient.GradientTexture({
-	width : 256, 
+	width : 256,
 	colors : [
 		[0, 0, 0],
 		[0, 0, 1],
@@ -2615,11 +2599,11 @@ vec4 encode_float(float val) {
 	float exponent = floor(log2(val));
 	float biased_exponent = exponent + 127.0;
 	float fraction = ((val / exp2(exponent)) - 1.0) * 8388608.0;
-	
+
 	float t = biased_exponent / 2.0;
 	float last_bit_of_biased_exponent = fract(t) * 2.0;
 	float remaining_bits_of_biased_exponent = floor(t);
-	
+
 	float byte4 = extract_bits(fraction, 0.0, 8.0) / 255.0;
 	float byte3 = extract_bits(fraction, 8.0, 16.0) / 255.0;
 	float byte2 = (last_bit_of_biased_exponent * 128.0 + extract_bits(fraction, 16.0, 23.0)) / 255.0;
@@ -2654,7 +2638,7 @@ mouse = new Mouse3D({
 	zoom : function(zoomChange) {
 		dragging = true;
 		let scale = Math.exp(-zoomFactor * zoomChange);
-		glutil.view.fovY *= scale 
+		glutil.view.fovY *= scale
 		glutil.updateProjection();
 	}
 });
@@ -2665,7 +2649,7 @@ onresize();
 update();
 
 
-//check ...	
+//check ...
 let checkCoordAccuracyShader = new Kernel({
 	code : `
 out vec4 fragColor;
@@ -2682,7 +2666,7 @@ void main() {
 });
 
 let nx = hydro.state.nx;
-let tmpTex = new FloatTexture2D(nx, nx); 
+let tmpTex = new glutil.FloatTexture2D({width:nx, height:nx});
 fbo.setColorAttachmentTex2D(0, tmpTex);
 fbo.draw({
 	callback : function() {
