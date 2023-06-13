@@ -45,7 +45,8 @@ _G.externalForceY = 0;
 
 let fbo = undefined;
 
-let quadObj, lineObj;
+let quadObj;
+let lineObj;
 
 let allShaders = [];
 
@@ -585,7 +586,7 @@ let eulerEquationSimulation = {
 			gl.viewport(0, 0, this.nx, this.nx);
 			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : resetSodShader,
 						uniforms : {
@@ -597,7 +598,7 @@ let eulerEquationSimulation = {
 			});
 			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : solidShader
 					});
@@ -609,7 +610,7 @@ let eulerEquationSimulation = {
 			gl.viewport(0, 0, this.nx, this.nx);
 			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : resetSodShader,
 						uniforms : {
@@ -621,7 +622,7 @@ let eulerEquationSimulation = {
 			});
 			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : resetSodCylinderSolidShader
 					});
@@ -633,7 +634,7 @@ let eulerEquationSimulation = {
 			gl.viewport(0, 0, this.nx, this.nx);
 			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : resetWaveShader,
 						uniforms : {
@@ -645,7 +646,7 @@ let eulerEquationSimulation = {
 			});
 			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : solidShader
 					});
@@ -658,7 +659,7 @@ let eulerEquationSimulation = {
 			gl.viewport(0, 0, this.nx, this.nx);
 			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : resetKelvinHemholtzShader,
 						uniforms : {
@@ -670,7 +671,7 @@ let eulerEquationSimulation = {
 			});
 			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
-				callback : function() {
+				callback : () => {
 					quadObj.draw({
 						shader : solidShader
 					});
@@ -912,7 +913,7 @@ class HydroState {
 		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : resetSodShader,
 					uniforms : {
@@ -924,7 +925,7 @@ class HydroState {
 		});
 		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : solidShader
 				});
@@ -936,7 +937,7 @@ class HydroState {
 		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : resetSodShader,
 					uniforms : {
@@ -948,7 +949,7 @@ class HydroState {
 		});
 		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : resetSodCylinderSolidShader
 				});
@@ -960,7 +961,7 @@ class HydroState {
 		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : resetWaveShader,
 					uniforms : {
@@ -972,7 +973,7 @@ class HydroState {
 		});
 		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : solidShader
 				});
@@ -985,7 +986,7 @@ class HydroState {
 		gl.viewport(0, 0, this.nx, this.nx);
 		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : resetKelvinHemholtzShader,
 					uniforms : {
@@ -997,7 +998,7 @@ class HydroState {
 		});
 		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
-			callback : function() {
+			callback : () => {
 				quadObj.draw({
 					shader : solidShader
 				});
@@ -1257,7 +1258,7 @@ function getFloatTexData(args) {//fbo, srcTex, destTex, channel) {
 	let destUint8Array = new Uint8Array(destTex.width * destTex.height * 4);
 	fbo_.setColorAttachmentTex2D(0, destTex);
 	fbo_.draw({
-		callback : function() {
+		callback : () => {
 			gl.viewport(0, 0, destTex.width, destTex.height);
 			quadObj.draw({
 				shader : encodeShader[channel],
@@ -1280,9 +1281,7 @@ let colorSchemes = {};
 
 class Kernel extends glutil.Program {
 	constructor(args) {
-
 		let varyingCodePrefix = 'varying vec2 pos;\n';
-
 		let fragmentCodePrefix = '';
 		let uniforms = {};
 		if (args.uniforms !== undefined) {
@@ -1297,8 +1296,7 @@ class Kernel extends glutil.Program {
 			});
 		}
 		if (args.texs !== undefined) {
-			for (let i = 0; i < args.texs.length; ++i) {
-				let v = args.texs[i];
+			args.texs.forEach((v, i) => {
 				let name, vartype;
 				if (typeof(v) == 'string') {
 					name = v;
@@ -1309,9 +1307,8 @@ class Kernel extends glutil.Program {
 				}
 				fragmentCodePrefix += 'uniform '+vartype+' '+name+';\n';
 				uniforms[name] = i;
-			}
+			});
 		}
-
 
 		if (!Kernel.prototype.kernelVertexShader) {
 			Kernel.prototype.kernelVertexShader = new glutil.VertexShader({
@@ -2625,7 +2622,7 @@ let zoomFactor = .0003;	// upon mousewheel
 let dragging = false;
 mouse = new Mouse3D({
 	pressObj : canvas,
-	mousedown : function() {
+	mousedown : () => {
 		dragging = false;
 	},
 	move : function(dx,dy) {
@@ -2669,7 +2666,7 @@ let nx = hydro.state.nx;
 let tmpTex = new glutil.FloatTexture2D({width:nx, height:nx});
 fbo.setColorAttachmentTex2D(0, tmpTex);
 fbo.draw({
-	callback : function() {
+	callback : () => {
 		gl.viewport(0, 0, tmpTex.width, tmpTex.height);
 		quadObj.draw({
 			shader : checkCoordAccuracyShader
