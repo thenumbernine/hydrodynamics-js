@@ -9,7 +9,7 @@ lots of accuracy issues with the GPU version ... or bugs I'm not finding
 in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding
 */
 
-import {DOM, getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
+import {DOM, getIDs, removeFromParent, show, hide, hidden, merge} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
 import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
@@ -1273,7 +1273,8 @@ let currentColorScheme;
 let colorSchemes = {};
 
 class Kernel extends glutil.Program {
-	constructor(args) {
+	constructor(args_) {
+		const args = merge({}, args_);
 		const varyingVar = args.varying !== undefined ? args.varying : 'pos';
 		const varyingCodePrefix = 'varying vec2 '+varyingVar+';\n';
 		const vertexCode =
@@ -1318,7 +1319,7 @@ void main() {
 varyingCodePrefix.replace(/varying/g, 'in')
 + fragmentCodePrefix
 + args.code;
-		delete args.code;
+		args.code = undefined; delete args.code;
 		args.uniforms = uniforms;
 		super(args);
 	}
