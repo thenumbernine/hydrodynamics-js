@@ -12,7 +12,6 @@ in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-D
 import {DOM, getIDs, removeFromParent, show, hide, hidden, merge} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
-import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
 import {makeFloatTexture2D} from '/js/gl-util-FloatTexture2D.js';
 import {makeKernel} from '/js/gl-util-Kernel.js';
 import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
@@ -713,7 +712,6 @@ if (glutil.contextName == 'webgl2') {
 	}
 }
 glutil.import('Gradient', makeGradient);
-glutil.import('UnitQuad', makeUnitQuad);
 glutil.import('FloatTexture2D', makeFloatTexture2D);
 glutil.import('Kernel', makeKernel);
 glutil.import('UnitQuad', makeUnitQuad);
@@ -900,6 +898,7 @@ class HydroState {
 		fbo.bind();
 		this.allFloatTexs.forEach(tex => {
 			fbo.setColorAttachmentTex2D(0, tex);
+			// TODO this is calling unbind so the check is worthless right?
 			fbo.check();
 			quadObj.draw({
 				shader : solidShader
