@@ -15,6 +15,7 @@ import {makeGradient} from '/js/gl-util-Gradient.js';
 import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
 import {makeFloatTexture2D} from '/js/gl-util-FloatTexture2D.js';
 import {makeKernel} from '/js/gl-util-Kernel.js';
+import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
 import {Mouse3D} from '/js/mouse3d.js';
 
 const ids = getIDs();
@@ -715,6 +716,7 @@ glutil.import('Gradient', makeGradient);
 glutil.import('UnitQuad', makeUnitQuad);
 glutil.import('FloatTexture2D', makeFloatTexture2D);
 glutil.import('Kernel', makeKernel);
+glutil.import('UnitQuad', makeUnitQuad);
 
 class HydroState {
 	constructor(args) {
@@ -1293,25 +1295,15 @@ lineObj = new glutil.SceneObject({
 	static : true
 });
 
-quadObj = new glutil.SceneObject({
-	mode : gl.TRIANGLE_STRIP,
-	attrs : {
-		vertex : new glutil.ArrayBuffer({
-			dim : 2,
-			// ok I originally had 'vertex' spanning [-1,1]^2 and 'texCoord' spanning [0,1]^2
-			// because using both from [0,1]^2 had some GL ES precision issues ... 
-			// so remember that if things go wrong like this ...
-			data : [0,0, 1,0, 0,1, 1,1]
-		})
-	},
-	parent : null,
-	static : true
-});
+// ok I originally had 'vertex' spanning [-1,1]^2 and 'texCoord' spanning [0,1]^2
+// because using both from [0,1]^2 had some GL ES precision issues ... 
+// so remember that if things go wrong like this ...
+quadObj = glutil.UnitQuad.unitQuad;
 
 //init shaders before init hydro (so it can call the resetSod or whatever)
 
-	resetSodShader = new glutil.Kernel({
-		code : `
+resetSodShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1333,17 +1325,17 @@ void main() {
 	fragColor = vec4(rho, rho * vel.x, rho * vel.y, rho * energyTotal);
 }
 `,
-		uniforms : {
-			rangeMin : ['vec2', [xmin, ymin]],
-			rangeMax : ['vec2', [xmax, ymax]],
-			externalForce : 'vec2',
-			noiseAmplitude : 'float'
-		},
-		texs : ['randomTex']
-	});
+	uniforms : {
+		rangeMin : ['vec2', [xmin, ymin]],
+		rangeMax : ['vec2', [xmax, ymax]],
+		externalForce : 'vec2',
+		noiseAmplitude : 'float'
+	},
+	texs : ['randomTex']
+});
 
-	resetSodCylinderSolidShader = new glutil.Kernel({
-		code : `
+resetSodCylinderSolidShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1357,15 +1349,15 @@ void main() {
 	}
 }
 `,
-		uniforms : {
-			rangeMin : ['vec2', [xmin, ymin]],
-			rangeMax : ['vec2', [xmax, ymax]],
-		},
-		texs : ['randomTex']
-	});
+	uniforms : {
+		rangeMin : ['vec2', [xmin, ymin]],
+		rangeMax : ['vec2', [xmax, ymax]],
+	},
+	texs : ['randomTex']
+});
 
-	resetWaveShader = new glutil.Kernel({
-		code : `
+resetWaveShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1383,17 +1375,17 @@ void main() {
 	fragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }
 `,
-		uniforms : {
-			rangeMin : ['vec2', [xmin, ymin]],
-			rangeMax : ['vec2', [xmax, ymax]],
-			externalForce : 'vec2',
-			noiseAmplitude : 'float'
-		},
-		texs : ['randomTex']
-	});
+	uniforms : {
+		rangeMin : ['vec2', [xmin, ymin]],
+		rangeMax : ['vec2', [xmax, ymax]],
+		externalForce : 'vec2',
+		noiseAmplitude : 'float'
+	},
+	texs : ['randomTex']
+});
 
-	resetKelvinHemholtzShader = new glutil.Kernel({
-		code : `
+resetKelvinHemholtzShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	vec2 gridPos = rangeMin + pos * (rangeMax - rangeMin);
@@ -1418,19 +1410,19 @@ void main() {
 	fragColor = vec4(rho, rho * vel.xy, rho * energyTotal);
 }
 `,
-		uniforms : {
-			rangeMin : ['vec2', [xmin, ymin]],
-			rangeMax : ['vec2', [xmax, ymax]],
-			externalForce : 'vec2',
-			noiseAmplitude : 'float',
-			gamma : 'float'
-		},
-		texs : ['randomTex']
-		//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders
-	});
+	uniforms : {
+		rangeMin : ['vec2', [xmin, ymin]],
+		rangeMax : ['vec2', [xmax, ymax]],
+		externalForce : 'vec2',
+		noiseAmplitude : 'float',
+		gamma : 'float'
+	},
+	texs : ['randomTex']
+	//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders
+});
 
-	burgersComputeCFLShader = new glutil.Kernel({
-		code : `
+burgersComputeCFLShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	float solid = texture(solidTex, pos).x;
@@ -1455,18 +1447,18 @@ void main() {
 	}
 }
 `,
-		uniforms : {
-			rangeMin : ['vec2', [xmin, ymin]],
-			rangeMax : ['vec2', [xmax, ymax]],
-			dpos : 'vec2',
-			externalForce : 'vec2',
-			gamma : 'float'
-		},
-		texs : ['qTex', 'solidTex']
-	});
+	uniforms : {
+		rangeMin : ['vec2', [xmin, ymin]],
+		rangeMax : ['vec2', [xmax, ymax]],
+		dpos : 'vec2',
+		externalForce : 'vec2',
+		gamma : 'float'
+	},
+	texs : ['qTex', 'solidTex']
+});
 
-	burgersComputeInterfaceVelocityShader = new glutil.Kernel({
-		code : `
+burgersComputeInterfaceVelocityShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	vec2 dposx = vec2(dpos.x, 0.);
@@ -1491,15 +1483,15 @@ void main() {
 		0., 0.);
 }
 `,
-		uniforms : {
-			dpos : 'vec2'
-		},
-		texs : ['qTex', 'solidTex']
-	});
+	uniforms : {
+		dpos : 'vec2'
+	},
+	texs : ['qTex', 'solidTex']
+});
 
-	coordNames.forEach((coordName, i) => {
-		burgersComputeFluxSlopeShader[i] = new glutil.Kernel({
-			code : `
+coordNames.forEach((coordName, i) => {
+	burgersComputeFluxSlopeShader[i] = new glutil.Kernel({
+		code : `
 out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1548,19 +1540,19 @@ void main() {
 	fragColor = s * mix(qR2 - qR1, qL1 - qL2, uigz) / dq;
 }
 `.replace(/\$side/g, i),
-			uniforms : {
-				dpos : 'vec2'
-			},
-			texs : ['qTex', 'solidTex', 'uiTex']
-		});
+		uniforms : {
+			dpos : 'vec2'
+		},
+		texs : ['qTex', 'solidTex', 'uiTex']
 	});
+});
 
-	Object.entries(fluxMethods).forEach(entry => {
-		const [methodName,fluxMethodCode] = entry;
-		burgersComputeFluxShader[methodName] = [];
-		coordNames.forEach((coordName, i) => {
-			burgersComputeFluxShader[methodName][i] = new glutil.Kernel({
-				code : `
+Object.entries(fluxMethods).forEach(entry => {
+	const [methodName,fluxMethodCode] = entry;
+	burgersComputeFluxShader[methodName] = [];
+	coordNames.forEach((coordName, i) => {
+		burgersComputeFluxShader[methodName][i] = new glutil.Kernel({
+			code : `
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
 }
@@ -1604,17 +1596,17 @@ void main() {
 	fragColor += delta * .5 * .5 * abs(ui) * (1. - abs(ui * dt_dx));
 }
 `.replace(/\$side/g, i),
-				uniforms : {
-					dpos : 'vec2',
-					dt_dx : 'float'
-				},
-				texs : ['qTex', 'solidTex', 'uiTex', 'rTex']
-			});
+			uniforms : {
+				dpos : 'vec2',
+				dt_dx : 'float'
+			},
+			texs : ['qTex', 'solidTex', 'uiTex', 'rTex']
 		});
 	});
+});
 
-	burgersUpdateStateShader = new glutil.Kernel({
-		code : `
+burgersUpdateStateShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	float solid = texture(solidTex, pos).x;
@@ -1632,18 +1624,18 @@ void main() {
 	}
 }
 `,
-		uniforms : {
-			dpos : 'vec2',
-			dt_dx : 'vec2'
-		},
-		texs : ['qTex', 'solidTex', 'fluxXTex', 'fluxYTex']
-	});
+	uniforms : {
+		dpos : 'vec2',
+		dt_dx : 'vec2'
+	},
+	texs : ['qTex', 'solidTex', 'fluxXTex', 'fluxYTex']
+});
 
 
-	//used for Riemann
+//used for Riemann
 
-	roeComputeCFLShader = new glutil.Kernel({
-		code : `
+roeComputeCFLShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	vec4 eigenvalueXN = texture(eigenvalueXTex, pos);
@@ -1662,17 +1654,17 @@ void main() {
 		0., 0., 0.);
 }
 `,
-		uniforms : {
-			dpos : 'vec2',
-			rangeMin : ['vec2', [xmin, ymin]],
-			rangeMax : ['vec2', [xmax, ymax]]
-		},
-		texs : ['eigenvalueXTex', 'eigenvalueYTex']
-	});
+	uniforms : {
+		dpos : 'vec2',
+		rangeMin : ['vec2', [xmin, ymin]],
+		rangeMax : ['vec2', [xmax, ymax]]
+	},
+	texs : ['eigenvalueXTex', 'eigenvalueYTex']
+});
 
-	coordNames.forEach((coordName, i) => {
-		roeComputeRoeValueShader[i] = new glutil.Kernel({
-			code : `
+coordNames.forEach((coordName, i) => {
+	roeComputeRoeValueShader[i] = new glutil.Kernel({
+		code : `
 out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1721,20 +1713,20 @@ void main() {
 		speedOfSound);
 }
 `.replace(/\$side/g, i),
-			uniforms : {
-				dpos : 'vec2',
-				rangeMin : 'vec2',
-				rangeMax : 'vec2',
-				externalForce : 'vec2',
-				gamma : 'float'
-			},
-			texs : ['qTex']
-		});
+		uniforms : {
+			dpos : 'vec2',
+			rangeMin : 'vec2',
+			rangeMax : 'vec2',
+			externalForce : 'vec2',
+			gamma : 'float'
+		},
+		texs : ['qTex']
 	});
+});
 
-	coordNames.forEach((coordName, i) => {
-		roeComputeEigenvalueShader[i] = new glutil.Kernel({
-			code : `
+coordNames.forEach((coordName, i) => {
+	roeComputeEigenvalueShader[i] = new glutil.Kernel({
+		code : `
 out vec4 fragColor;
 void main() {
 	vec4 roeValues = texture(roeValueTex, pos);
@@ -1758,15 +1750,15 @@ void main() {
 		velocityN + speedOfSound);
 }
 `.replace(/\$side/g, i),
-			uniforms : {
-				gamma : 'float'
-			},
-			texs : ['qTex', 'roeValueTex']
-		});
+		uniforms : {
+			gamma : 'float'
+		},
+		texs : ['qTex', 'roeValueTex']
 	});
+});
 
-	let roeComputeEigenvectorColumnCode = [
-		`
+let roeComputeEigenvectorColumnCode = [
+`
 	//min eigenvector
 	fragColor = vec4(
 		1.,
@@ -1774,7 +1766,7 @@ void main() {
 		velocity.y - speedOfSound * normal.y,
 		hTotal - speedOfSound * velocityN);
 `,
-			`
+`
 	//mid eigenvector (normal)
 	fragColor = vec4(
 		1.,
@@ -1782,7 +1774,7 @@ void main() {
 		velocity.y,
 		.5 * velocitySq);
 `,
-			`
+`
 	//mid eigenvector (tangent)
 	fragColor = vec4(
 		0.,
@@ -1790,7 +1782,7 @@ void main() {
 		tangent.y,
 		velocityT);
 `,
-			`
+`
 	//max eigenvector
 	fragColor = vec4(
 		1.,
@@ -1798,13 +1790,13 @@ void main() {
 		velocity.y + speedOfSound * normal.y,
 		hTotal + speedOfSound * velocityN);
 `
-	];
+];
 
-	coordNames.forEach((coordName, i) => {
-		roeComputeEigenvectorColumnShader[i] = [];
-		roeComputeEigenvectorColumnCode.forEach((code, j) => {
-			roeComputeEigenvectorColumnShader[i][j] = new glutil.Kernel({
-				code : `
+coordNames.forEach((coordName, i) => {
+	roeComputeEigenvectorColumnShader[i] = [];
+	roeComputeEigenvectorColumnCode.forEach((code, j) => {
+		roeComputeEigenvectorColumnShader[i][j] = new glutil.Kernel({
+			code : `
 out vec4 fragColor;
 void main() {
 	vec4 roeValues = texture(roeValueTex, pos);
@@ -1822,21 +1814,21 @@ void main() {
 
 
 `.replace(/\$side/g, i) + code + '\n}',
-				uniforms : {
-					gamma : 'float'
-				},
-				texs : ['qTex', 'roeValueTex']
-			});
+			uniforms : {
+				gamma : 'float'
+			},
+			texs : ['qTex', 'roeValueTex']
 		});
 	});
+});
 
-	/*
-	rows are min, mid normal, mid tangent, max
-	but I'm going to write these out in columns for easier reconstruction of the original matrix
-	... at least I think it'll be easier
-	*/
-	let roeComputeEigenvectorInverseColumnCode = [
-		`
+/*
+rows are min, mid normal, mid tangent, max
+but I'm going to write these out in columns for easier reconstruction of the original matrix
+... at least I think it'll be easier
+*/
+let roeComputeEigenvectorInverseColumnCode = [
+`
 	float invDenom = .5 / (speedOfSound * speedOfSound);
 	fragColor = vec4(
 		(.5 * (gamma - 1.) * velocitySq + speedOfSound * velocityN) * invDenom,	//ei_0,0
@@ -1844,7 +1836,7 @@ void main() {
 		-velocityT, //ei_2,0
 		(.5 * (gamma - 1.) * velocitySq - speedOfSound * velocityN) * invDenom);	//ei_3,0
 `,
-			`
+`
 	float invDenom = .5 / (speedOfSound * speedOfSound);
 	fragColor = vec4(
 		-(normal.x * speedOfSound + (gamma - 1.) * velocity.x) * invDenom,	//ei_0,1
@@ -1852,7 +1844,7 @@ void main() {
 		tangent.x,	//ei_2,1
 		(normal.x * speedOfSound - (gamma - 1.) * velocity.x) * invDenom);	//ei_3,1
 `,
-			`
+`
 	float invDenom = .5 / (speedOfSound * speedOfSound);
 	fragColor = vec4(
 		-(normal.y * speedOfSound + (gamma - 1.) * velocity.y) * invDenom,	//ei_0,2
@@ -1860,7 +1852,7 @@ void main() {
 		tangent.y,	//ei_2,2
 		(normal.y * speedOfSound - (gamma - 1.) * velocity.y) * invDenom);	//ei_3,2
 `,
-			`
+`
 	float invDenom = .5 / (speedOfSound * speedOfSound);
 	fragColor = vec4(
 		(gamma - 1.) * invDenom,	//ei_0,3
@@ -1868,13 +1860,13 @@ void main() {
 		0.,	//ei_2,3
 		(gamma - 1.) * invDenom);	//ei_3,3
 `
-	];
+];
 
-	coordNames.forEach((coordName, i) => {
-		roeComputeEigenvectorInverseColumnShader[i] = [];
-		roeComputeEigenvectorInverseColumnCode.forEach((code, j) => {
-			roeComputeEigenvectorInverseColumnShader[i][j] = new glutil.Kernel({
-				code : `
+coordNames.forEach((coordName, i) => {
+	roeComputeEigenvectorInverseColumnShader[i] = [];
+	roeComputeEigenvectorInverseColumnCode.forEach((code, j) => {
+		roeComputeEigenvectorInverseColumnShader[i][j] = new glutil.Kernel({
+			code : `
 out vec4 fragColor;
 void main() {
 	vec4 roeValues = texture(roeValueTex, pos);
@@ -1891,17 +1883,17 @@ void main() {
 	float velocitySq = dot(velocity, velocity);
 
 `.replace(/\$side/g, i) + code + '\n}',
-				uniforms : {
-					gamma : 'float'
-				},
-				texs : ['qTex', 'roeValueTex']
-			});
+			uniforms : {
+				gamma : 'float'
+			},
+			texs : ['qTex', 'roeValueTex']
 		});
 	});
+});
 
-	coordNames.forEach((coordName, i) => {
-		roeComputeDeltaQTildeShader[i] = new glutil.Kernel({
-			code : `
+coordNames.forEach((coordName, i) => {
+	roeComputeDeltaQTildeShader[i] = new glutil.Kernel({
+		code : `
 out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1924,22 +1916,22 @@ void main() {
 	fragColor = eigenvectorInverse * dq;
 }
 `.replace(/\$side/g, i),
-			uniforms : {
-				dpos : 'vec2'
-			},
-			texs : [
-				'qTex',
-				'eigenvectorInverseCol0Tex',
-				'eigenvectorInverseCol1Tex',
-				'eigenvectorInverseCol2Tex',
-				'eigenvectorInverseCol3Tex'
-			]
-		});
+		uniforms : {
+			dpos : 'vec2'
+		},
+		texs : [
+			'qTex',
+			'eigenvectorInverseCol0Tex',
+			'eigenvectorInverseCol1Tex',
+			'eigenvectorInverseCol2Tex',
+			'eigenvectorInverseCol3Tex'
+		]
 	});
+});
 
-	coordNames.forEach((coordName, i) => {
-		roeComputeFluxSlopeShader[i] = new glutil.Kernel({
-			code : (`
+coordNames.forEach((coordName, i) => {
+	roeComputeFluxSlopeShader[i] = new glutil.Kernel({
+		code : (`
 out vec4 fragColor;
 void main() {
 	vec2 sidestep = vec2(0., 0.);
@@ -1962,19 +1954,19 @@ void main() {
 `.replace(/\$j/g, j);
 	}).join('')
 + '}').replace(/\$side/g, i),
-			uniforms : {
-				dpos : 'vec2'
-			},
-			texs : ['dqTildeTex', 'eigenvalueTex']
-		});
+		uniforms : {
+			dpos : 'vec2'
+		},
+		texs : ['dqTildeTex', 'eigenvalueTex']
 	});
+});
 
-	Object.entries(fluxMethods).forEach(entry => {
-		const [methodName,fluxMethodCode] = entry;
-		roeComputeFluxShader[methodName] = [];
-		coordNames.forEach((coordName, i) => {
-			roeComputeFluxShader[methodName][i] = new glutil.Kernel({
-				code : `
+Object.entries(fluxMethods).forEach(entry => {
+	const [methodName,fluxMethodCode] = entry;
+	roeComputeFluxShader[methodName] = [];
+	coordNames.forEach((coordName, i) => {
+		roeComputeFluxShader[methodName][i] = new glutil.Kernel({
+			code : `
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
 }
@@ -2025,37 +2017,37 @@ void main() {
 	fragColor = eigenvectorMat * fluxTilde;
 }
 `.replace(/\$side/g, i),
-				uniforms : {
-					dpos : 'vec2',
-					dt_dx : 'float'
-				},
-				texs : [
-					'qTex',
-					'dqTildeTex',
-					'rTildeTex',
-					'eigenvalueTex',
-					'eigenvectorInverseCol0Tex',
-					'eigenvectorInverseCol1Tex',
-					'eigenvectorInverseCol2Tex',
-					'eigenvectorInverseCol3Tex',
-					'eigenvectorCol0Tex',
-					'eigenvectorCol1Tex',
-					'eigenvectorCol2Tex',
-					'eigenvectorCol3Tex',
-				]
-			});
+			uniforms : {
+				dpos : 'vec2',
+				dt_dx : 'float'
+			},
+			texs : [
+				'qTex',
+				'dqTildeTex',
+				'rTildeTex',
+				'eigenvalueTex',
+				'eigenvectorInverseCol0Tex',
+				'eigenvectorInverseCol1Tex',
+				'eigenvectorInverseCol2Tex',
+				'eigenvectorInverseCol3Tex',
+				'eigenvectorCol0Tex',
+				'eigenvectorCol1Tex',
+				'eigenvectorCol2Tex',
+				'eigenvectorCol3Tex',
+			]
 		});
 	});
+});
 
-	//matches burgersUpdateStateShader
-	roeUpdateStateShader = burgersUpdateStateShader;
-
-
-	//pressure shaders
+//matches burgersUpdateStateShader
+roeUpdateStateShader = burgersUpdateStateShader;
 
 
-	burgersComputePressureShader = new glutil.Kernel({
-		code : `
+//pressure shaders
+
+
+burgersComputePressureShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	float solid = texture(solidTex, pos).x;
@@ -2075,18 +2067,18 @@ void main() {
 	}
 }
 `,
-		uniforms : {
-			dpos : 'vec2',
-			rangeMin : 'vec2',
-			rangeMax : 'vec2',
-			externalForce : 'vec2',
-			gamma : 'float'
-		},
-		texs : ['qTex', 'solidTex']
-	});
+	uniforms : {
+		dpos : 'vec2',
+		rangeMin : 'vec2',
+		rangeMax : 'vec2',
+		externalForce : 'vec2',
+		gamma : 'float'
+	},
+	texs : ['qTex', 'solidTex']
+});
 
-	burgersApplyPressureToMomentumShader = new glutil.Kernel({
-		code : `
+burgersApplyPressureToMomentumShader = new glutil.Kernel({
+	code : `
 out vec4 fragColor;
 void main() {
 	float solid = texture(solidTex, pos).x;
