@@ -1278,12 +1278,12 @@ class Kernel extends glutil.Program {
 		const varyingVar = args.varying !== undefined ? args.varying : 'pos';
 		const varyingCodePrefix = 'varying vec2 '+varyingVar+';\n';
 		const vertexCode =
-varyingCodePrefix.replace(/varying/g, 'out') + `
+varyingCodePrefix.replace(/varying/g, 'out')
++ `
 in vec2 vertex;
-in vec2 texCoord;
 void main() {
-	`+varyingVar+` = texCoord;
-	gl_Position = vec4(vertex, 0., 1.);
+	`+varyingVar+` = vertex;
+	gl_Position = vec4(vertex * 2. - 1., 0., 1.);
 }
 `;
 		let fragmentCodePrefix = '';
@@ -1350,10 +1350,9 @@ quadObj = new glutil.SceneObject({
 	attrs : {
 		vertex : new glutil.ArrayBuffer({
 			dim : 2,
-			data : [-1,-1, 1,-1, -1,1, 1,1]
-		}),
-		texCoord : new glutil.ArrayBuffer({
-			dim : 2,
+			// ok I originally had 'vertex' spanning [-1,1]^2 and 'texCoord' spanning [0,1]^2
+			// because using both from [0,1]^2 had some GL ES precision issues ... 
+			// so remember that if things go wrong like this ...
 			data : [0,0, 1,0, 0,1, 1,1]
 		})
 	},
