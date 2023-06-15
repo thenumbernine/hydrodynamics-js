@@ -8,6 +8,7 @@ http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does 
 lots of accuracy issues with the GPU version ... or bugs I'm not finding
 in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding
 */
+
 import {DOM, getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
@@ -17,8 +18,7 @@ import {Mouse3D} from '/js/mouse3d.js';
 
 const ids = getIDs();
 window.ids = ids;
-
-const urlparams = new URLSearchParams(location.search);
+const urlparams = new URLSearchParams(window.location.search);
 
 let gl;
 let glutil;
@@ -1218,14 +1218,7 @@ function update() {
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 	gl.bindTexture(gl.TEXTURE_2D, null);
 
-	requestAnimationFrame(update);
-}
-
-function onresize() {
-	canvas.width = window.innerWidth;
-	canvas.height = window.innerHeight;
-	ids.content.style.height = (window.innerHeight - 50)+'px';
-	glutil.resize();
+	window.requestAnimationFrame(update);
 }
 
 function buildSelect(id, key, map) {
@@ -1281,9 +1274,19 @@ let colorSchemes = {};
 
 class Kernel extends glutil.Program {
 	constructor(args) {
-		let varyingCodePrefix = 'varying vec2 pos;\n';
+		const varyingVar = args.varying !== undefined ? args.varying : 'pos';
+		const varyingCodePrefix = 'varying vec2 '+varyingVar+';\n';
+		const vertexCode =
+varyingCodePrefix.replace(/varying/g, 'out') + `
+in vec2 vertex;
+in vec2 texCoord;
+void main() {
+	`+varyingVar+` = texCoord;
+	gl_Position = vec4(vertex, 0., 1.);
+}
+`;
 		let fragmentCodePrefix = '';
-		let uniforms = {};
+		const uniforms = {};
 		if (args.uniforms !== undefined) {
 			Object.entries(args.uniforms).forEach(entry => {
 				let [uniformName, uniformType] = entry;
@@ -1310,22 +1313,7 @@ class Kernel extends glutil.Program {
 			});
 		}
 
-		if (!Kernel.prototype.kernelVertexShader) {
-			Kernel.prototype.kernelVertexShader = new glutil.VertexShader({
-				code : `#version 300 es
-precision `+glutil.vertexBestPrec+` float;
-` + varyingCodePrefix.replace(/varying/g, 'out') + `
-in vec2 vertex;
-in vec2 texCoord;
-void main() {
-	pos = texCoord;
-	gl_Position = vec4(vertex, 0., 1.);
-}
-`
-			});
-		}
-
-		args.vertexShader = Kernel.prototype.kernelVertexShader;
+		args.vertexCode = vertexCode;
 		args.fragmentCode =
 varyingCodePrefix.replace(/varying/g, 'in')
 + fragmentCodePrefix
@@ -1335,6 +1323,7 @@ varyingCodePrefix.replace(/varying/g, 'in')
 		super(args);
 	}
 }
+glutil.Kernel = Kernel;
 
 lineObj = new glutil.SceneObject({
 	scene : glutil.scene,
@@ -1373,7 +1362,7 @@ quadObj = new glutil.SceneObject({
 
 //init shaders before init hydro (so it can call the resetSod or whatever)
 
-	resetSodShader = new Kernel({
+	resetSodShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1405,7 +1394,7 @@ void main() {
 		texs : ['randomTex']
 	});
 
-	resetSodCylinderSolidShader = new Kernel({
+	resetSodCylinderSolidShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1427,7 +1416,7 @@ void main() {
 		texs : ['randomTex']
 	});
 
-	resetWaveShader = new Kernel({
+	resetWaveShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1455,7 +1444,7 @@ void main() {
 		texs : ['randomTex']
 	});
 
-	resetKelvinHemholtzShader = new Kernel({
+	resetKelvinHemholtzShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1492,7 +1481,7 @@ void main() {
 		//TODO make it periodic on the left/right borders and reflecting on the top/bottom borders
 	});
 
-	burgersComputeCFLShader = new Kernel({
+	burgersComputeCFLShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1528,7 +1517,7 @@ void main() {
 		texs : ['qTex', 'solidTex']
 	});
 
-	burgersComputeInterfaceVelocityShader = new Kernel({
+	burgersComputeInterfaceVelocityShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1561,7 +1550,7 @@ void main() {
 	});
 
 	coordNames.forEach((coordName, i) => {
-		burgersComputeFluxSlopeShader[i] = new Kernel({
+		burgersComputeFluxSlopeShader[i] = new glutil.Kernel({
 			code : `
 out vec4 fragColor;
 void main() {
@@ -1622,7 +1611,7 @@ void main() {
 		const [methodName,fluxMethodCode] = entry;
 		burgersComputeFluxShader[methodName] = [];
 		coordNames.forEach((coordName, i) => {
-			burgersComputeFluxShader[methodName][i] = new Kernel({
+			burgersComputeFluxShader[methodName][i] = new glutil.Kernel({
 				code : `
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
@@ -1676,7 +1665,7 @@ void main() {
 		});
 	});
 
-	burgersUpdateStateShader = new Kernel({
+	burgersUpdateStateShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1705,7 +1694,7 @@ void main() {
 
 	//used for Riemann
 
-	roeComputeCFLShader = new Kernel({
+	roeComputeCFLShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -1734,7 +1723,7 @@ void main() {
 	});
 
 	coordNames.forEach((coordName, i) => {
-		roeComputeRoeValueShader[i] = new Kernel({
+		roeComputeRoeValueShader[i] = new glutil.Kernel({
 			code : `
 out vec4 fragColor;
 void main() {
@@ -1796,7 +1785,7 @@ void main() {
 	});
 
 	coordNames.forEach((coordName, i) => {
-		roeComputeEigenvalueShader[i] = new Kernel({
+		roeComputeEigenvalueShader[i] = new glutil.Kernel({
 			code : `
 out vec4 fragColor;
 void main() {
@@ -1866,7 +1855,7 @@ void main() {
 	coordNames.forEach((coordName, i) => {
 		roeComputeEigenvectorColumnShader[i] = [];
 		roeComputeEigenvectorColumnCode.forEach((code, j) => {
-			roeComputeEigenvectorColumnShader[i][j] = new Kernel({
+			roeComputeEigenvectorColumnShader[i][j] = new glutil.Kernel({
 				code : `
 out vec4 fragColor;
 void main() {
@@ -1936,7 +1925,7 @@ void main() {
 	coordNames.forEach((coordName, i) => {
 		roeComputeEigenvectorInverseColumnShader[i] = [];
 		roeComputeEigenvectorInverseColumnCode.forEach((code, j) => {
-			roeComputeEigenvectorInverseColumnShader[i][j] = new Kernel({
+			roeComputeEigenvectorInverseColumnShader[i][j] = new glutil.Kernel({
 				code : `
 out vec4 fragColor;
 void main() {
@@ -1963,7 +1952,7 @@ void main() {
 	});
 
 	coordNames.forEach((coordName, i) => {
-		roeComputeDeltaQTildeShader[i] = new Kernel({
+		roeComputeDeltaQTildeShader[i] = new glutil.Kernel({
 			code : `
 out vec4 fragColor;
 void main() {
@@ -2001,7 +1990,7 @@ void main() {
 	});
 
 	coordNames.forEach((coordName, i) => {
-		roeComputeFluxSlopeShader[i] = new Kernel({
+		roeComputeFluxSlopeShader[i] = new glutil.Kernel({
 			code : (`
 out vec4 fragColor;
 void main() {
@@ -2036,7 +2025,7 @@ void main() {
 		const [methodName,fluxMethodCode] = entry;
 		roeComputeFluxShader[methodName] = [];
 		coordNames.forEach((coordName, i) => {
-			roeComputeFluxShader[methodName][i] = new Kernel({
+			roeComputeFluxShader[methodName][i] = new glutil.Kernel({
 				code : `
 vec4 fluxMethod(vec4 r) {
 	$fluxMethodCode
@@ -2117,7 +2106,7 @@ void main() {
 	//pressure shaders
 
 
-	burgersComputePressureShader = new Kernel({
+	burgersComputePressureShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -2148,7 +2137,7 @@ void main() {
 		texs : ['qTex', 'solidTex']
 	});
 
-	burgersApplyPressureToMomentumShader = new Kernel({
+	burgersApplyPressureToMomentumShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -2197,7 +2186,7 @@ void main() {
 		texs : ['qTex', 'solidTex', 'pressureTex']
 	});
 
-	burgersApplyPressureToWorkShader = new Kernel({
+	burgersApplyPressureToWorkShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -2263,7 +2252,7 @@ void main() {
 		texs : ['qTex', 'solidTex', 'pressureTex']
 	});
 
-	solidShader = new Kernel({
+	solidShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -2275,7 +2264,7 @@ void main() {
 		}
 	});
 
-	copyShader = new Kernel({
+	copyShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -2288,7 +2277,7 @@ void main() {
 		texs : ['srcTex']
 	});
 
-	minReduceShader = new Kernel({
+	minReduceShader = new glutil.Kernel({
 		code : `
 out vec4 fragColor;
 void main() {
@@ -2567,7 +2556,7 @@ ids.colorScheme.addEventListener('change', () => {
 
 //http://lab.concord.org/experiments/webgl-gpgpu/webgl.html
 for (let channel = 0; channel < 4; ++channel) {
-	encodeShader[channel] = new Kernel({
+	encodeShader[channel] = new glutil.Kernel({
 		code : `
 float shift_right(float v, float amt) {
 	v = floor(v) + 0.5;
@@ -2640,6 +2629,13 @@ mouse = new Mouse3D({
 	}
 });
 
+function onresize() {
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
+	ids.content.style.height = (window.innerHeight - 50)+'px';
+	glutil.resize();
+}
+
 //start it off
 window.addEventListener('resize', onresize);
 onresize();
@@ -2647,7 +2643,7 @@ update();
 
 
 //check ...
-let checkCoordAccuracyShader = new Kernel({
+let checkCoordAccuracyShader = new glutil.Kernel({
 	code : `
 out vec4 fragColor;
 void main() {
