@@ -14,6 +14,7 @@ import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
 import {makeUnitQuad} from '/js/gl-util-UnitQuad.js';
 import {makeFloatTexture2D} from '/js/gl-util-FloatTexture2D.js';
+import {makeKernel} from '/js/gl-util-Kernel.js';
 import {Mouse3D} from '/js/mouse3d.js';
 
 const ids = getIDs();
@@ -713,6 +714,7 @@ if (glutil.contextName == 'webgl2') {
 glutil.import('Gradient', makeGradient);
 glutil.import('UnitQuad', makeUnitQuad);
 glutil.import('FloatTexture2D', makeFloatTexture2D);
+glutil.import('Kernel', makeKernel);
 
 class HydroState {
 	constructor(args) {
@@ -1271,60 +1273,6 @@ let sceneObjects = [];
 
 let currentColorScheme;
 let colorSchemes = {};
-
-class Kernel extends glutil.Program {
-	constructor(args_) {
-		const args = merge({}, args_);
-		const varyingVar = args.varying !== undefined ? args.varying : 'pos';
-		const varyingCodePrefix = 'varying vec2 '+varyingVar+';\n';
-		const vertexCode =
-varyingCodePrefix.replace(/varying/g, 'out')
-+ `
-in vec2 vertex;
-void main() {
-	`+varyingVar+` = vertex;
-	gl_Position = vec4(vertex * 2. - 1., 0., 1.);
-}
-`;
-		let fragmentCodePrefix = '';
-		const uniforms = {};
-		if (args.uniforms !== undefined) {
-			Object.entries(args.uniforms).forEach(entry => {
-				let [uniformName, uniformType] = entry;
-				if (Array.isArray(uniformType)) {
-					//save initial value
-					uniforms[uniformName] = uniformType[1];
-					uniformType = uniformType[0];
-				}
-				fragmentCodePrefix += 'uniform '+uniformType+' '+uniformName+';\n';
-			});
-		}
-		if (args.texs !== undefined) {
-			args.texs.forEach((v, i) => {
-				let name, vartype;
-				if (typeof(v) == 'string') {
-					name = v;
-					vartype = 'sampler2D';
-				} else {
-					name = v[0];
-					vartype = v[1];
-				}
-				fragmentCodePrefix += 'uniform '+vartype+' '+name+';\n';
-				uniforms[name] = i;
-			});
-		}
-
-		args.vertexCode = vertexCode;
-		args.fragmentCode =
-varyingCodePrefix.replace(/varying/g, 'in')
-+ fragmentCodePrefix
-+ args.code;
-		args.code = undefined; delete args.code;
-		args.uniforms = uniforms;
-		super(args);
-	}
-}
-glutil.Kernel = Kernel;
 
 lineObj = new glutil.SceneObject({
 	scene : glutil.scene,
