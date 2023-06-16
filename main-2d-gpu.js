@@ -702,15 +702,6 @@ try {
 	show(ids.webglfail);
 	throw e;
 }
-if (glutil.contextName == 'webgl2') {
-	if (!gl.getExtension('EXT_color_buffer_float')) {
-		throw 'This requires EXT_color_buffer_float';
-	}
-} else {
-	if (!gl.getExtension('OES_texture_float')) {
-		throw 'This requires OES_texture_float';
-	}
-}
 glutil.import('Gradient', makeGradient);
 glutil.import('FloatTexture2D', makeFloatTexture2D);
 glutil.import('Kernel', makeKernel);
