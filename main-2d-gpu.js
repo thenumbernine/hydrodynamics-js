@@ -585,8 +585,8 @@ let eulerEquationSimulation = {
 		Sod : function() {
 			let thiz = this;
 			gl.viewport(0, 0, this.nx, this.nx);
-			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
+				dest : this.qTex,
 				callback : () => {
 					quadObj.draw({
 						shader : resetSodShader,
@@ -597,8 +597,8 @@ let eulerEquationSimulation = {
 					});
 				}
 			});
-			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
+				dest : this.solidTex,
 				callback : () => {
 					quadObj.draw({
 						shader : solidShader
@@ -609,8 +609,8 @@ let eulerEquationSimulation = {
 		SodCylinder : function() {
 			let thiz = this;
 			gl.viewport(0, 0, this.nx, this.nx);
-			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
+				dest : this.qTex,
 				callback : () => {
 					quadObj.draw({
 						shader : resetSodShader,
@@ -621,8 +621,8 @@ let eulerEquationSimulation = {
 					});
 				}
 			});
-			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
+				dest : this.solidTex,
 				callback : () => {
 					quadObj.draw({
 						shader : resetSodCylinderSolidShader
@@ -633,8 +633,8 @@ let eulerEquationSimulation = {
 		Wave : function() {
 			let thiz = this;
 			gl.viewport(0, 0, this.nx, this.nx);
-			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
+				dest : this.qTex,
 				callback : () => {
 					quadObj.draw({
 						shader : resetWaveShader,
@@ -645,8 +645,8 @@ let eulerEquationSimulation = {
 					});
 				}
 			});
-			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
+				dest : this.solidTex,
 				callback : () => {
 					quadObj.draw({
 						shader : solidShader
@@ -658,8 +658,8 @@ let eulerEquationSimulation = {
 		KelvinHemholtz : function() {
 			let thiz = this;
 			gl.viewport(0, 0, this.nx, this.nx);
-			fbo.setColorAttachmentTex2D(0, this.qTex);
 			fbo.draw({
+				dest : this.qTex,
 				callback : () => {
 					quadObj.draw({
 						shader : resetKelvinHemholtzShader,
@@ -670,8 +670,8 @@ let eulerEquationSimulation = {
 					});
 				}
 			});
-			fbo.setColorAttachmentTex2D(0, this.solidTex);
 			fbo.draw({
+				dest : this.solidTex,
 				callback : () => {
 					quadObj.draw({
 						shader : solidShader
@@ -895,16 +895,16 @@ class HydroState {
 		//initialize all textures to zero by default
 		//...except the noise tex, which isn't added to the 'allFloatTexs' list
 		gl.viewport(0, 0, this.nx, this.nx);
-		fbo.bind();
 		this.allFloatTexs.forEach(tex => {
-			fbo.setColorAttachmentTex2D(0, tex);
-			// TODO this is calling unbind so the check is worthless right?
-			fbo.check();
-			quadObj.draw({
-				shader : solidShader
+			fbo.draw({
+				dest : tex,
+				callback : () => {
+					quadObj.draw({
+						shader : solidShader
+					});
+				},
 			});
 		});
-		fbo.unbind();
 
 		//initial conditions
 		this.resetSod();
@@ -914,8 +914,8 @@ class HydroState {
 	resetSod() {
 		let thiz = this;
 		gl.viewport(0, 0, this.nx, this.nx);
-		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
+			dest : this.qTex,
 			callback : () => {
 				quadObj.draw({
 					shader : resetSodShader,
@@ -926,8 +926,8 @@ class HydroState {
 				});
 			}
 		});
-		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
+			dest : this.solidTex,
 			callback : () => {
 				quadObj.draw({
 					shader : solidShader
@@ -938,8 +938,8 @@ class HydroState {
 	resetSodCylinder() {
 		let thiz = this;
 		gl.viewport(0, 0, this.nx, this.nx);
-		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
+			dest : this.qTex,
 			callback : () => {
 				quadObj.draw({
 					shader : resetSodShader,
@@ -950,8 +950,8 @@ class HydroState {
 				});
 			}
 		});
-		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
+			dest : this.solidTex,
 			callback : () => {
 				quadObj.draw({
 					shader : resetSodCylinderSolidShader
@@ -962,8 +962,8 @@ class HydroState {
 	resetWave() {
 		let thiz = this;
 		gl.viewport(0, 0, this.nx, this.nx);
-		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
+			dest : this.qTex,
 			callback : () => {
 				quadObj.draw({
 					shader : resetWaveShader,
@@ -974,8 +974,8 @@ class HydroState {
 				});
 			}
 		});
-		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
+			dest : this.solidTex,
 			callback : () => {
 				quadObj.draw({
 					shader : solidShader
@@ -987,8 +987,8 @@ class HydroState {
 	resetKelvinHemholtz() {
 		let thiz = this;
 		gl.viewport(0, 0, this.nx, this.nx);
-		fbo.setColorAttachmentTex2D(0, this.qTex);
 		fbo.draw({
+			dest : this.qTex,
 			callback : () => {
 				quadObj.draw({
 					shader : resetKelvinHemholtzShader,
@@ -999,8 +999,8 @@ class HydroState {
 				});
 			}
 		});
-		fbo.setColorAttachmentTex2D(0, this.solidTex);
 		fbo.draw({
+			dest : this.solidTex,
 			callback : () => {
 				quadObj.draw({
 					shader : solidShader
@@ -1252,8 +1252,8 @@ function getFloatTexData(args) {//fbo, srcTex, destTex, channel) {
 	let channel = args.channel === undefined ? 0 : args.channel;
 
 	let destUint8Array = new Uint8Array(destTex.width * destTex.height * 4);
-	fbo_.setColorAttachmentTex2D(0, destTex);
 	fbo_.draw({
+		dest : destTex,
 		callback : () => {
 			gl.viewport(0, 0, destTex.width, destTex.height);
 			quadObj.draw({
@@ -2599,8 +2599,8 @@ void main() {
 
 let nx = hydro.state.nx;
 let tmpTex = new glutil.FloatTexture2D({width:nx, height:nx});
-fbo.setColorAttachmentTex2D(0, tmpTex);
 fbo.draw({
+	dest : tmpTex,
 	callback : () => {
 		gl.viewport(0, 0, tmpTex.width, tmpTex.height);
 		quadObj.draw({
