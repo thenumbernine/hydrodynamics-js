@@ -1,2 +1,2 @@
-require 'ext.file''..':cd()
+require 'ext.path''..':cd()
 return {run = require 'main'}
