@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Hydrodynamics in Javascript</title>
+	</head>
+	<body>
+
+<div class='entry'>
+	I'm teaching myself CFD in my free time.  
+	I'm focusing on hyperbolic solvers because they seem particularly of interest in the field of numerical relativity, 
+	which I am aiming to apply these lessons towards.<br>
+	<br>
+
+	Here's what I've got so far:<br>
+	<br>
+	<b><a href='/hydrodynamics/index-1d.html'>1D CFD Simulation in WebGL</a></b> - 
+	<a href='https://github.com/thenumbernine/hydrodynamics-js'>GitHub</a><br>
+	<ul style='padding-left:20px'>
+		<li type='square'>Supports Euler, Runge-Kutta-2, Runge-Kutta-4, and Iterative Crank-Nicolson-3 explicit integration.</li>
+		<li type='square'>Supports a number of flux limiters.</li>
+		<li type='square'>Supports mirror, periodic, and free-flow boundary conditions.</li>
+		<li type='square'>
+			Compressible Euler fluid equation simulation with the following:<br>
+			<ul>Initial Conditions:
+				<li type='circle'>Sod shock tube test initial conditions</li>
+				<li type='circle'>Sedov blast test initial conditions (works under the Burger's solver, breaks under the Roe solver unless the limiter is set to "donor cell")</li>
+				<li type='circle'>simple wave advection</li>
+				<li type='circle'>simple bell curve perturbation</li>
+			</ul>
+			<ul>Solvers:
+				<li type='circle'>Burgers / Explicit Integration</li>
+				<li type='circle'>Burgers / Implicit Integration of Backward Euler via Gauss-Seidel</li>
+				<li type='circle'>Roe / Explicit Integration</li>
+			</ul>
+		</li>
+		<li type='square'>
+			ADM formalism (from Alcubierre's <i>Numerical Relativity</i>) is half working,
+			works best with "donor cell" limiter, but barely pulls along at that.<br>
+		</li>
+		<li type='square'>
+			SRHD with Roe Solver and Sod shock tube initial conditions is in the works.<br>
+		</li>
+	</ul>
+	<br>
+	<b><a href='/hydrodynamics/index-2d.html'>2D CFD Simulation in WebGL</a></b> - 
+	<a href='https://github.com/thenumbernine/hydrodynamics-js'>GitHub</a><br>
+	<ul style='padding-left:20px'>
+		<li type='square'>Supports Euler, Runge-Kutta-2, Runga-Kutta-4, and Iterative Crank-Nicolson-3 explicit integration.</li>
+		<li type='square'>Supports a number of flux limiters.</li>
+		<li type='square'>Supports mirror, periodic, and free-flow boundary conditions per-side of the grid.</li>
+		<li type='square'>Supports arbitrary boundaries on the rectangular grid (see "Sod w/Cylinder" initial conditions).</li>
+		<li type='square'>Supports gravity / external forces.</li>
+		<li type='square'>Compressible Euler fluid equation simulation with the following:
+			<ul>Initial Conditions:
+				<li type='circle'>Sod shock tube test extended to two dimensions</li>
+				<li type='circle'>Sod shock tube test with a cylinder obstacle</li>
+				<li type='circle'>simple bell curve perturbation</li>
+				<li type='circle'>Kelvin-Hemholtz instability demo (left and right boundaries must be set to "periodic" to best observe the phenomenon)</li>
+				<li type='circle'>Rayleigh-Taylor instability demo (left and right boundaries must be set to "periodic" and external force Y direction must be set to "1" to best observe the phenomenon)</li>
+			</ul>
+			<ul>Solvers:
+				<li type='circle'>Burgers / Explicit Integration</li>
+				<li type='circle'>Burgers / Implicit Integration of Backward Euler via Gauss-Seidel</li>
+				<li type='circle'>Roe / Explicit Integration</li>
+			</ul>
+		</li>
+	</ul>
+	<b><a href='/hydrodynamics/index-2d-gpu.html'>2D GPGPU-driven CFD Simulation in WebGL</a></b> - 
+	<a href='https://github.com/thenumbernine/hydrodynamics-js'>GitHub</a><br>
+	<ul style='padding-left:20px'>
+		<li type='square'>Supports a number of flux limiters.</li>
+		<li type='square'>Compressible Euler fluid equation simulation with the following:
+			<ul>Initial Conditions:
+				<li type='circle'>Sod shock tube test extended to two dimensions</li>
+				<li type='circle'>Sod shock tube test with a cylinder obstacle (currently only works with the Burgers solver)</li>
+				<li type='circle'>simple bell curve perturbation</li>
+				<li type='circle'>Kelvin-Hemholtz instability demo (currently only works with Burgers solver)</li>
+			</ul>
+			<ul>Solvers:
+				<li type='circle'>Burgers / Explicit Integration</li>
+				<li type='circle'>Roe / Explicit Integration</li>
+			</ul>
+		</li>
+	</ul>
+</div>
+<div class='entry'>
+	Sources:<br>
+	<a href='http://www.mpia-hd.mpg.de/homes/dullemon/lectures/hydrodynamicsII/'>Hydrodynamics II: Numerical methods and applications</a><br>
+	<a href='http://www.cfdbooks.com/cfdcodes.html'>I do like CFD's Free CFD Codes</a><br>
+	"Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro<br>
+	<a href='http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf'>http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf</a><br>
+</div>
+
+	</body>
+</html>
