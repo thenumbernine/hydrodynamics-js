@@ -10,7 +10,8 @@ http://www.cfdbooks.com/cfdcodes.html
 "Riemann Solvers and Numerical Methods for Fluid Dynamics," Toro
 http://people.nas.nasa.gov/~pulliam/Classes/New_notes/euler_notes.pdf also does not
 */
-import {DOM, getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
+import {Br, Button, Option, Canvas} from '/js/dom.js';
+import {getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
 import {Mouse3D} from '/js/mouse3d.js';
@@ -2039,7 +2040,7 @@ function onresize() {
 function buildSelect(id, key, map) {
 	let select = ids[id];
 	for (let k in map) {
-		let option = DOM('option', {text : k, appendTo : select});
+		let option = Option({innerText : k, appendTo : select});
 		if (hydro.state[key] == k) {
 			option.setAttribute('selected', 'true');
 		}
@@ -2069,14 +2070,16 @@ ids.menu.addEventListener('click', e => {
 	let simulation = eulerEquationSimulation;
 	for (let initialConditionName in simulation.initialConditions) {
 		let method = simulation.initialConditions[initialConditionName];
-		DOM('button', {
-			text : 'Reset '+initialConditionName,
-			click : function() {
-				method.call(hydro.state);
+		Button({
+			innerText : 'Reset '+initialConditionName,
+			events : {
+				click : () => {
+					method.call(hydro.state);
+				},
 			},
 			appendTo : parent,
 		});
-		DOM('br', {appendTo : parent});
+		Br({appendTo : parent});
 	}
 }
 
@@ -2087,7 +2090,7 @@ ids.useNoise.addEventListener('change', e => {
 {
 	const select = ids.gridsize;
 	[20, 50, 100, 200, 500, 1000].forEach(gridsize => {
-		const option = DOM('option', {text : gridsize, appendTo : select});
+		const option = Option({innerText : gridsize, appendTo : select});
 		if (hydro.state.nx == gridsize) option.setAttribute('selected', 'true');
 	});
 	select.addEventListener('change', e => {
@@ -2183,8 +2186,8 @@ ids.timeStepValue.addEventListener('change', e => {
 	fixedDT = v;
 });
 
-canvas = DOM('canvas', {
-	css : {
+canvas = Canvas({
+	style : {
 		left : 0,
 		top : 0,
 		position : 'absolute',
@@ -2241,9 +2244,9 @@ colorSchemes['B&W'] = new glutil.Texture2D({
 colorSchemes.Heat.bind();
 
 for (let k in colorSchemes) {
-	DOM('option', {
+	Option({
 		value : k,
-		text : k,
+		innerText : k,
 		appendTo : ids.colorScheme,
 	});
 }

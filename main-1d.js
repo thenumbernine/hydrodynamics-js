@@ -5,9 +5,10 @@
 2D unstructured
 */
 
+import {Br, Button, Canvas, Option} from '/js/dom.js';
 import {assert} from '/js/util.js';
 import {svd} from './svd.js';
-import {DOM, getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
+import {getIDs, removeFromParent, show, hide, hidden} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {Mouse3D} from '/js/mouse3d.js';
 import {makeExplicitMethods} from './explicit_methods.js';
@@ -1873,7 +1874,7 @@ function onresize() {
 function buildSelect(id, key, map) {
 	let select = ids[id];
 	for (let k in map) {
-		let option = DOM('option', {text : k, appendTo : select});
+		let option = Option({innerText : k, appendTo : select});
 		if (hydro.state[key] == k) {
 			option.setAttribute('selected', 'true');
 		}
@@ -1883,8 +1884,8 @@ function buildSelect(id, key, map) {
 	});
 }
 
-canvas = DOM('canvas', {
-	css : {
+canvas = Canvas({
+	style : {
 		left : 0,
 		top : 0,
 		position : 'absolute',
@@ -1981,20 +1982,22 @@ for (let simulationName in simulations) {
 	let simulation = simulations[simulationName];
 	for (let initialConditionName in simulation.initialConditions) {
 		let method = simulation.initialConditions[initialConditionName];
-		DOM('button', {
-			text : 'Reset '+initialConditionName,
-			click : e => {
-				method.call(hydro.state);
+		Button({
+			innerText : 'Reset '+initialConditionName,
+			events : {
+				click : e => {
+					method.call(hydro.state);
+				},
 			},
 			appendTo : parent,
 		});
-		DOM('br', {appendTo : parent});
+		Br({appendTo : parent});
 	}
 }
 
 let select = ids.gridsize;
 [20, 50, 100, 200, 500, 1000].forEach(gridsize => {
-	let option = DOM('option', {text : gridsize, appendTo : select});
+	let option = Option({innerText : gridsize, appendTo : select});
 	if (hydro.state.nx == gridsize) {
 		option.setAttribute('selected', 'true');
 	}
@@ -2022,7 +2025,7 @@ buildSelect('explicitMethod', 'explicitMethod', explicitMethods);
 	const map = simulations;
 	const select = ids[id];
 	for (let k in map) {
-		const option = DOM('option', {text : k, appendTo : select});
+		const option = Option({innerText : k, appendTo : select});
 		if (hydro.state[key] == k) {
 			option.setAttribute('selected', 'true');
 		}

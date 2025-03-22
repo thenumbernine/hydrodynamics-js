@@ -9,7 +9,8 @@ lots of accuracy issues with the GPU version ... or bugs I'm not finding
 in case of accuracy issues, check out view-source:http://hvidtfeldts.net/WebGL-DP/webgl.html for vec2 single -> double encoding
 */
 
-import {DOM, getIDs, removeFromParent, show, hide, hidden, merge} from '/js/util.js';
+import {Canvas, Option} from '/js/dom.js'
+import {getIDs, removeFromParent, show, hide, hidden, merge} from '/js/util.js';
 import {GLUtil} from '/js/gl-util.js';
 import {makeGradient} from '/js/gl-util-Gradient.js';
 import {makeFloatTexture2D} from '/js/gl-util-FloatTexture2D.js';
@@ -682,8 +683,8 @@ let eulerEquationSimulation = {
 	}
 };
 
-canvas = DOM('canvas', {
-	css : {
+canvas = Canvas({
+	style : {
 		left : 0,
 		top : 0,
 		position : 'absolute',
@@ -1219,7 +1220,7 @@ function buildSelect(id, key, map) {
 	const select = ids[id];
 	if (select === undefined) return;
 	for (let k in map) {
-		let option = DOM('option', {text : k, appendTo : select});
+		let option = Option({innerText : k, appendTo : select});
 		if (hydro.state[key] == k) {
 			option.setAttribute('selected', 'true');
 		}
@@ -2345,7 +2346,7 @@ ids.useNoise.addEventListener('change', () => {
 (function(){
 	let select = ids.gridsize;
 	[32, 64, 128, 256, 512, 1024, 2048].forEach(gridsize => {
-		let option = DOM('option', {text : gridsize, appendTo : select});
+		let option = Option({innerText : gridsize, appendTo : select});
 		if (hydro.state.nx == gridsize) option.setAttribute('selected', 'true');
 	});
 	select.addEventListener('change', () => {
@@ -2472,9 +2473,9 @@ currentColorScheme = colorSchemes.Heat;
 for (let k in colorSchemes) {
 	(function(){
 		let v = colorSchemes[k];
-		DOM('option', {
+		Option({
 			value : k,
-			text : k,
+			innerText : k,
 			appendTo : ids.colorScheme,
 		});
 	})();
